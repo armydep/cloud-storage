@@ -108,6 +108,29 @@ class ItemsPublic(SQLModel):
     count: int
 
 
+class FileEntryBase(SQLModel):
+    name: str = Field(min_length=1, max_length=255)
+    type: str = Field(default="folder", min_length=1, max_length=32)
+    parent_id: uuid.UUID | None = Field(default=None, foreign_key="fileentry.id")
+
+
+class FileEntry(FileEntryBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, ondelete="CASCADE"
+    )
+
+
+class FileEntryPublic(FileEntryBase):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    created_at: datetime | None = None
+
+
 # Generic message
 class Message(SQLModel):
     message: str
