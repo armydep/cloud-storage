@@ -1,0 +1,13 @@
+.vscode/*
+!.vscode/extensions.json
+.env
+.env.*
+!.env.example
+!.env.sample
+.copier/.copier-answers.yml
+.idea/
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
