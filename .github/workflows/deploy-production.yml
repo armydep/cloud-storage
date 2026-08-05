@@ -27,7 +27,7 @@ jobs:
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       # Supplies the non-secret defaults Compose interpolates. Secrets come from
       # the job env above, which takes precedence over the .env file. `-n` keeps
       # an operator-managed .env on the self-hosted runner intact.
