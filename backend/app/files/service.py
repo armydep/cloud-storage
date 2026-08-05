@@ -168,7 +168,10 @@ def create_presigned_download(
         raise StoredFileNotFoundError
 
     object_key = storage.get_object_key(file.blob_hash)
-    download_url = storage.create_presigned_download_url(object_key=object_key)
+    download_url = storage.create_presigned_download_url(
+        object_key=object_key,
+        filename=file.name,
+    )
 
     return PresignDownloadResponse(
         download_url=download_url,

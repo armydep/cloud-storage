@@ -785,6 +785,91 @@ Acceptance criteria:
 - frontend build passes;
 - targeted Files Playwright test passes or any remaining blocker is documented.
 
+### Phase 3.6: Real stack upload/download verification
+
+Goal: verify the implemented frontend upload/download flow against the real local Docker stack, not only mocked Playwright responses.
+
+Why this slice exists:
+
+- Phase 3.3 and 3.4 implemented the frontend flows;
+- Phase 3.5 added deterministic UI tests with mocked file API responses;
+- the remaining risk is integration-specific:
+  - browser-to-MinIO CORS;
+  - presigned URL host rewriting;
+  - upload metadata matching actual MinIO object state;
+  - download behavior for files that exist in DB but not in MinIO.
+
+Work:
+
+1. Start/rebuild the real stack:
+   ```text
+   docker compose up -d --build
+   ```
+2. Confirm required services are healthy/running:
+   ```text
+   docker compose ps
+   ```
+   Required:
+   - backend;
+   - frontend;
+   - db;
+   - minio;
+   - minio-create-bucket completed successfully.
+3. Verify frontend URL:
+   ```text
+   http://localhost:5173/files
+   ```
+4. Verify backend returns browser-accessible presigned URLs:
+   - upload/download URLs must use:
+     ```text
+     http://localhost:9000
+     ```
+   - they must not use:
+     ```text
+     http://minio:9000
+     ```
+5. Test real upload manually or with Playwright:
+   - log in as seeded user;
+   - browse to `root.documents`;
+   - upload a small `.txt` file with a unique name;
+   - confirm success toast;
+   - confirm the uploaded file appears without manual reload.
+6. Test real download:
+   - use the uploaded file from step 5, not old mock DB rows;
+   - click Download;
+   - confirm the file downloads from MinIO.
+7. If upload fails in browser:
+   - inspect browser network console;
+   - check whether the failed request is backend API or MinIO PUT;
+   - if MinIO PUT fails with CORS, add MinIO CORS configuration to setup;
+   - if URL host is `minio`, fix backend public URL rewriting/config.
+8. If download fails for seeded mock files:
+   - expected for DB-only seed rows unless matching MinIO objects exist;
+   - verify download using a newly uploaded file first.
+
+Acceptance criteria:
+
+- real browser upload works through presigned PUT;
+- uploaded file metadata is completed in backend;
+- current folder refreshes after upload;
+- real browser download works through presigned GET;
+- MinIO URLs are browser-accessible;
+- any required MinIO CORS/setup fix is documented and committed;
+- no backend byte proxying is introduced.
+
+Implementation result:
+
+- real browser upload was verified against Docker stack;
+- frontend uploaded bytes directly to MinIO with presigned PUT;
+- uploaded file appeared in `root.documents` without manual reload;
+- presigned URLs used browser-accessible `http://localhost:9000`;
+- MinIO PUT returned success;
+- initial download behavior opened/navigated to the MinIO object for text files instead of producing a browser download;
+- backend presigned download generation was updated to include `ResponseContentDisposition: attachment`;
+- real browser download then produced a download event with the uploaded filename;
+- MinIO GET returned success;
+- no backend byte proxying was added.
+
 ## Acceptance criteria for Phase 3
 
 - user can upload a file into the current folder from `/files`;

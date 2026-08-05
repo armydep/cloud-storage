@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 import boto3
 from botocore.exceptions import ClientError
@@ -66,13 +67,20 @@ def create_presigned_upload_url(
 def create_presigned_download_url(
     *,
     object_key: str,
+    filename: str,
     expires_in: int | None = None,
 ) -> str:
+    safe_filename = filename.replace("\\", "\\\\").replace('"', '\\"')
+    encoded_filename = quote(filename)
     url = get_s3_client().generate_presigned_url(
         ClientMethod="get_object",
         Params={
             "Bucket": settings.S3_BUCKET,
             "Key": object_key,
+            "ResponseContentDisposition": (
+                f'attachment; filename="{safe_filename}"; '
+                f"filename*=UTF-8''{encoded_filename}"
+            ),
         },
         ExpiresIn=_get_expires_in(expires_in),
     )

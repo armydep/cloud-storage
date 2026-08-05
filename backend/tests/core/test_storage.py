@@ -73,6 +73,7 @@ def test_create_presigned_download_url_uses_get_object_params(
 
     url = storage.create_presigned_download_url(
         object_key="sha256/abc",
+        filename="report.pdf",
         expires_in=120,
     )
 
@@ -83,6 +84,9 @@ def test_create_presigned_download_url_uses_get_object_params(
             "Params": {
                 "Bucket": settings.S3_BUCKET,
                 "Key": "sha256/abc",
+                "ResponseContentDisposition": (
+                    "attachment; filename=\"report.pdf\"; filename*=UTF-8''report.pdf"
+                ),
             },
             "ExpiresIn": 120,
         }
@@ -95,7 +99,7 @@ def test_create_presigned_url_uses_default_expiry(
     client = MockS3Client()
     monkeypatch.setattr(storage, "get_s3_client", lambda: client)
 
-    storage.create_presigned_download_url(object_key="sha256/abc")
+    storage.create_presigned_download_url(object_key="sha256/abc", filename="file.txt")
 
     assert client.presigned_calls[0]["ExpiresIn"] == (
         settings.S3_PRESIGNED_URL_EXPIRES_SECONDS
@@ -110,7 +114,10 @@ def test_presigned_url_rewrite_keeps_query_string(
     )
     monkeypatch.setattr(storage, "get_s3_client", lambda: client)
 
-    url = storage.create_presigned_download_url(object_key="sha256/abc")
+    url = storage.create_presigned_download_url(
+        object_key="sha256/abc",
+        filename='quote"file.txt',
+    )
 
     assert (
         url

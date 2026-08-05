@@ -774,8 +774,8 @@ def test_presign_download_succeeds_for_owned_file(
     )
     calls = []
 
-    def mock_create_presigned_download_url(*, object_key: str) -> str:
-        calls.append({"object_key": object_key})
+    def mock_create_presigned_download_url(*, object_key: str, filename: str) -> str:
+        calls.append({"object_key": object_key, "filename": filename})
         return "http://localhost:9000/cloud-file-storage/sha256/download?sig=1"
 
     monkeypatch.setattr(
@@ -794,7 +794,7 @@ def test_presign_download_succeeds_for_owned_file(
         "method": "GET",
         "expires_in": settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
     }
-    assert calls == [{"object_key": f"sha256/{'a' * 64}"}]
+    assert calls == [{"object_key": f"sha256/{'a' * 64}", "filename": file.name}]
 
 
 def test_presign_download_missing_file_returns_404(
