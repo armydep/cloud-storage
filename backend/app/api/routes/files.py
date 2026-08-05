@@ -3,8 +3,16 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import CurrentUser, SessionDep
-from app.files.schemas import FolderWithContentsPublic
-from app.files.service import FolderNotFoundError, get_folder_contents
+from app.files.schemas import (
+    FolderWithContentsPublic,
+    PresignUploadRequest,
+    PresignUploadResponse,
+)
+from app.files.service import (
+    FolderNotFoundError,
+    create_presigned_upload,
+    get_folder_contents,
+)
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -26,6 +34,22 @@ def read_files(
             session=session,
             owner_id=current_user.id,
             path=path,
+        )
+    except FolderNotFoundError:
+        raise HTTPException(status_code=404, detail="Folder not found")
+
+
+@router.post("/presign-upload", response_model=PresignUploadResponse)
+def presign_upload(
+    session: SessionDep,
+    current_user: CurrentUser,
+    request: PresignUploadRequest,
+) -> Any:
+    try:
+        return create_presigned_upload(
+            session=session,
+            owner_id=current_user.id,
+            request=request,
         )
     except FolderNotFoundError:
         raise HTTPException(status_code=404, detail="Folder not found")

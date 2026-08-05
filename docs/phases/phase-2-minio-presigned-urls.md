@@ -790,6 +790,17 @@ Endpoint:
 POST /api/v1/files/presign-upload
 ```
 
+Files:
+
+```text
+backend/app/api/routes/files.py
+backend/app/files/service.py
+backend/app/files/repository.py
+backend/app/files/schemas.py
+backend/app/core/storage.py
+backend/tests/api/routes/test_files.py
+```
+
 Work:
 
 - authenticate current user;
@@ -802,6 +813,100 @@ Work:
 
 Do not insert a `files` row here.
 
+Service design:
+
+Add a service function:
+
+```python
+def create_presigned_upload(
+    *,
+    session: Session,
+    owner_id: uuid.UUID,
+    request: PresignUploadRequest,
+) -> PresignUploadResponse:
+    ...
+```
+
+Responsibilities:
+
+1. Load folder:
+   ```python
+   repository.get_folder_by_path(
+       session=session,
+       owner_id=owner_id,
+       path=request.folder_path,
+   )
+   ```
+2. If folder is missing, raise `FolderNotFoundError`.
+3. Derive object key:
+   ```python
+   storage.get_object_key(request.blob_hash)
+   ```
+4. Generate presigned upload URL:
+   ```python
+   storage.create_presigned_upload_url(
+       object_key=object_key,
+       mime_type=request.mime_type,
+   )
+   ```
+5. Return:
+   ```python
+   PresignUploadResponse(
+       upload_url=upload_url,
+       headers={"Content-Type": request.mime_type},
+       object_key=object_key,
+       expires_in=settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
+   )
+   ```
+
+Route design:
+
+Add to `backend/app/api/routes/files.py`:
+
+```python
+@router.post("/presign-upload", response_model=PresignUploadResponse)
+def presign_upload(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    request: PresignUploadRequest,
+) -> Any:
+    try:
+        return create_presigned_upload(
+            session=session,
+            owner_id=current_user.id,
+            request=request,
+        )
+    except FolderNotFoundError:
+        raise HTTPException(status_code=404, detail="Folder not found")
+```
+
+Important behavior:
+
+- request validation happens through `PresignUploadRequest`;
+- folder ownership is enforced by querying `owner_id + folder_path`;
+- no `files` row is inserted;
+- no `head_object` call is made;
+- no file bytes pass through the backend.
+
+Testing strategy:
+
+- mock `app.files.service.storage.create_presigned_upload_url`;
+- do not require real MinIO;
+- create/use an owned folder in the test DB;
+- call the API with auth headers;
+- assert response shape and object key;
+- assert no `StoredFile` row is created.
+
+Test cases:
+
+- success for owned folder;
+- missing folder returns 404;
+- invalid hash returns 422;
+- unauthenticated request returns 401;
+- another user's folder path returns 404 because lookup is scoped by owner;
+- presign upload does not insert into `files`.
+
 Acceptance criteria:
 
 - owned folder returns a presigned upload response;
@@ -809,6 +914,25 @@ Acceptance criteria:
 - invalid hash returns 422;
 - another user's folder cannot be used;
 - storage wrapper is mocked in API tests.
+- response includes:
+  ```json
+  {
+    "method": "PUT",
+    "headers": {
+      "Content-Type": "<mime_type>"
+    },
+    "object_key": "sha256/<blob_hash>",
+    "expires_in": 900
+  }
+  ```
+- `files` table row count does not increase after presign upload.
+
+Verification commands:
+
+```text
+uv run ruff check app/api/routes/files.py app/files/service.py tests/api/routes/test_files.py
+uv run pytest tests/api/routes/test_files.py
+```
 
 ### Phase 2.3.4: Complete upload endpoint
 

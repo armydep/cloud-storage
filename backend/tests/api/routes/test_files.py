@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -151,6 +153,203 @@ def test_read_files_by_unknown_path_returns_404(
         f"{settings.API_V1_STR}/files",
         headers=normal_user_token_headers,
         params={"path": "root.missing"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Folder not found"
+
+
+def _create_unique_folder(
+    *,
+    client: TestClient,
+    headers: dict[str, str],
+    db: Session,
+    name_prefix: str = "Upload",
+) -> Folder:
+    root_response = client.get(
+        f"{settings.API_V1_STR}/files",
+        headers=headers,
+    )
+    root = root_response.json()
+    suffix = uuid.uuid4().hex
+    folder = Folder(
+        name=f"{name_prefix} {suffix}",
+        path=f"root.{name_prefix.lower()}_{suffix}",
+        owner_id=root["owner_id"],
+        parent_id=root["id"],
+    )
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return folder
+
+
+def test_presign_upload_succeeds_for_owned_folder(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+    )
+    calls = []
+
+    def mock_create_presigned_upload_url(*, object_key: str, mime_type: str) -> str:
+        calls.append({"object_key": object_key, "mime_type": mime_type})
+        return "http://localhost:9000/cloud-file-storage/sha256/upload?sig=1"
+
+    monkeypatch.setattr(
+        "app.files.service.storage.create_presigned_upload_url",
+        mock_create_presigned_upload_url,
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/presign-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "a" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content == {
+        "upload_url": "http://localhost:9000/cloud-file-storage/sha256/upload?sig=1",
+        "method": "PUT",
+        "headers": {"Content-Type": "application/pdf"},
+        "object_key": f"sha256/{'a' * 64}",
+        "expires_in": settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
+    }
+    assert calls == [
+        {
+            "object_key": f"sha256/{'a' * 64}",
+            "mime_type": "application/pdf",
+        }
+    ]
+
+
+def test_presign_upload_does_not_insert_file(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+    )
+    files_before = len(db.exec(select(StoredFile)).all())
+    monkeypatch.setattr(
+        "app.files.service.storage.create_presigned_upload_url",
+        lambda *, object_key, mime_type: "http://localhost:9000/upload",
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/presign-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "b" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    files_after = len(db.exec(select(StoredFile)).all())
+    assert files_after == files_before
+
+
+def test_presign_upload_missing_folder_returns_404(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/presign-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": f"root.missing_{uuid.uuid4().hex}",
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "c" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Folder not found"
+
+
+def test_presign_upload_invalid_hash_returns_422(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/presign-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": "root",
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "not-a-hash",
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_presign_upload_requires_authentication(client: TestClient) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/presign-upload",
+        json={
+            "folder_path": "root",
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "d" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_presign_upload_rejects_another_users_folder(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="SuperUpload",
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/presign-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "e" * 64,
+            "size_bytes": 123,
+        },
     )
 
     assert response.status_code == 404
