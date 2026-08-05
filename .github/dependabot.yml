@@ -8,6 +8,10 @@ updates:
     commit-message:
       prefix: ⬆
     labels: [dependencies, internal]
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
   # Python uv
   - package-ecosystem: uv
     directory: /
@@ -16,6 +20,10 @@ updates:
     commit-message:
       prefix: ⬆
     labels: [dependencies, internal]
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
   # bun
   - package-ecosystem: bun
     directory: /
@@ -26,6 +34,10 @@ updates:
     labels: [dependencies, internal]
     ignore:
       - dependency-name: "@hey-api/openapi-ts"
+    groups:
+      bun-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
   # Docker
   - package-ecosystem: docker
     directories:
@@ -36,6 +48,10 @@ updates:
     commit-message:
       prefix: ⬆
     labels: [dependencies, internal]
+    groups:
+      docker-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
   # Docker Compose
   - package-ecosystem: docker-compose
     directory: /
@@ -44,3 +60,7 @@ updates:
     commit-message:
       prefix: ⬆
     labels: [dependencies, internal]
+    groups:
+      docker-compose-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]

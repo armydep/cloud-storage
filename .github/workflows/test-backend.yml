@@ -3,7 +3,7 @@ name: Test Backend
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     types:
       - opened
@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      - name: Create .env from the committed example
+        run: cp .env.example .env
       - name: Set up Python
         uses: actions/setup-python@v7
         with:

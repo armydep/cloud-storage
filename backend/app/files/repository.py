@@ -6,6 +6,8 @@ from sqlmodel import Session, select
 from app.files.models import Folder, StoredFile
 from app.files.schemas import CompleteUploadRequest
 
+ROOT_FOLDER_PATH = "root"
+
 
 class DuplicateFileNameRepositoryError(Exception):
     pass
@@ -22,9 +24,25 @@ def get_folder_by_path(
 
 
 def create_root_folder(*, session: Session, owner_id: uuid.UUID) -> Folder:
-    folder = Folder(name="root", path="root", owner_id=owner_id)
+    """
+    Create the owner's root folder, tolerating a lost creation race.
+
+    Two concurrent first requests can both find no root and both try to
+    insert one. uq_folders_owner_path lets the loser fail on commit and read
+    the winner's row instead of raising past the caller.
+    """
+    folder = Folder(name=ROOT_FOLDER_PATH, path=ROOT_FOLDER_PATH, owner_id=owner_id)
     session.add(folder)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        existing = get_folder_by_path(
+            session=session, owner_id=owner_id, path=ROOT_FOLDER_PATH
+        )
+        if existing is None:
+            raise
+        return existing
     session.refresh(folder)
     return folder
 

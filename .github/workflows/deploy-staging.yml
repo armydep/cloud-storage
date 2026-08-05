@@ -3,7 +3,7 @@ name: Deploy to Staging
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   deploy:
@@ -28,5 +28,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+      # Supplies the non-secret defaults Compose interpolates. Secrets come from
+      # the job env above, which takes precedence over the .env file. `-n` keeps
+      # an operator-managed .env on the self-hosted runner intact.
+      - name: Create .env from the committed example
+        run: cp -n .env.example .env
       - run: docker compose -f compose.yml --project-name ${{ secrets.STACK_NAME_STAGING }} build
       - run: docker compose -f compose.yml --project-name ${{ secrets.STACK_NAME_STAGING }} up -d

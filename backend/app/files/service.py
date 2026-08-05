@@ -5,6 +5,7 @@ from sqlmodel import Session
 from app.core import storage
 from app.core.config import settings
 from app.files import repository
+from app.files.repository import ROOT_FOLDER_PATH
 from app.files.schemas import (
     CompleteUploadRequest,
     FolderContentPublic,
@@ -48,7 +49,7 @@ def get_folder_contents(
         owner_id=owner_id,
         path=path,
     )
-    if not folder and path == "root":
+    if not folder and path == ROOT_FOLDER_PATH:
         folder = repository.create_root_folder(session=session, owner_id=owner_id)
 
     if not folder:
@@ -85,7 +86,9 @@ def get_folder_contents(
         for file in files
     ]
 
-    return FolderWithContentsPublic.model_validate(folder, update={"contents": contents})
+    return FolderWithContentsPublic.model_validate(
+        folder, update={"contents": contents}
+    )
 
 
 def create_presigned_upload(

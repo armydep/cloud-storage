@@ -54,6 +54,13 @@ Authorization: Bearer <access-token>
 
 ## Local development
 
+Create your local `.env` first. The stack does not start without it, because
+Docker Compose and the backend settings both read values from it:
+
+```bash
+cp .env.example .env
+```
+
 Start the stack:
 
 ```bash
@@ -88,8 +95,13 @@ docker compose exec backend bash scripts/test.sh
 
 ## Environment files
 
-Local `.env` files are intentionally ignored by Git. Keep secrets and local
+`.env.example` is committed and holds non-secret defaults. Copy it to `.env`
+and edit that copy; `.env` itself is ignored by Git, so keep secrets and local
 credentials there, not in committed source files.
+
+Values set to `changethis` must be replaced for any real deployment. The
+backend only warns about them when `ENVIRONMENT=local` and refuses to start
+otherwise.
 
 Ignored local files include:
 
