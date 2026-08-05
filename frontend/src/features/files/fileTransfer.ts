@@ -1,4 +1,4 @@
-import { type PresignUploadRequest, FilesService } from "@/client"
+import { FilesService, type PresignUploadRequest } from "@/client"
 
 import { getFileCategory } from "./fileCategory"
 import { calculateSha256 } from "./fileHash"
@@ -6,6 +6,11 @@ import { calculateSha256 } from "./fileHash"
 type UploadFileToCurrentFolderParams = {
   file: File
   currentPath: string
+}
+
+type DownloadFileParams = {
+  id: string
+  name: string
 }
 
 export async function uploadFileToCurrentFolder({
@@ -39,4 +44,19 @@ export async function uploadFileToCurrentFolder({
   await FilesService.completeFileUpload({
     requestBody: metadata,
   })
+}
+
+export async function downloadFile({
+  id,
+  name,
+}: DownloadFileParams): Promise<void> {
+  const response = await FilesService.presignDownload({ fileId: id })
+  const link = document.createElement("a")
+
+  link.href = response.download_url
+  link.download = name
+  link.rel = "noopener"
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
 }

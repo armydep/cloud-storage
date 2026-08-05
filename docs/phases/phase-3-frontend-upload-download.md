@@ -658,6 +658,71 @@ Acceptance criteria:
 - implement presign-download call;
 - start browser download.
 
+Detailed implementation plan:
+
+1. Extend the file transfer helper:
+   ```text
+   frontend/src/features/files/fileTransfer.ts
+   ```
+2. Add:
+   ```ts
+   export async function downloadFile(file: {
+     id: string
+     name: string
+   }): Promise<void>
+   ```
+3. Inside `downloadFile`:
+   - call:
+     ```ts
+     FilesService.presignDownload({ fileId: file.id })
+     ```
+   - create a temporary anchor:
+     ```ts
+     const link = document.createElement("a")
+     link.href = response.download_url
+     link.download = file.name
+     link.click()
+     ```
+   - do not call backend to fetch bytes;
+   - do not attach auth headers to the MinIO URL.
+4. Add row action UI:
+   ```text
+   frontend/src/components/Files/FileActionsMenu.tsx
+   ```
+5. `FileActionsMenu` props:
+   ```ts
+   type FileActionsMenuProps = {
+     file: FolderContentPublic
+   }
+   ```
+6. Behavior:
+   - render only for rows where `type === "file"`;
+   - call `downloadFile` on click;
+   - show loading/disabled state while presigned URL is being created;
+   - show error toast: `Download link could not be created.`;
+   - keep folder rows without a download action.
+7. Update:
+   ```text
+   frontend/src/components/Files/columns.tsx
+   ```
+   Add an `actions` column at the end and render `FileActionsMenu` only for file rows.
+8. Verification:
+   ```text
+   cd frontend
+   npm run build
+   ```
+
+Acceptance criteria:
+
+- file rows show a Download action;
+- folder rows do not show a Download action;
+- clicking Download calls backend presign-download;
+- browser downloads directly from MinIO presigned URL;
+- backend does not proxy downloaded bytes;
+- download action handles errors with a toast;
+- folder navigation still works;
+- frontend build passes.
+
 ### Phase 3.5: UX polish and tests
 
 - loading states;
