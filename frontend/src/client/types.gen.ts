@@ -9,22 +9,16 @@ export type Body_login_login_access_token = {
     client_secret?: (string | null);
 };
 
-export type HTTPValidationError = {
-    detail?: Array<ValidationError>;
+export type CompleteUploadRequest = {
+    folder_path: string;
+    name: string;
+    mime_type: string;
+    category: FileCategory;
+    blob_hash: string;
+    size_bytes: number;
 };
 
-export type ItemCreate = {
-    title: string;
-    description?: (string | null);
-};
-
-export type ItemPublic = {
-    title: string;
-    description?: (string | null);
-    id: string;
-    owner_id: string;
-    created_at?: (string | null);
-};
+export type FileCategory = 'image' | 'video' | 'audio' | 'document' | 'spreadsheet' | 'archive' | 'other';
 
 export type FolderContentPublic = {
     id: string;
@@ -46,6 +40,23 @@ export type FolderWithContentsPublic = {
     contents: Array<FolderContentPublic>;
 };
 
+export type HTTPValidationError = {
+    detail?: Array<ValidationError>;
+};
+
+export type ItemCreate = {
+    title: string;
+    description?: (string | null);
+};
+
+export type ItemPublic = {
+    title: string;
+    description?: (string | null);
+    id: string;
+    owner_id: string;
+    created_at?: (string | null);
+};
+
 export type ItemsPublic = {
     data: Array<ItemPublic>;
     count: number;
@@ -65,11 +76,47 @@ export type NewPassword = {
     new_password: string;
 };
 
+export type PresignDownloadResponse = {
+    download_url: string;
+    method?: string;
+    expires_in: number;
+};
+
+export type PresignUploadRequest = {
+    folder_path: string;
+    name: string;
+    mime_type: string;
+    category: FileCategory;
+    blob_hash: string;
+    size_bytes: number;
+};
+
+export type PresignUploadResponse = {
+    upload_url: string;
+    method?: string;
+    headers: {
+        [key: string]: (string);
+    };
+    object_key: string;
+    expires_in: number;
+};
+
 export type PrivateUserCreate = {
     email: string;
     password: string;
     full_name: string;
     is_verified?: boolean;
+};
+
+export type StoredFilePublic = {
+    name: string;
+    mime_type: string;
+    category: string;
+    blob_hash: string;
+    size_bytes: number;
+    id: string;
+    owner_id: string;
+    folder_id: string;
 };
 
 export type Token = {
@@ -129,6 +176,30 @@ export type ValidationError = {
     type: string;
 };
 
+export type FilesReadFilesData = {
+    path?: string;
+};
+
+export type FilesReadFilesResponse = (FolderWithContentsPublic);
+
+export type FilesPresignDownloadData = {
+    fileId: string;
+};
+
+export type FilesPresignDownloadResponse = (PresignDownloadResponse);
+
+export type FilesCompleteFileUploadData = {
+    requestBody: CompleteUploadRequest;
+};
+
+export type FilesCompleteFileUploadResponse = (StoredFilePublic);
+
+export type FilesPresignUploadData = {
+    requestBody: PresignUploadRequest;
+};
+
+export type FilesPresignUploadResponse = (PresignUploadResponse);
+
 export type ItemsReadItemsData = {
     limit?: number;
     skip?: number;
@@ -158,12 +229,6 @@ export type ItemsUpdateItemResponse = (ItemPublic);
 export type ItemsDeleteItemData = {
     id: string;
 };
-
-export type FilesReadFilesData = {
-    path?: string;
-};
-
-export type FilesReadFilesResponse = (FolderWithContentsPublic);
 
 export type ItemsDeleteItemResponse = (Message);
 

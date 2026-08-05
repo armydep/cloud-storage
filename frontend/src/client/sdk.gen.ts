@@ -3,12 +3,15 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { FilesReadFilesData, FilesReadFilesResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class FilesService {
     /**
      * Read Files
      * Return a folder and its direct contents by ltree path.
+     *
+     * The root folder is created lazily when path is "root". Other missing paths
+     * return 404.
      * @param data The data for the request.
      * @param data.path
      * @returns FolderWithContentsPublic Successful Response
@@ -21,6 +24,64 @@ export class FilesService {
             query: {
                 path: data.path
             },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Presign Download
+     * @param data The data for the request.
+     * @param data.fileId
+     * @returns PresignDownloadResponse Successful Response
+     * @throws ApiError
+     */
+    public static presignDownload(data: FilesPresignDownloadData): CancelablePromise<FilesPresignDownloadResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/files/{file_id}/presign-download',
+            path: {
+                file_id: data.fileId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Complete File Upload
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns StoredFilePublic Successful Response
+     * @throws ApiError
+     */
+    public static completeFileUpload(data: FilesCompleteFileUploadData): CancelablePromise<FilesCompleteFileUploadResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/files/complete-upload',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Presign Upload
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns PresignUploadResponse Successful Response
+     * @throws ApiError
+     */
+    public static presignUpload(data: FilesPresignUploadData): CancelablePromise<FilesPresignUploadResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/files/presign-upload',
+            body: data.requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: 'Validation Error'
             }

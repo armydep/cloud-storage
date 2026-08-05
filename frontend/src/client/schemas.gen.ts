@@ -57,6 +57,177 @@ export const Body_login_login_access_tokenSchema = {
     title: 'Body_login-login_access_token'
 } as const;
 
+export const CompleteUploadRequestSchema = {
+    properties: {
+        folder_path: {
+            type: 'string',
+            maxLength: 1024,
+            minLength: 1,
+            title: 'Folder Path'
+        },
+        name: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Name'
+        },
+        mime_type: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Mime Type'
+        },
+        category: {
+            '$ref': '#/components/schemas/FileCategory'
+        },
+        blob_hash: {
+            type: 'string',
+            maxLength: 64,
+            minLength: 64,
+            title: 'Blob Hash'
+        },
+        size_bytes: {
+            type: 'integer',
+            exclusiveMinimum: 0,
+            title: 'Size Bytes'
+        }
+    },
+    type: 'object',
+    required: ['folder_path', 'name', 'mime_type', 'category', 'blob_hash', 'size_bytes'],
+    title: 'CompleteUploadRequest'
+} as const;
+
+export const FileCategorySchema = {
+    type: 'string',
+    enum: ['image', 'video', 'audio', 'document', 'spreadsheet', 'archive', 'other'],
+    title: 'FileCategory'
+} as const;
+
+export const FolderContentPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        name: {
+            type: 'string',
+            title: 'Name'
+        },
+        type: {
+            type: 'string',
+            title: 'Type'
+        },
+        path: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Path'
+        },
+        mime_type: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Mime Type'
+        },
+        category: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Category'
+        },
+        blob_hash: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Blob Hash'
+        },
+        size_bytes: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Size Bytes'
+        }
+    },
+    type: 'object',
+    required: ['id', 'name', 'type'],
+    title: 'FolderContentPublic'
+} as const;
+
+export const FolderWithContentsPublicSchema = {
+    properties: {
+        path: {
+            type: 'string',
+            maxLength: 1024,
+            minLength: 1,
+            title: 'Path'
+        },
+        name: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Name'
+        },
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        owner_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Owner Id'
+        },
+        parent_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Parent Id'
+        },
+        contents: {
+            items: {
+                '$ref': '#/components/schemas/FolderContentPublic'
+            },
+            type: 'array',
+            title: 'Contents'
+        }
+    },
+    type: 'object',
+    required: ['path', 'name', 'id', 'owner_id', 'contents'],
+    title: 'FolderWithContentsPublic'
+} as const;
+
 export const HTTPValidationErrorSchema = {
     properties: {
         detail: {
@@ -226,6 +397,99 @@ export const NewPasswordSchema = {
     title: 'NewPassword'
 } as const;
 
+export const PresignDownloadResponseSchema = {
+    properties: {
+        download_url: {
+            type: 'string',
+            title: 'Download Url'
+        },
+        method: {
+            type: 'string',
+            title: 'Method',
+            default: 'GET'
+        },
+        expires_in: {
+            type: 'integer',
+            title: 'Expires In'
+        }
+    },
+    type: 'object',
+    required: ['download_url', 'expires_in'],
+    title: 'PresignDownloadResponse'
+} as const;
+
+export const PresignUploadRequestSchema = {
+    properties: {
+        folder_path: {
+            type: 'string',
+            maxLength: 1024,
+            minLength: 1,
+            title: 'Folder Path'
+        },
+        name: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Name'
+        },
+        mime_type: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Mime Type'
+        },
+        category: {
+            '$ref': '#/components/schemas/FileCategory'
+        },
+        blob_hash: {
+            type: 'string',
+            maxLength: 64,
+            minLength: 64,
+            title: 'Blob Hash'
+        },
+        size_bytes: {
+            type: 'integer',
+            exclusiveMinimum: 0,
+            title: 'Size Bytes'
+        }
+    },
+    type: 'object',
+    required: ['folder_path', 'name', 'mime_type', 'category', 'blob_hash', 'size_bytes'],
+    title: 'PresignUploadRequest'
+} as const;
+
+export const PresignUploadResponseSchema = {
+    properties: {
+        upload_url: {
+            type: 'string',
+            title: 'Upload Url'
+        },
+        method: {
+            type: 'string',
+            title: 'Method',
+            default: 'PUT'
+        },
+        headers: {
+            additionalProperties: {
+                type: 'string'
+            },
+            type: 'object',
+            title: 'Headers'
+        },
+        object_key: {
+            type: 'string',
+            title: 'Object Key'
+        },
+        expires_in: {
+            type: 'integer',
+            title: 'Expires In'
+        }
+    },
+    type: 'object',
+    required: ['upload_url', 'headers', 'object_key', 'expires_in'],
+    title: 'PresignUploadResponse'
+} as const;
+
 export const PrivateUserCreateSchema = {
     properties: {
         email: {
@@ -249,6 +513,58 @@ export const PrivateUserCreateSchema = {
     type: 'object',
     required: ['email', 'password', 'full_name'],
     title: 'PrivateUserCreate'
+} as const;
+
+export const StoredFilePublicSchema = {
+    properties: {
+        name: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Name'
+        },
+        mime_type: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Mime Type'
+        },
+        category: {
+            type: 'string',
+            maxLength: 64,
+            minLength: 1,
+            title: 'Category'
+        },
+        blob_hash: {
+            type: 'string',
+            maxLength: 128,
+            minLength: 1,
+            title: 'Blob Hash'
+        },
+        size_bytes: {
+            type: 'integer',
+            minimum: 0,
+            title: 'Size Bytes'
+        },
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        owner_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Owner Id'
+        },
+        folder_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Folder Id'
+        }
+    },
+    type: 'object',
+    required: ['name', 'mime_type', 'category', 'blob_hash', 'size_bytes', 'id', 'owner_id', 'folder_id'],
+    title: 'StoredFilePublic'
 } as const;
 
 export const TokenSchema = {
