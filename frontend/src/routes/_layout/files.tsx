@@ -128,10 +128,7 @@ function Files() {
         <p className="text-muted-foreground">
           Browse the contents of your current directory
         </p>
-        <PathBreadcrumbs
-          currentPath={currentPath}
-          onOpenFolder={openFolder}
-        />
+        <PathBreadcrumbs currentPath={currentPath} onOpenFolder={openFolder} />
       </div>
       <FilesTable currentPath={currentPath} onOpenFolder={openFolder} />
     </div>

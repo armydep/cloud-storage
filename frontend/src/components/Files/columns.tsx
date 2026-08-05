@@ -47,75 +47,73 @@ export function getColumns({
   onOpenFolder,
 }: FilesColumnsOptions): ColumnDef<FolderContentPublic>[] {
   return [
-  {
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => {
-      const isFolder = row.original.type === "folder"
-      const Icon = isFolder ? Folder : File
-      const nameContent = (
-        <>
-          <Icon
-            className={
-              isFolder ? "size-4 text-blue-500" : "size-4 text-muted-foreground"
-            }
-          />
-          <span className="font-medium">{row.original.name}</span>
-        </>
-      )
-
-      if (isFolder && row.original.path) {
-        return (
-          <button
-            className="flex items-center gap-2 rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            type="button"
-            onClick={() => onOpenFolder(row.original.path as string)}
-          >
-            {nameContent}
-          </button>
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => {
+        const isFolder = row.original.type === "folder"
+        const Icon = isFolder ? Folder : File
+        const nameContent = (
+          <>
+            <Icon
+              className={
+                isFolder
+                  ? "size-4 text-blue-500"
+                  : "size-4 text-muted-foreground"
+              }
+            />
+            <span className="font-medium">{row.original.name}</span>
+          </>
         )
-      }
 
-      return (
-        <div className="flex items-center gap-2">
-          {nameContent}
-        </div>
-      )
+        if (isFolder && row.original.path) {
+          return (
+            <button
+              className="flex items-center gap-2 rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              type="button"
+              onClick={() => onOpenFolder(row.original.path as string)}
+            >
+              {nameContent}
+            </button>
+          )
+        }
+
+        return <div className="flex items-center gap-2">{nameContent}</div>
+      },
     },
-  },
-  {
-    accessorKey: "file_type",
-    header: "Type",
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">
-        {row.original.type === "folder"
-          ? "folder"
-          : row.original.mime_type || row.original.category || "file"}
-      </span>
-    ),
-  },
-  {
-    accessorKey: "path",
-    header: "Path / Hash",
-    cell: ({ row }) => (
-      <span className="max-w-xs truncate block font-mono text-xs text-muted-foreground">
-        {row.original.path || row.original.blob_hash || "—"}
-      </span>
-    ),
-  },
-  {
-    accessorKey: "size_bytes",
-    header: "Size",
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">
-        {formatSize(row.original.size_bytes)}
-      </span>
-    ),
-  },
-  {
-    accessorKey: "id",
-    header: "ID",
-    cell: ({ row }) => <CopyId id={row.original.id} />,
-  },
+    {
+      accessorKey: "file_type",
+      header: "Type",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {row.original.type === "folder"
+            ? "folder"
+            : row.original.mime_type || row.original.category || "file"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "path",
+      header: "Path / Hash",
+      cell: ({ row }) => (
+        <span className="max-w-xs truncate block font-mono text-xs text-muted-foreground">
+          {row.original.path || row.original.blob_hash || "—"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "size_bytes",
+      header: "Size",
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {formatSize(row.original.size_bytes)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "id",
+      header: "ID",
+      cell: ({ row }) => <CopyId id={row.original.id} />,
+    },
   ]
 }
