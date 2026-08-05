@@ -730,6 +730,61 @@ Acceptance criteria:
 - Playwright coverage;
 - update frontend README if needed.
 
+Detailed implementation plan:
+
+1. Review current Files UI behavior manually:
+   - `/files` loads root folder;
+   - current path is visible;
+   - folder rows navigate into child folders;
+   - empty folder state still renders correctly;
+   - Upload button is visible on every folder path;
+   - file rows show Download action;
+   - folder rows do not show Download action.
+2. Improve upload UX only where needed:
+   - make upload-in-progress state clear;
+   - keep duplicate filename message visible and specific;
+   - keep generic upload failure message for non-409 errors;
+   - ensure file input resets after success/failure;
+   - ensure folder listing refreshes after upload success.
+3. Improve download UX only where needed:
+   - keep download action disabled while presigned URL is being created;
+   - keep error toast for presign failures;
+   - keep folder rows action-free.
+4. Add Playwright coverage:
+   ```text
+   frontend/tests/files.spec.ts
+   ```
+5. Recommended test cases:
+   - Files page shows current path;
+   - clicking a folder row navigates to that folder path;
+   - empty seeded folder shows empty state;
+   - Upload button exists;
+   - file rows show Download action;
+   - folder rows do not show Download action.
+6. Optional local E2E test if stable with Docker stack:
+   - login;
+   - navigate to `/files`;
+   - upload a small text file into `root.documents`;
+   - verify the uploaded file appears without manual reload.
+7. Do not introduce broad mocking or a new unit test framework in this slice.
+8. Run checks:
+   ```text
+   cd frontend
+   npm run build
+   npm run test -- files.spec.ts
+   ```
+9. If repo-wide lint is run, note the existing SVG accessibility failures unless they are fixed in this slice.
+
+Acceptance criteria:
+
+- existing folder browsing remains working;
+- Upload and Download controls are visible in the correct places;
+- duplicate upload error remains user-readable;
+- failed download presign shows an error toast;
+- Playwright coverage exists for Files navigation and row actions;
+- frontend build passes;
+- targeted Files Playwright test passes or any remaining blocker is documented.
+
 ## Acceptance criteria for Phase 3
 
 - user can upload a file into the current folder from `/files`;
