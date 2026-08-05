@@ -2,6 +2,12 @@
 
 ## Docker Compose
 
+* Create your local `.env` from the committed example (it is not tracked by Git):
+
+```bash
+cp .env.example .env
+```
+
 * Start the local stack with Docker Compose:
 
 ```bash

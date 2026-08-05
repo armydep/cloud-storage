@@ -31,7 +31,7 @@ jobs:
           changed:
             - backend/**
             - frontend/**
-            - .env
+            - .env.example
             - compose*.yml
             - .github/workflows/playwright.yml
 
@@ -48,6 +48,8 @@ jobs:
       fail-fast: false
     steps:
     - uses: actions/checkout@v6
+    - name: Create .env from the committed example
+      run: cp .env.example .env
     - uses: oven-sh/setup-bun@v2
     - uses: actions/setup-python@v7
       with:
