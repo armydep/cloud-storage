@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import settings
+from app.core.storage import ObjectNotFoundError, ObjectStat
 from app.files.models import Folder, StoredFile
 
 
@@ -348,6 +349,331 @@ def test_presign_upload_rejects_another_users_folder(
             "mime_type": "application/pdf",
             "category": "document",
             "blob_hash": "e" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Folder not found"
+
+
+def test_complete_upload_succeeds_for_owned_folder(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteUpload",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key: ObjectStat(
+            size_bytes=123,
+            content_type="application/pdf",
+        ),
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "completed-report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "f" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content["name"] == "completed-report.pdf"
+    assert content["folder_id"] == str(folder.id)
+    assert content["owner_id"] == str(folder.owner_id)
+    assert content["mime_type"] == "application/pdf"
+    assert content["category"] == "document"
+    assert content["blob_hash"] == "f" * 64
+    assert content["size_bytes"] == 123
+
+    stored_file = db.exec(
+        select(StoredFile).where(StoredFile.id == content["id"])
+    ).first()
+    assert stored_file is not None
+
+
+def test_complete_upload_file_appears_in_folder_listing(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteUploadList",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key: ObjectStat(size_bytes=456),
+    )
+
+    complete_response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "listed-report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "1" * 64,
+            "size_bytes": 456,
+        },
+    )
+    assert complete_response.status_code == 200
+
+    listing_response = client.get(
+        f"{settings.API_V1_STR}/files",
+        headers=normal_user_token_headers,
+        params={"path": folder.path},
+    )
+
+    assert listing_response.status_code == 200
+    contents = listing_response.json()["contents"]
+    assert any(item["name"] == "listed-report.pdf" for item in contents)
+
+
+def test_complete_upload_missing_folder_returns_404(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": f"root.missing_{uuid.uuid4().hex}",
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "2" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Folder not found"
+
+
+def test_complete_upload_missing_object_returns_400(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteUploadMissingObject",
+    )
+
+    def mock_stat_object(*, object_key: str) -> ObjectStat:
+        del object_key
+        raise ObjectNotFoundError
+
+    monkeypatch.setattr("app.files.service.storage.stat_object", mock_stat_object)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "missing-object.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "3" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Uploaded object not found"
+
+
+def test_complete_upload_size_mismatch_returns_400(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteUploadSizeMismatch",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key: ObjectStat(size_bytes=999),
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "size-mismatch.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "4" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Uploaded object size mismatch"
+
+
+def test_complete_upload_content_type_mismatch_returns_400(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteUploadContentTypeMismatch",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key: ObjectStat(size_bytes=123, content_type="text/plain"),
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "content-type-mismatch.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "5" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Uploaded object content type mismatch"
+
+
+def test_complete_upload_duplicate_filename_returns_409(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteUploadDuplicate",
+    )
+    existing = StoredFile(
+        owner_id=folder.owner_id,
+        folder_id=folder.id,
+        name="duplicate.pdf",
+        mime_type="application/pdf",
+        category="document",
+        blob_hash="6" * 64,
+        size_bytes=123,
+    )
+    db.add(existing)
+    db.commit()
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key: ObjectStat(size_bytes=123),
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "duplicate.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "7" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "File name already exists"
+
+
+def test_complete_upload_invalid_payload_returns_422(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": "root",
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "not-a-hash",
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_complete_upload_requires_authentication(client: TestClient) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        json={
+            "folder_path": "root",
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "8" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_complete_upload_rejects_another_users_folder(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="CompleteUploadSuper",
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "9" * 64,
             "size_bytes": 123,
         },
     )

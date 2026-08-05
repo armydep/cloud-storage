@@ -3,6 +3,7 @@ import uuid
 from sqlmodel import Session, select
 
 from app.files.models import Folder, StoredFile
+from app.files.schemas import CompleteUploadRequest
 
 
 def get_folder_by_path(
@@ -53,3 +54,35 @@ def get_file_by_id(
         StoredFile.id == file_id,
     )
     return session.exec(statement).first()
+
+
+def get_file_by_folder_and_name(
+    *, session: Session, folder_id: uuid.UUID, name: str
+) -> StoredFile | None:
+    statement = select(StoredFile).where(
+        StoredFile.folder_id == folder_id,
+        StoredFile.name == name,
+    )
+    return session.exec(statement).first()
+
+
+def create_file(
+    *,
+    session: Session,
+    owner_id: uuid.UUID,
+    folder_id: uuid.UUID,
+    request: CompleteUploadRequest,
+) -> StoredFile:
+    file = StoredFile(
+        owner_id=owner_id,
+        folder_id=folder_id,
+        name=request.name,
+        mime_type=request.mime_type,
+        category=request.category.value,
+        blob_hash=request.blob_hash,
+        size_bytes=request.size_bytes,
+    )
+    session.add(file)
+    session.commit()
+    session.refresh(file)
+    return file

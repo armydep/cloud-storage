@@ -944,6 +944,17 @@ Endpoint:
 POST /api/v1/files/complete-upload
 ```
 
+Files:
+
+```text
+backend/app/api/routes/files.py
+backend/app/files/service.py
+backend/app/files/repository.py
+backend/app/files/schemas.py
+backend/app/core/storage.py
+backend/tests/api/routes/test_files.py
+```
+
 Work:
 
 - authenticate current user;
@@ -958,6 +969,163 @@ Work:
 - insert row into `files`;
 - return created file metadata.
 
+Repository design:
+
+Add repository helpers:
+
+```python
+def get_file_by_folder_and_name(
+    *,
+    session: Session,
+    folder_id: uuid.UUID,
+    name: str,
+) -> StoredFile | None:
+    ...
+```
+
+```python
+def create_file(
+    *,
+    session: Session,
+    owner_id: uuid.UUID,
+    folder_id: uuid.UUID,
+    request: CompleteUploadRequest,
+) -> StoredFile:
+    ...
+```
+
+The duplicate-name check can be done in service first. Phase 2.3.6 will add the final DB unique constraint.
+
+Service design:
+
+Add domain exceptions:
+
+```python
+class ObjectNotUploadedError(Exception):
+    pass
+
+
+class ObjectSizeMismatchError(Exception):
+    pass
+
+
+class DuplicateFileNameError(Exception):
+    pass
+```
+
+Add service function:
+
+```python
+def complete_upload(
+    *,
+    session: Session,
+    owner_id: uuid.UUID,
+    request: CompleteUploadRequest,
+) -> StoredFilePublic:
+    ...
+```
+
+Responsibilities:
+
+1. Load folder by `owner_id + request.folder_path`.
+2. If folder is missing, raise `FolderNotFoundError`.
+3. Check duplicate filename inside that folder.
+4. If duplicate exists, raise `DuplicateFileNameError`.
+5. Derive object key:
+   ```python
+   object_key = storage.get_object_key(request.blob_hash)
+   ```
+6. Call:
+   ```python
+   object_stat = storage.stat_object(object_key=object_key)
+   ```
+7. If object is missing, map `storage.ObjectNotFoundError` to `ObjectNotUploadedError`.
+8. Verify:
+   ```python
+   object_stat.size_bytes == request.size_bytes
+   ```
+9. Insert the `StoredFile` metadata row.
+10. Return `StoredFilePublic`.
+
+Content type rule for this slice:
+
+- if `object_stat.content_type` is present and does not match `request.mime_type`, reject it;
+- if MinIO does not return content type, do not block completion in this slice.
+
+Route design:
+
+Add to `backend/app/api/routes/files.py`:
+
+```python
+@router.post("/complete-upload", response_model=StoredFilePublic)
+def complete_file_upload(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    request: CompleteUploadRequest,
+) -> Any:
+    try:
+        return complete_upload(
+            session=session,
+            owner_id=current_user.id,
+            request=request,
+        )
+    except FolderNotFoundError:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    except ObjectNotUploadedError:
+        raise HTTPException(status_code=400, detail="Uploaded object not found")
+    except ObjectSizeMismatchError:
+        raise HTTPException(status_code=400, detail="Uploaded object size mismatch")
+    except DuplicateFileNameError:
+        raise HTTPException(status_code=409, detail="File name already exists")
+```
+
+Response:
+
+Return the existing `StoredFilePublic` shape:
+
+```json
+{
+  "id": "...",
+  "owner_id": "...",
+  "folder_id": "...",
+  "name": "report.pdf",
+  "mime_type": "application/pdf",
+  "category": "document",
+  "blob_hash": "5f70bf18...",
+  "size_bytes": 248320
+}
+```
+
+Important behavior:
+
+- this endpoint records metadata only;
+- file bytes still go directly browser -> MinIO;
+- this endpoint must not create folders;
+- this endpoint must not overwrite existing `files` rows;
+- object key is derived from `blob_hash`, not from filename;
+- same `blob_hash` is allowed in a different folder or with a different filename.
+
+Testing strategy:
+
+- mock `app.files.service.storage.stat_object`;
+- do not require real MinIO;
+- use an owned test folder;
+- verify one `StoredFile` row is inserted on success;
+- verify the file appears in `GET /api/v1/files?path=<folder_path>` after completion.
+
+Test cases:
+
+- success inserts file row;
+- missing folder returns 404;
+- missing object returns 400;
+- object size mismatch returns 400;
+- duplicate filename in same folder returns 409;
+- invalid payload returns 422;
+- unauthenticated request returns 401;
+- another user's folder path returns 404;
+- completed file appears in folder listing.
+
 Acceptance criteria:
 
 - successful completion inserts one `files` row;
@@ -966,6 +1134,13 @@ Acceptance criteria:
 - duplicate name in same folder is rejected;
 - same `blob_hash` can still be used in another folder/name;
 - `GET /api/v1/files?path=<folder_path>` shows the completed file.
+
+Verification commands:
+
+```text
+uv run ruff check app/api/routes/files.py app/files/repository.py app/files/service.py tests/api/routes/test_files.py
+uv run pytest tests/api/routes/test_files.py -k complete_upload
+```
 
 ### Phase 2.3.5: Presign download endpoint
 

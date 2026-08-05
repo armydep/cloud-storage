@@ -4,12 +4,19 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import CurrentUser, SessionDep
 from app.files.schemas import (
+    CompleteUploadRequest,
     FolderWithContentsPublic,
     PresignUploadRequest,
     PresignUploadResponse,
+    StoredFilePublic,
 )
 from app.files.service import (
+    DuplicateFileNameError,
     FolderNotFoundError,
+    ObjectContentTypeMismatchError,
+    ObjectNotUploadedError,
+    ObjectSizeMismatchError,
+    complete_upload,
     create_presigned_upload,
     get_folder_contents,
 )
@@ -37,6 +44,30 @@ def read_files(
         )
     except FolderNotFoundError:
         raise HTTPException(status_code=404, detail="Folder not found")
+
+
+@router.post("/complete-upload", response_model=StoredFilePublic)
+def complete_file_upload(
+    session: SessionDep,
+    current_user: CurrentUser,
+    request: CompleteUploadRequest,
+) -> Any:
+    try:
+        return complete_upload(
+            session=session,
+            owner_id=current_user.id,
+            request=request,
+        )
+    except FolderNotFoundError:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    except ObjectNotUploadedError:
+        raise HTTPException(status_code=400, detail="Uploaded object not found")
+    except ObjectSizeMismatchError:
+        raise HTTPException(status_code=400, detail="Uploaded object size mismatch")
+    except ObjectContentTypeMismatchError:
+        raise HTTPException(status_code=400, detail="Uploaded object content type mismatch")
+    except DuplicateFileNameError:
+        raise HTTPException(status_code=409, detail="File name already exists")
 
 
 @router.post("/presign-upload", response_model=PresignUploadResponse)

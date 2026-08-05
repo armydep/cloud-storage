@@ -6,14 +6,32 @@ from app.core import storage
 from app.core.config import settings
 from app.files import repository
 from app.files.schemas import (
+    CompleteUploadRequest,
     FolderContentPublic,
     FolderWithContentsPublic,
     PresignUploadRequest,
     PresignUploadResponse,
+    StoredFilePublic,
 )
 
 
 class FolderNotFoundError(Exception):
+    pass
+
+
+class ObjectNotUploadedError(Exception):
+    pass
+
+
+class ObjectSizeMismatchError(Exception):
+    pass
+
+
+class ObjectContentTypeMismatchError(Exception):
+    pass
+
+
+class DuplicateFileNameError(Exception):
     pass
 
 
@@ -88,3 +106,43 @@ def create_presigned_upload(
         object_key=object_key,
         expires_in=settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
     )
+
+
+def complete_upload(
+    *, session: Session, owner_id: uuid.UUID, request: CompleteUploadRequest
+) -> StoredFilePublic:
+    folder = repository.get_folder_by_path(
+        session=session,
+        owner_id=owner_id,
+        path=request.folder_path,
+    )
+    if not folder:
+        raise FolderNotFoundError
+
+    existing_file = repository.get_file_by_folder_and_name(
+        session=session,
+        folder_id=folder.id,
+        name=request.name,
+    )
+    if existing_file:
+        raise DuplicateFileNameError
+
+    object_key = storage.get_object_key(request.blob_hash)
+    try:
+        object_stat = storage.stat_object(object_key=object_key)
+    except storage.ObjectNotFoundError:
+        raise ObjectNotUploadedError
+
+    if object_stat.size_bytes != request.size_bytes:
+        raise ObjectSizeMismatchError
+
+    if object_stat.content_type and object_stat.content_type != request.mime_type:
+        raise ObjectContentTypeMismatchError
+
+    file = repository.create_file(
+        session=session,
+        owner_id=owner_id,
+        folder_id=folder.id,
+        request=request,
+    )
+    return StoredFilePublic.model_validate(file)
