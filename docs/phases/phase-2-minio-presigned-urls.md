@@ -598,12 +598,14 @@ docker compose exec backend python -c "from app.core.storage import get_object_k
 
 Goal: define request/response contracts before implementing endpoint behavior.
 
+This slice should add schemas and pure validation helpers only. It should not add the upload/download routes yet and should not call MinIO.
+
 Files:
 
 ```text
 backend/app/files/schemas.py
 backend/app/files/service.py
-backend/tests/api/routes/test_files.py
+backend/tests/files/test_schemas.py
 ```
 
 Add schemas:
@@ -615,12 +617,68 @@ CompleteUploadRequest
 PresignDownloadResponse
 ```
 
+Schema contracts:
+
+```python
+class FileCategory(str, Enum):
+    image = "image"
+    video = "video"
+    audio = "audio"
+    document = "document"
+    spreadsheet = "spreadsheet"
+    archive = "archive"
+    other = "other"
+```
+
+```python
+class PresignUploadRequest(SQLModel):
+    folder_path: str
+    name: str
+    mime_type: str
+    category: FileCategory
+    blob_hash: str
+    size_bytes: int
+```
+
+```python
+class PresignUploadResponse(SQLModel):
+    upload_url: str
+    method: str = "PUT"
+    headers: dict[str, str]
+    object_key: str
+    expires_in: int
+```
+
+```python
+class CompleteUploadRequest(SQLModel):
+    folder_path: str
+    name: str
+    mime_type: str
+    category: FileCategory
+    blob_hash: str
+    size_bytes: int
+```
+
+```python
+class PresignDownloadResponse(SQLModel):
+    download_url: str
+    method: str = "GET"
+    expires_in: int
+```
+
 Validation rules:
 
 - `folder_path` must be present;
+- `folder_path` should use ltree-style path segments:
+  ```text
+  root
+  root.documents
+  root.projects.phase_2
+  ```
 - `blob_hash` must be 64 lowercase/uppercase hex characters;
 - `size_bytes > 0`;
 - `name` must be non-empty;
+- `name` should not contain `/` because folder placement is controlled by `folder_path`;
 - `mime_type` must be non-empty;
 - `category` must be one of:
   ```text
@@ -633,11 +691,94 @@ Validation rules:
   other
   ```
 
+Recommended implementation:
+
+- keep request/response model definitions in `backend/app/files/schemas.py`;
+- add shared validation helpers in the same file if they are schema-specific;
+- if validation logic becomes larger, move pure helpers to:
+  ```text
+  backend/app/files/validation.py
+  ```
+- avoid route/service side effects in this slice.
+
+Pydantic/SQLModel validation examples:
+
+```python
+SHA256_HEX_PATTERN = re.compile(r"^[a-fA-F0-9]{64}$")
+LTREE_PATH_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$")
+```
+
+```python
+@field_validator("blob_hash")
+@classmethod
+def validate_blob_hash(cls, value: str) -> str:
+    if not SHA256_HEX_PATTERN.fullmatch(value):
+        raise ValueError("blob_hash must be a 64-character SHA-256 hex string")
+    return value.lower()
+```
+
+```python
+@field_validator("folder_path")
+@classmethod
+def validate_folder_path(cls, value: str) -> str:
+    if not LTREE_PATH_PATTERN.fullmatch(value):
+        raise ValueError("folder_path must be a valid ltree path")
+    return value
+```
+
+```python
+@field_validator("name")
+@classmethod
+def validate_name(cls, value: str) -> str:
+    if "/" in value:
+        raise ValueError("name must not contain '/'")
+    return value
+```
+
+Implementation notes:
+
+- normalize `blob_hash` to lowercase after validation;
+- keep `category` typed as an enum, not a free string;
+- use `Field(min_length=1)` for `folder_path`, `name`, and `mime_type`;
+- use `Field(gt=0)` for `size_bytes`;
+- avoid adding object existence checks here; that belongs to Phase 2.3.4;
+- avoid folder ownership checks here; that belongs to Phase 2.3.3/2.3.4 services.
+
+Tests:
+
+```text
+backend/tests/files/test_schemas.py
+```
+
+Test cases:
+
+- valid `PresignUploadRequest` accepts expected payload;
+- valid `CompleteUploadRequest` accepts expected payload;
+- uppercase `blob_hash` is accepted and normalized to lowercase;
+- invalid short hash is rejected;
+- invalid non-hex hash is rejected;
+- `size_bytes = 0` is rejected;
+- empty `folder_path` is rejected;
+- invalid ltree path is rejected;
+- filename containing `/` is rejected;
+- invalid category is rejected;
+- response schemas default method values to `PUT` and `GET`.
+
 Acceptance criteria:
 
 - invalid request payloads fail with 422;
 - validation can be tested without MinIO;
 - no DB insert happens in this slice.
+- no new file API endpoints are exposed in this slice;
+- schema tests pass without Docker/MinIO;
+- Ruff passes for changed schema/test files.
+
+Verification commands:
+
+```text
+uv run ruff check app/files/schemas.py tests/files/test_schemas.py
+uv run pytest tests/files/test_schemas.py
+```
 
 ### Phase 2.3.3: Presign upload endpoint
 
