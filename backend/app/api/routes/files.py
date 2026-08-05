@@ -4,7 +4,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import CurrentUser, SessionDep
+from app.files.repository import ROOT_FOLDER_PATH
 from app.files.schemas import (
+    LTREE_PATH_PATTERN,
     CompleteUploadRequest,
     FolderWithContentsPublic,
     PresignDownloadResponse,
@@ -32,14 +34,23 @@ router = APIRouter(prefix="/files", tags=["files"])
 def read_files(
     session: SessionDep,
     current_user: CurrentUser,
-    path: str = Query(default="root", min_length=1, max_length=1024),
+    path: str = Query(
+        default=ROOT_FOLDER_PATH,
+        min_length=1,
+        max_length=1024,
+        pattern=LTREE_PATH_PATTERN.pattern,
+    ),
 ) -> Any:
     """
     Return a folder and its direct contents by ltree path.
 
     The root folder is created lazily when path is "root". Other missing paths
-    return 404.
+    return 404, and a path that is not a valid ltree returns 422.
     """
+    if path.split(".", 1)[0] != ROOT_FOLDER_PATH:
+        # Every folder of every user hangs off "root", so this can never match.
+        raise HTTPException(status_code=404, detail="Folder not found")
+
     try:
         return get_folder_contents(
             session=session,
@@ -85,7 +96,9 @@ def complete_file_upload(
     except ObjectSizeMismatchError:
         raise HTTPException(status_code=400, detail="Uploaded object size mismatch")
     except ObjectContentTypeMismatchError:
-        raise HTTPException(status_code=400, detail="Uploaded object content type mismatch")
+        raise HTTPException(
+            status_code=400, detail="Uploaded object content type mismatch"
+        )
     except DuplicateFileNameError:
         raise HTTPException(status_code=409, detail="File name already exists")
 
