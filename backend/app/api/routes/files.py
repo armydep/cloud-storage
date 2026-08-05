@@ -68,13 +68,14 @@ def read_files(
     files = session.exec(files_statement).all()
     contents = [
         FolderContentPublic(
-            id=folder.id,
-            name=folder.name,
+            id=child.id,
+            name=child.name,
             type="folder",
-            path=folder.path,
+            path=child.path,
         )
-        for folder in child_folders
-    ] + [
+        for child in child_folders
+    ]
+    contents += [
         FolderContentPublic(
             id=file.id,
             name=file.name,
