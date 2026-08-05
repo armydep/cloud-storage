@@ -6,6 +6,7 @@ import { z } from "zod"
 
 import { FilesService } from "@/client"
 import { DataTable } from "@/components/Common/DataTable"
+import UploadFileButton from "@/components/Files/UploadFileButton"
 import { getColumns } from "@/components/Files/columns"
 import PendingFiles from "@/components/Pending/PendingFiles"
 import { Button } from "@/components/ui/button"
@@ -123,15 +124,18 @@ function Files() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">Files</h1>
-        <p className="text-muted-foreground">
-          Browse the contents of your current directory
-        </p>
-        <PathBreadcrumbs
-          currentPath={currentPath}
-          onOpenFolder={openFolder}
-        />
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl font-bold tracking-tight">Files</h1>
+          <p className="text-muted-foreground">
+            Browse the contents of your current directory
+          </p>
+          <PathBreadcrumbs
+            currentPath={currentPath}
+            onOpenFolder={openFolder}
+          />
+        </div>
+        <UploadFileButton currentPath={currentPath} />
       </div>
       <FilesTable currentPath={currentPath} onOpenFolder={openFolder} />
     </div>

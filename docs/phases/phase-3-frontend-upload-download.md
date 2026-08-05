@@ -562,6 +562,96 @@ Acceptance criteria:
 - implement presign-upload, MinIO PUT, complete-upload;
 - refresh current folder.
 
+Detailed implementation plan:
+
+1. Add upload flow helper:
+   ```text
+   frontend/src/features/files/fileTransfer.ts
+   ```
+2. Export a single upload API:
+   ```ts
+   export async function uploadFileToCurrentFolder({
+     file,
+     currentPath,
+   }: {
+     file: File
+     currentPath: string
+   }): Promise<void>
+   ```
+3. Inside `uploadFileToCurrentFolder`:
+   - calculate `blob_hash` with `calculateSha256(file)`;
+   - derive `category` with `getFileCategory(file.type)`;
+   - build metadata:
+     ```ts
+     {
+       folder_path: currentPath,
+       name: file.name,
+       mime_type: file.type || "application/octet-stream",
+       category,
+       blob_hash,
+       size_bytes: file.size,
+     }
+     ```
+   - call `FilesService.presignUpload({ requestBody: metadata })`;
+   - upload bytes directly to MinIO:
+     ```ts
+     await fetch(presign.upload_url, {
+       method: presign.method || "PUT",
+       headers: presign.headers,
+       body: file,
+     })
+     ```
+   - if MinIO upload fails, throw and do not call complete-upload;
+   - call `FilesService.completeFileUpload({ requestBody: metadata })`.
+4. Add upload UI:
+   ```text
+   frontend/src/components/Files/UploadFileButton.tsx
+   ```
+5. `UploadFileButton` props:
+   ```ts
+   type UploadFileButtonProps = {
+     currentPath: string
+   }
+   ```
+6. `UploadFileButton` behavior:
+   - render visible Upload button;
+   - use hidden `<input type="file">`;
+   - support one file per upload in this slice;
+   - disable button while upload is running;
+   - show basic uploading state;
+   - show success/error toast;
+   - reset file input after each attempt.
+7. Refresh current folder after successful upload:
+   ```ts
+   queryClient.invalidateQueries({ queryKey: ["files", currentPath] })
+   ```
+8. Wire the button into:
+   ```text
+   frontend/src/routes/_layout/files.tsx
+   ```
+   Place it in the page header next to the Files title.
+9. Error handling in this slice:
+   - duplicate filename `409`: show `A file with this name already exists in this folder.`;
+   - validation/object errors: show `Upload failed. Try again.`;
+   - keep detailed error mapping polish for Phase 3.5.
+10. Verification:
+    ```text
+    cd frontend
+    npm run build
+    ```
+
+Acceptance criteria:
+
+- Files page shows an Upload button;
+- selecting a file starts the presigned upload flow;
+- browser sends file bytes to MinIO URL, not backend;
+- backend receives only presign/complete metadata requests;
+- complete-upload is not called when MinIO PUT fails;
+- successful upload refreshes the current folder listing;
+- current path is passed as `folder_path`;
+- upload button is disabled while upload is running;
+- frontend build passes.
+
 ### Phase 3.4: Download action
 
 - add file-row Download action;
