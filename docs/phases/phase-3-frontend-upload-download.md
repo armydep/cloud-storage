@@ -42,6 +42,35 @@ frontend/src/client/sdk.gen.ts
 frontend/src/client/types.gen.ts
 ```
 
+## Frontend organization approach
+
+Do not do a broad frontend refactor before implementing upload/download. The current structure is acceptable for the current app size.
+
+Apply a small feature-level organization as Phase 3 work touches the Files area:
+
+```text
+frontend/src/features/files/
+  fileHash.ts
+  fileCategory.ts
+  fileTransfer.ts
+
+frontend/src/components/Files/
+  columns.tsx
+  UploadFileButton.tsx
+  FileActionsMenu.tsx
+```
+
+Rules:
+
+- keep generated backend client code in `frontend/src/client/`;
+- do not manually edit generated client files;
+- keep route files responsible for routing, path state, and page composition;
+- move reusable file-transfer logic into `frontend/src/features/files/`;
+- move reusable Files UI into `frontend/src/components/Files/`;
+- only extract UI from `routes/_layout/files.tsx` when that UI is being touched by the slice.
+
+This keeps the frontend aligned with the backend refactor direction without spending time on low-value reorganization.
+
 ## Backend API contract to align with
 
 ### List folder contents
@@ -245,7 +274,7 @@ Goal: compute SHA-256 in the browser before requesting an upload URL.
 Add:
 
 ```text
-frontend/src/utils/files.ts
+frontend/src/features/files/fileHash.ts
 ```
 
 Suggested API:
@@ -299,6 +328,12 @@ document
 spreadsheet
 archive
 other
+```
+
+Recommended file:
+
+```text
+frontend/src/features/files/fileCategory.ts
 ```
 
 ## 4. Add upload UI on Files screen
@@ -472,7 +507,53 @@ Mocking strategy:
 
 - add SHA-256 utility;
 - add MIME category mapper;
+- keep both under `frontend/src/features/files/`;
+- add a feature barrel export if it makes imports cleaner:
+  ```text
+  frontend/src/features/files/index.ts
+  ```
 - add unit tests if frontend test setup supports it.
+
+Detailed implementation plan:
+
+1. Create:
+   ```text
+   frontend/src/features/files/fileHash.ts
+   frontend/src/features/files/fileCategory.ts
+   frontend/src/features/files/index.ts
+   ```
+2. Implement:
+   ```ts
+   export async function calculateSha256(file: File): Promise<string>
+   ```
+3. Implement:
+   ```ts
+   export function getFileCategory(mimeType: string): FileCategory
+   ```
+4. Import `FileCategory` from the generated client types:
+   ```ts
+   import type { FileCategory } from "@/client"
+   ```
+5. Keep functions pure and browser-safe:
+   - no backend calls;
+   - no MinIO calls;
+   - no React state;
+   - no route dependency.
+6. Verification:
+   ```text
+   cd frontend
+   npm run build
+   ```
+7. If a frontend unit test framework is already configured, add tests. If not, do not introduce a new test framework in this slice; cover behavior in later Playwright/E2E work.
+
+Acceptance criteria:
+
+- `calculateSha256` returns lowercase 64-character SHA-256 hex;
+- empty file hashing works;
+- `getFileCategory` returns only backend-supported category values;
+- unknown/empty MIME type maps to `other`;
+- no route/component files are changed unless needed for exports;
+- frontend build passes.
 
 ### Phase 3.3: Upload button and upload flow
 
