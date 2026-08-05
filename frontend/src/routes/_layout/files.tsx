@@ -10,7 +10,7 @@ import { FilesService } from "@/client"
 
 function getRootFilesQueryOptions() {
   return {
-    queryFn: () => FilesService.readRootFileEntry(),
+    queryFn: () => FilesService.readFiles({ path: "root" }),
     queryKey: ["files", "root"],
   }
 }

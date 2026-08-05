@@ -159,7 +159,11 @@ export type ItemsDeleteItemData = {
     id: string;
 };
 
-export type FilesReadRootFileEntryResponse = (FolderWithContentsPublic);
+export type FilesReadFilesData = {
+    path?: string;
+};
+
+export type FilesReadFilesResponse = (FolderWithContentsPublic);
 
 export type ItemsDeleteItemResponse = (Message);
 

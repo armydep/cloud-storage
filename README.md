@@ -8,20 +8,20 @@ and folders in a private cloud-style workspace.
 Phase 1 starts the file-management API.
 
 - Add authenticated file endpoints.
-- Add `GET /api/v1/files/root`.
+- Add `GET /api/v1/files?path=<ltree-path>`.
 - Create the user's root folder lazily on first page load.
 - Return the same root folder and its contents on later page loads.
 - Add backend tests for the endpoint.
 
 ## Current API
 
-### `GET /api/v1/files/root`
+### `GET /api/v1/files?path=<ltree-path>`
 
-Returns the authenticated user's root folder and its contents.
+Returns the requested folder and its direct contents.
 
-If the user does not have a root folder yet, the backend creates one and returns
-it. This lets the frontend call the endpoint on page load without running a
-separate setup flow.
+If `path` is omitted, it defaults to `root`. If the user does not have a root
+folder yet, the backend creates one and returns it. Other missing paths return
+`404`.
 
 Example response:
 
