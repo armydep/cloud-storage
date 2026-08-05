@@ -1,9 +1,14 @@
 import uuid
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.files.models import Folder, StoredFile
 from app.files.schemas import CompleteUploadRequest
+
+
+class DuplicateFileNameRepositoryError(Exception):
+    pass
 
 
 def get_folder_by_path(
@@ -82,7 +87,11 @@ def create_file(
         blob_hash=request.blob_hash,
         size_bytes=request.size_bytes,
     )
-    session.add(file)
-    session.commit()
+    try:
+        session.add(file)
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise DuplicateFileNameRepositoryError
     session.refresh(file)
     return file

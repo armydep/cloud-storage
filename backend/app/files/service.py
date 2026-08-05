@@ -144,12 +144,15 @@ def complete_upload(
     if object_stat.content_type and object_stat.content_type != request.mime_type:
         raise ObjectContentTypeMismatchError
 
-    file = repository.create_file(
-        session=session,
-        owner_id=owner_id,
-        folder_id=folder.id,
-        request=request,
-    )
+    try:
+        file = repository.create_file(
+            session=session,
+            owner_id=owner_id,
+            folder_id=folder.id,
+            request=request,
+        )
+    except repository.DuplicateFileNameRepositoryError:
+        raise DuplicateFileNameError
     return StoredFilePublic.model_validate(file)
 
 

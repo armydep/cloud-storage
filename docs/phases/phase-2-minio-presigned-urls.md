@@ -1286,6 +1286,15 @@ uv run pytest tests/api/routes/test_files.py -k presign_download
 
 Goal: make file/folder uniqueness rules explicit at the database layer.
 
+Files:
+
+```text
+backend/app/alembic/versions/<new_revision>_add_file_storage_constraints.py
+backend/app/files/repository.py
+backend/app/files/service.py
+backend/tests/api/routes/test_files.py
+```
+
 Work:
 
 - add migration for:
@@ -1301,12 +1310,142 @@ Work:
   ```
 - update repository/service code to translate duplicate filename conflicts into stable API errors.
 
+Pre-migration data check:
+
+Before adding unique indexes, check whether existing dev data violates the future constraints:
+
+```sql
+SELECT folder_id, name, COUNT(*)
+FROM files
+GROUP BY folder_id, name
+HAVING COUNT(*) > 1;
+```
+
+```sql
+SELECT owner_id, path, COUNT(*)
+FROM folders
+GROUP BY owner_id, path
+HAVING COUNT(*) > 1;
+```
+
+```sql
+SELECT parent_id, name, COUNT(*)
+FROM folders
+GROUP BY parent_id, name
+HAVING COUNT(*) > 1;
+```
+
+If duplicates exist in local dev data, resolve them before applying the migration. Do not silently delete data in the migration.
+
+Migration design:
+
+Create a new Alembic revision after:
+
+```text
+a17c8d9e0f12
+```
+
+Recommended upgrade:
+
+```python
+def upgrade():
+    op.execute("CREATE INDEX IF NOT EXISTS ix_files_owner_id ON files(owner_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_files_folder_id ON files(folder_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_files_blob_hash ON files(blob_hash)")
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_files_folder_name ON files(folder_id, name)"
+    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_folders_owner_id ON folders(owner_id)")
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_folders_owner_path ON folders(owner_id, path)"
+    )
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_folders_parent_name ON folders(parent_id, name)"
+    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_folders_path_gist ON folders USING GIST(path)")
+```
+
+Recommended downgrade:
+
+```python
+def downgrade():
+    op.execute("DROP INDEX IF EXISTS ix_folders_path_gist")
+    op.execute("DROP INDEX IF EXISTS uq_folders_parent_name")
+    op.execute("DROP INDEX IF EXISTS uq_folders_owner_path")
+    op.execute("DROP INDEX IF EXISTS ix_folders_owner_id")
+    op.execute("DROP INDEX IF EXISTS uq_files_folder_name")
+    op.execute("DROP INDEX IF EXISTS ix_files_blob_hash")
+    op.execute("DROP INDEX IF EXISTS ix_files_folder_id")
+    op.execute("DROP INDEX IF EXISTS ix_files_owner_id")
+```
+
+Important Postgres details:
+
+- `folders.path` is `LTREE`, so `UNIQUE(owner_id, path)` is valid.
+- `folders.path` should get a GiST index for tree/path queries.
+- `UNIQUE(parent_id, name)` allows multiple root folders with the same name because PostgreSQL treats `NULL` values as distinct.
+- For strict one root folder per owner, keep relying on `UNIQUE(owner_id, path)` for `path = root`.
+- Phase 2.3.6 should not change the public API shape.
+
+Repository hardening:
+
+Current service does a duplicate filename check before insert. Keep that check, but also prepare for DB-level race conditions.
+
+Add a repository exception:
+
+```python
+class DuplicateFileNameRepositoryError(Exception):
+    pass
+```
+
+Update `create_file`:
+
+```python
+try:
+    session.add(file)
+    session.commit()
+except IntegrityError:
+    session.rollback()
+    raise DuplicateFileNameRepositoryError
+```
+
+Then update service:
+
+```python
+try:
+    file = repository.create_file(...)
+except repository.DuplicateFileNameRepositoryError:
+    raise DuplicateFileNameError
+```
+
+Do not expose SQLAlchemy errors directly from the API layer.
+
+Test strategy:
+
+- migration test can be manual/local via Alembic command;
+- API tests should still mock MinIO;
+- add/keep endpoint test proving duplicate filename returns 409;
+- add repository-level test or service-level test for duplicate insert conflict if practical;
+- verify existing file listing still works.
+
 Acceptance criteria:
 
 - Alembic migration applies cleanly;
 - duplicate file name in same folder is blocked;
 - duplicate folder path per owner is blocked;
 - existing folder listing still works.
+- complete-upload still returns 409 for duplicate filename;
+- repository rolls back session after integrity errors;
+- downgrade drops only the indexes added by this migration.
+
+Verification commands:
+
+```text
+uv run ruff check app/files/repository.py app/files/service.py tests/api/routes/test_files.py
+docker compose exec backend alembic upgrade head
+docker compose exec backend alembic current
+uv run pytest tests/api/routes/test_files.py -k "complete_upload_duplicate or read_files"
+```
 
 ### Phase 2.3.7: End-to-end local verification
 

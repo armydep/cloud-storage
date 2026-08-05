@@ -124,9 +124,11 @@ def test_read_files_by_path(
         headers=normal_user_token_headers,
     )
     root = root_response.json()
+    suffix = uuid.uuid4().hex
+    path = f"root.documents_{suffix}"
     child_folder = Folder(
-        name="Documents",
-        path="root.documents",
+        name=f"Documents {suffix}",
+        path=path,
         owner_id=root["owner_id"],
         parent_id=root["id"],
     )
@@ -137,14 +139,14 @@ def test_read_files_by_path(
     response = client.get(
         f"{settings.API_V1_STR}/files",
         headers=normal_user_token_headers,
-        params={"path": "root.documents"},
+        params={"path": path},
     )
 
     assert response.status_code == 200
     content = response.json()
     assert content["id"] == str(child_folder.id)
-    assert content["name"] == "Documents"
-    assert content["path"] == "root.documents"
+    assert content["name"] == f"Documents {suffix}"
+    assert content["path"] == path
 
 
 def test_read_files_by_unknown_path_returns_404(
@@ -609,6 +611,52 @@ def test_complete_upload_duplicate_filename_returns_409(
             "mime_type": "application/pdf",
             "category": "document",
             "blob_hash": "7" * 64,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "File name already exists"
+
+
+def test_complete_upload_repository_duplicate_conflict_returns_409(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteUploadRepositoryDuplicate",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key: ObjectStat(size_bytes=123),
+    )
+    monkeypatch.setattr(
+        "app.files.service.repository.get_file_by_folder_and_name",
+        lambda *, session, folder_id, name: None,
+    )
+
+    def mock_create_file(**kwargs):
+        del kwargs
+        from app.files.repository import DuplicateFileNameRepositoryError
+
+        raise DuplicateFileNameRepositoryError
+
+    monkeypatch.setattr("app.files.service.repository.create_file", mock_create_file)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "repository-duplicate.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": "0" * 64,
             "size_bytes": 123,
         },
     )
