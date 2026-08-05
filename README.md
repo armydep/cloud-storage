@@ -10,14 +10,14 @@ Phase 1 starts the file-management API.
 - Add authenticated file endpoints.
 - Add `GET /api/v1/files/root`.
 - Create the user's root folder lazily on first page load.
-- Return the same root folder on later page loads.
+- Return the same root folder and its contents on later page loads.
 - Add backend tests for the endpoint.
 
 ## Current API
 
 ### `GET /api/v1/files/root`
 
-Returns the authenticated user's root folder.
+Returns the authenticated user's root folder and its contents.
 
 If the user does not have a root folder yet, the backend creates one and returns
 it. This lets the frontend call the endpoint on page load without running a
@@ -28,11 +28,21 @@ Example response:
 ```json
 {
   "id": "9f23b079-4d95-46cb-b57d-7430118b1d6e",
-  "name": "root",
-  "type": "folder",
-  "parent_id": null,
   "owner_id": "0ce5d6d4-6d65-4032-8571-c560b03b5310",
-  "created_at": "2026-08-05T01:50:00Z"
+  "parent_id": null,
+  "path": "root",
+  "name": "root",
+  "contents": [
+    {
+      "id": "d9d07d65-8f99-40c5-b6e2-48f931a09e63",
+      "name": "report.pdf",
+      "type": "file",
+      "mime_type": "application/pdf",
+      "category": "document",
+      "blob_hash": "abc123",
+      "size_bytes": 12345
+    }
+  ]
 }
 ```
 

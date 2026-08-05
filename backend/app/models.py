@@ -2,12 +2,20 @@ import uuid
 from datetime import datetime, timezone
 
 from pydantic import EmailStr
-from sqlalchemy import DateTime
+from sqlalchemy import BigInteger, DateTime
+from sqlalchemy.types import UserDefinedType
 from sqlmodel import Field, Relationship, SQLModel
 
 
 def get_datetime_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+class LtreeType(UserDefinedType):
+    cache_ok = True
+
+    def get_col_spec(self, **kw: object) -> str:
+        return "LTREE"
 
 
 # Shared properties
@@ -108,27 +116,66 @@ class ItemsPublic(SQLModel):
     count: int
 
 
-class FileEntryBase(SQLModel):
+class FolderBase(SQLModel):
+    path: str = Field(min_length=1, max_length=1024, sa_type=LtreeType)  # type: ignore
     name: str = Field(min_length=1, max_length=255)
-    type: str = Field(default="folder", min_length=1, max_length=32)
-    parent_id: uuid.UUID | None = Field(default=None, foreign_key="fileentry.id")
 
 
-class FileEntry(FileEntryBase, table=True):
+class Folder(FolderBase, table=True):
+    __tablename__ = "folders"
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    created_at: datetime | None = Field(
-        default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
-    )
     owner_id: uuid.UUID = Field(
         foreign_key="user.id", nullable=False, ondelete="CASCADE"
     )
+    parent_id: uuid.UUID | None = Field(
+        default=None, foreign_key="folders.id", nullable=True
+    )
 
 
-class FileEntryPublic(FileEntryBase):
+class FolderPublic(FolderBase):
     id: uuid.UUID
     owner_id: uuid.UUID
-    created_at: datetime | None = None
+    parent_id: uuid.UUID | None = None
+
+
+class StoredFileBase(SQLModel):
+    name: str = Field(min_length=1, max_length=255)
+    mime_type: str = Field(min_length=1, max_length=255)
+    category: str = Field(min_length=1, max_length=64)
+    blob_hash: str = Field(min_length=1, max_length=128)
+    size_bytes: int = Field(ge=0, sa_type=BigInteger)  # type: ignore
+
+
+class StoredFile(StoredFileBase, table=True):
+    __tablename__ = "files"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, ondelete="CASCADE"
+    )
+    folder_id: uuid.UUID = Field(
+        foreign_key="folders.id", nullable=False, ondelete="CASCADE"
+    )
+
+
+class StoredFilePublic(StoredFileBase):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    folder_id: uuid.UUID
+
+
+class FolderContentPublic(SQLModel):
+    id: uuid.UUID
+    name: str
+    type: str
+    path: str | None = None
+    mime_type: str | None = None
+    category: str | None = None
+    blob_hash: str | None = None
+    size_bytes: int | None = None
+
+
+class FolderWithContentsPublic(FolderPublic):
+    contents: list[FolderContentPublic]
 
 
 # Generic message
