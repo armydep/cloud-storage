@@ -1,10 +1,13 @@
 import uuid
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.core.security import get_password_hash, verify_password
-from app.models import Item, ItemCreate, User, UserCreate, UserUpdate
+from app.models import Folder, Item, ItemCreate, User, UserCreate, UserUpdate
+
+ROOT_FOLDER_PATH = "root"
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
@@ -66,3 +69,38 @@ def create_item(*, session: Session, item_in: ItemCreate, owner_id: uuid.UUID) -
     session.commit()
     session.refresh(db_item)
     return db_item
+
+
+def get_folder_by_path(
+    *, session: Session, owner_id: uuid.UUID, path: str
+) -> Folder | None:
+    statement = select(Folder).where(Folder.owner_id == owner_id, Folder.path == path)
+    return session.exec(statement).first()
+
+
+def get_or_create_root_folder(*, session: Session, owner_id: uuid.UUID) -> Folder:
+    """
+    Return the owner's root folder, creating it on first use.
+
+    Two concurrent first requests can both find no root and both try to insert
+    one. The uq_folders_owner_path constraint lets the loser of that race fail
+    and read the winner's row instead of creating a second root.
+    """
+    folder = get_folder_by_path(
+        session=session, owner_id=owner_id, path=ROOT_FOLDER_PATH
+    )
+    if folder:
+        return folder
+
+    folder = Folder(name=ROOT_FOLDER_PATH, path=ROOT_FOLDER_PATH, owner_id=owner_id)
+    session.add(folder)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        statement = select(Folder).where(
+            Folder.owner_id == owner_id, Folder.path == ROOT_FOLDER_PATH
+        )
+        return session.exec(statement).one()
+    session.refresh(folder)
+    return folder

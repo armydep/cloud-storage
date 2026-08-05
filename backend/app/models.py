@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from pydantic import EmailStr
-from sqlalchemy import BigInteger, DateTime
+from sqlalchemy import BigInteger, DateTime, Index, UniqueConstraint
 from sqlalchemy.types import UserDefinedType
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -123,6 +123,11 @@ class FolderBase(SQLModel):
 
 class Folder(FolderBase, table=True):
     __tablename__ = "folders"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "path", name="uq_folders_owner_path"),
+        Index("ix_folders_owner_parent", "owner_id", "parent_id"),
+        Index("ix_folders_path_gist", "path", postgresql_using="gist"),
+    )
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
         foreign_key="user.id", nullable=False, ondelete="CASCADE"
@@ -148,6 +153,7 @@ class StoredFileBase(SQLModel):
 
 class StoredFile(StoredFileBase, table=True):
     __tablename__ = "files"
+    __table_args__ = (Index("ix_files_owner_folder", "owner_id", "folder_id"),)
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
         foreign_key="user.id", nullable=False, ondelete="CASCADE"

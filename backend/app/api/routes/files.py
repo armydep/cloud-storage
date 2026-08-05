@@ -3,7 +3,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from sqlmodel import select
 
+from app import crud
 from app.api.deps import CurrentUser, SessionDep
+from app.crud import ROOT_FOLDER_PATH
 from app.models import Folder, FolderContentPublic, FolderWithContentsPublic, StoredFile
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -21,16 +23,15 @@ def read_files(
     The root folder is created lazily when path is "root". Other missing paths
     return 404.
     """
-    statement = select(Folder).where(
-        Folder.owner_id == current_user.id,
-        Folder.path == path,
-    )
-    folder = session.exec(statement).first()
-    if not folder and path == "root":
-        folder = Folder(name="root", path="root", owner_id=current_user.id)
-        session.add(folder)
-        session.commit()
-        session.refresh(folder)
+    folder: Folder | None
+    if path == ROOT_FOLDER_PATH:
+        folder = crud.get_or_create_root_folder(
+            session=session, owner_id=current_user.id
+        )
+    else:
+        folder = crud.get_folder_by_path(
+            session=session, owner_id=current_user.id, path=path
+        )
 
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
@@ -42,7 +43,9 @@ def read_files(
     )
     files_statement = (
         select(StoredFile)
-        .where(StoredFile.owner_id == current_user.id, StoredFile.folder_id == folder.id)
+        .where(
+            StoredFile.owner_id == current_user.id, StoredFile.folder_id == folder.id
+        )
         .order_by(StoredFile.name)
     )
     child_folders = session.exec(child_folders_statement).all()
@@ -68,4 +71,6 @@ def read_files(
         for file in files
     ]
 
-    return FolderWithContentsPublic.model_validate(folder, update={"contents": contents})
+    return FolderWithContentsPublic.model_validate(
+        folder, update={"contents": contents}
+    )
