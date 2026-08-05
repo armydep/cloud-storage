@@ -193,8 +193,9 @@ You can set several other environment variables:
 
 There are some environment variables only used by GitHub Actions that you can configure:
 
-* `LATEST_CHANGES`: Used by the GitHub Action [latest-changes](https://github.com/tiangolo/latest-changes) to automatically add release notes based on the PRs merged. It's a personal access token, read the docs for details.
-* `SMOKESHOW_AUTH_KEY`: Used to handle and publish the code coverage using [Smokeshow](https://github.com/samuelcolvin/smokeshow), follow their instructions to create a (free) Smokeshow key.
+* `PROJECTS_TOKEN`: Used by the Add to Project workflow to add new and
+  reopened issues and pull requests to the project board. The token must have
+  permission to write to the configured GitHub Project.
 
 ### Deploy with Docker Compose
 
@@ -303,14 +304,13 @@ The current Github Actions workflows expect these secrets:
 * `FIRST_SUPERUSER_PASSWORD`
 * `POSTGRES_PASSWORD`
 * `SECRET_KEY`
-* `LATEST_CHANGES`
-* `SMOKESHOW_AUTH_KEY`
+* `PROJECTS_TOKEN`
 
 ## GitHub Action Deployment Workflows
 
 There are GitHub Action workflows in the `.github/workflows` directory already configured for deploying to the environments (GitHub Actions runners with the labels):
 
-* `staging`: after pushing (or merging) to the branch `master`.
+* `staging`: after pushing (or merging) to the branch `main`.
 * `production`: after publishing a release.
 
 If you need to add extra environments you could use those as a starting point.
