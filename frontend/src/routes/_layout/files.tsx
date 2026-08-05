@@ -6,8 +6,8 @@ import { z } from "zod"
 
 import { FilesService } from "@/client"
 import { DataTable } from "@/components/Common/DataTable"
-import UploadFileButton from "@/components/Files/UploadFileButton"
 import { getColumns } from "@/components/Files/columns"
+import UploadFileButton from "@/components/Files/UploadFileButton"
 import PendingFiles from "@/components/Pending/PendingFiles"
 import { Button } from "@/components/ui/button"
 

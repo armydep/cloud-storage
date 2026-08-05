@@ -4,8 +4,8 @@ import { useRef } from "react"
 
 import { ApiError } from "@/client"
 import { Button } from "@/components/ui/button"
-import useCustomToast from "@/hooks/useCustomToast"
 import { uploadFileToCurrentFolder } from "@/features/files"
+import useCustomToast from "@/hooks/useCustomToast"
 
 type UploadFileButtonProps = {
   currentPath: string
@@ -27,7 +27,8 @@ export default function UploadFileButton({
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadFileToCurrentFolder({ file, currentPath }),
+    mutationFn: (file: File) =>
+      uploadFileToCurrentFolder({ file, currentPath }),
     onSuccess: () => {
       showSuccessToast("File uploaded successfully")
       queryClient.invalidateQueries({ queryKey: ["files", currentPath] })
