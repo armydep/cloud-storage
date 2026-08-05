@@ -5,6 +5,10 @@ import type { FolderContentPublic } from "@/client"
 import { Button } from "@/components/ui/button"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 
+type FilesColumnsOptions = {
+  onOpenFolder: (path: string) => void
+}
+
 function CopyId({ id }: { id: string }) {
   const [copiedText, copy] = useCopyToClipboard()
   const isCopied = copiedText === id
@@ -39,17 +43,42 @@ function formatSize(value?: number | null) {
   }).format(value)
 }
 
-export const columns: ColumnDef<FolderContentPublic>[] = [
+export function getColumns({
+  onOpenFolder,
+}: FilesColumnsOptions): ColumnDef<FolderContentPublic>[] {
+  return [
   {
     accessorKey: "name",
     header: "Name",
     cell: ({ row }) => {
       const isFolder = row.original.type === "folder"
       const Icon = isFolder ? Folder : File
+      const nameContent = (
+        <>
+          <Icon
+            className={
+              isFolder ? "size-4 text-blue-500" : "size-4 text-muted-foreground"
+            }
+          />
+          <span className="font-medium">{row.original.name}</span>
+        </>
+      )
+
+      if (isFolder && row.original.path) {
+        return (
+          <button
+            className="flex items-center gap-2 rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            type="button"
+            onClick={() => onOpenFolder(row.original.path as string)}
+          >
+            {nameContent}
+          </button>
+        )
+      }
+
       return (
         <div className="flex items-center gap-2">
-          <Icon className={isFolder ? "size-4 text-blue-500" : "size-4 text-muted-foreground"} />
-          <span className="font-medium">{row.original.name}</span>
+          {nameContent}
         </div>
       )
     },
@@ -88,4 +117,5 @@ export const columns: ColumnDef<FolderContentPublic>[] = [
     header: "ID",
     cell: ({ row }) => <CopyId id={row.original.id} />,
   },
-]
+  ]
+}
