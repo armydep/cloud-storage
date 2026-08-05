@@ -9,23 +9,6 @@ export type Body_login_login_access_token = {
     client_secret?: (string | null);
 };
 
-export type HTTPValidationError = {
-    detail?: Array<ValidationError>;
-};
-
-export type ItemCreate = {
-    title: string;
-    description?: (string | null);
-};
-
-export type ItemPublic = {
-    title: string;
-    description?: (string | null);
-    id: string;
-    owner_id: string;
-    created_at?: (string | null);
-};
-
 export type FolderContentPublic = {
     id: string;
     name: string;
@@ -44,6 +27,23 @@ export type FolderWithContentsPublic = {
     owner_id: string;
     parent_id?: (string | null);
     contents: Array<FolderContentPublic>;
+};
+
+export type HTTPValidationError = {
+    detail?: Array<ValidationError>;
+};
+
+export type ItemCreate = {
+    title: string;
+    description?: (string | null);
+};
+
+export type ItemPublic = {
+    title: string;
+    description?: (string | null);
+    id: string;
+    owner_id: string;
+    created_at?: (string | null);
 };
 
 export type ItemsPublic = {
@@ -129,6 +129,12 @@ export type ValidationError = {
     type: string;
 };
 
+export type FilesReadFilesData = {
+    path?: string;
+};
+
+export type FilesReadFilesResponse = (FolderWithContentsPublic);
+
 export type ItemsReadItemsData = {
     limit?: number;
     skip?: number;
@@ -158,12 +164,6 @@ export type ItemsUpdateItemResponse = (ItemPublic);
 export type ItemsDeleteItemData = {
     id: string;
 };
-
-export type FilesReadFilesData = {
-    path?: string;
-};
-
-export type FilesReadFilesResponse = (FolderWithContentsPublic);
 
 export type ItemsDeleteItemResponse = (Message);
 

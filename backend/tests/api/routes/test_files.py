@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -22,9 +23,7 @@ def test_read_root_creates_user_root(
     assert "id" in content
     assert "owner_id" in content
 
-    root = db.exec(
-        select(Folder).where(Folder.id == content["id"])
-    ).first()
+    root = db.exec(select(Folder).where(Folder.id == content["id"])).first()
     assert root is not None
     assert str(root.owner_id) == content["owner_id"]
 
@@ -108,8 +107,7 @@ def test_read_root_is_scoped_to_authenticated_user(
     assert normal_user_response.status_code == 200
     assert superuser_response.json()["id"] != normal_user_response.json()["id"]
     assert (
-        superuser_response.json()["owner_id"]
-        != normal_user_response.json()["owner_id"]
+        superuser_response.json()["owner_id"] != normal_user_response.json()["owner_id"]
     )
 
 
@@ -151,6 +149,46 @@ def test_read_files_by_unknown_path_returns_404(
         f"{settings.API_V1_STR}/files",
         headers=normal_user_token_headers,
         params={"path": "root.missing"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Folder not found"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "",
+        "root..documents",
+        "root.",
+        ".root",
+        "root documents",
+        "root.docu-ments",
+        "root.documents;drop table folders",
+        "root/documents",
+        "root." + "a" * 256,
+        "root." + "a" * 1024,
+    ],
+)
+def test_read_files_rejects_malformed_path(
+    client: TestClient, normal_user_token_headers: dict[str, str], path: str
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/files",
+        headers=normal_user_token_headers,
+        params={"path": path},
+    )
+
+    assert response.status_code == 422
+
+
+def test_read_files_outside_root_returns_404(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/files",
+        headers=normal_user_token_headers,
+        params={"path": "elsewhere.documents"},
     )
 
     assert response.status_code == 404

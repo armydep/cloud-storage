@@ -1,10 +1,17 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from pydantic import EmailStr
-from sqlalchemy import BigInteger, DateTime, Index, UniqueConstraint
+from sqlalchemy import BigInteger, DateTime, Index, UniqueConstraint, cast
 from sqlalchemy.types import UserDefinedType
 from sqlmodel import Field, Relationship, SQLModel
+
+# A dot separated chain of ltree labels, e.g. "root.documents.invoices".
+# Postgres accepts more than this in an ltree label, but folder paths are
+# generated from user input, so keep the accepted alphabet narrow.
+LTREE_PATH_PATTERN = r"^[A-Za-z0-9_]{1,255}(\.[A-Za-z0-9_]{1,255})*$"
+LTREE_PATH_MAX_LENGTH = 1024
 
 
 def get_datetime_utc() -> datetime:
@@ -16,6 +23,11 @@ class LtreeType(UserDefinedType):
 
     def get_col_spec(self, **kw: object) -> str:
         return "LTREE"
+
+    def bind_expression(self, bindvalue: Any) -> Any:
+        # Emit `path = $1::ltree` instead of relying on Postgres resolving an
+        # untyped parameter to ltree by context.
+        return cast(bindvalue, self)
 
 
 # Shared properties
@@ -117,7 +129,11 @@ class ItemsPublic(SQLModel):
 
 
 class FolderBase(SQLModel):
-    path: str = Field(min_length=1, max_length=1024, sa_type=LtreeType)  # type: ignore
+    path: str = Field(
+        min_length=1,
+        max_length=LTREE_PATH_MAX_LENGTH,
+        sa_type=LtreeType,  # type: ignore
+    )
     name: str = Field(min_length=1, max_length=255)
 
 

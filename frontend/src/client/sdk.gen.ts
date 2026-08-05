@@ -9,6 +9,9 @@ export class FilesService {
     /**
      * Read Files
      * Return a folder and its direct contents by ltree path.
+     *
+     * The root folder is created lazily when path is "root". Other missing paths
+     * return 404, and a path that is not a valid ltree returns 422.
      * @param data The data for the request.
      * @param data.path
      * @returns FolderWithContentsPublic Successful Response
