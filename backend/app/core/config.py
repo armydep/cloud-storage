@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = ""
 
+    S3_ENDPOINT_URL: str = "http://minio:9000"
+    S3_PUBLIC_ENDPOINT_URL: str = "http://localhost:9000"
+    S3_BUCKET: str = "cloud-file-storage"
+    S3_ACCESS_KEY: str = "minioadmin"
+    S3_SECRET_KEY: str = "minioadmin"
+    S3_REGION: str = "us-east-1"
+    S3_PRESIGNED_URL_EXPIRES_SECONDS: int = 900
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:

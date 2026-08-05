@@ -70,6 +70,8 @@ OpenAPI JSON:   http://localhost:8000/api/v1/openapi.json
 Adminer:        http://localhost:8080
 Mailcatcher:    http://localhost:1080
 Traefik:        http://localhost:8090
+MinIO S3 API:   http://localhost:9000
+MinIO console:  http://localhost:9001
 ```
 
 Run backend database migrations:
