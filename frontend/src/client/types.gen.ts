@@ -26,6 +26,26 @@ export type ItemPublic = {
     created_at?: (string | null);
 };
 
+export type FolderContentPublic = {
+    id: string;
+    name: string;
+    type: string;
+    path?: (string | null);
+    mime_type?: (string | null);
+    category?: (string | null);
+    blob_hash?: (string | null);
+    size_bytes?: (number | null);
+};
+
+export type FolderWithContentsPublic = {
+    path: string;
+    name: string;
+    id: string;
+    owner_id: string;
+    parent_id?: (string | null);
+    contents: Array<FolderContentPublic>;
+};
+
 export type ItemsPublic = {
     data: Array<ItemPublic>;
     count: number;
@@ -138,6 +158,12 @@ export type ItemsUpdateItemResponse = (ItemPublic);
 export type ItemsDeleteItemData = {
     id: string;
 };
+
+export type FilesReadFilesData = {
+    path?: string;
+};
+
+export type FilesReadFilesResponse = (FolderWithContentsPublic);
 
 export type ItemsDeleteItemResponse = (Message);
 
