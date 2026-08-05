@@ -1451,6 +1451,8 @@ uv run pytest tests/api/routes/test_files.py -k "complete_upload_duplicate or re
 
 Goal: verify the full local upload/download flow with MinIO.
 
+This is a verification slice. It should not add new backend features unless a bug is found during the flow.
+
 Manual flow:
 
 ```text
@@ -1464,6 +1466,194 @@ Manual flow:
 8. Download file bytes from MinIO.
 ```
 
+Prerequisites:
+
+```text
+docker compose up -d
+docker compose exec backend alembic upgrade head
+```
+
+Verify services:
+
+```text
+docker compose ps
+```
+
+Expected services:
+
+```text
+backend
+db
+minio
+minio-create-bucket
+frontend
+```
+
+Verify MinIO bucket:
+
+```text
+docker compose logs minio-create-bucket
+```
+
+Expected bucket:
+
+```text
+cloud-file-storage
+```
+
+Authentication setup:
+
+Use an existing seeded user. If using the local default template values:
+
+```text
+username: orkasha@gmail.com or the configured FIRST_SUPERUSER
+password: changethis unless changed in .env
+```
+
+Get an access token:
+
+```bash
+curl -s -X POST "http://localhost:8000/api/v1/login/access-token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=<email>&password=<password>"
+```
+
+Set:
+
+```bash
+TOKEN=<access-token>
+```
+
+Create a local test file:
+
+```bash
+printf "hello cloud file storage\n" > /tmp/cloud-file-storage-e2e.txt
+```
+
+Compute metadata:
+
+```bash
+HASH=$(sha256sum /tmp/cloud-file-storage-e2e.txt | awk '{print $1}')
+SIZE=$(wc -c < /tmp/cloud-file-storage-e2e.txt)
+```
+
+Request upload URL:
+
+```bash
+curl -s -X POST "http://localhost:8000/api/v1/files/presign-upload" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"folder_path\": \"root\",
+    \"name\": \"cloud-file-storage-e2e.txt\",
+    \"mime_type\": \"text/plain\",
+    \"category\": \"document\",
+    \"blob_hash\": \"$HASH\",
+    \"size_bytes\": $SIZE
+  }"
+```
+
+Expected response:
+
+```json
+{
+  "upload_url": "...",
+  "method": "PUT",
+  "headers": {
+    "Content-Type": "text/plain"
+  },
+  "object_key": "sha256/<hash>",
+  "expires_in": 900
+}
+```
+
+Upload bytes directly to MinIO:
+
+```bash
+curl -X PUT "$UPLOAD_URL" \
+  -H "Content-Type: text/plain" \
+  --data-binary @/tmp/cloud-file-storage-e2e.txt
+```
+
+Complete upload:
+
+```bash
+curl -s -X POST "http://localhost:8000/api/v1/files/complete-upload" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"folder_path\": \"root\",
+    \"name\": \"cloud-file-storage-e2e.txt\",
+    \"mime_type\": \"text/plain\",
+    \"category\": \"document\",
+    \"blob_hash\": \"$HASH\",
+    \"size_bytes\": $SIZE
+  }"
+```
+
+Expected response:
+
+```json
+{
+  "id": "<file-id>",
+  "name": "cloud-file-storage-e2e.txt",
+  "mime_type": "text/plain",
+  "category": "document",
+  "blob_hash": "<hash>",
+  "size_bytes": 25
+}
+```
+
+Verify folder listing:
+
+```bash
+curl -s "http://localhost:8000/api/v1/files?path=root" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Expected:
+
+```text
+cloud-file-storage-e2e.txt appears in contents
+```
+
+Request download URL:
+
+```bash
+curl -s -X POST "http://localhost:8000/api/v1/files/<file-id>/presign-download" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Download bytes directly from MinIO:
+
+```bash
+curl -s "$DOWNLOAD_URL" -o /tmp/cloud-file-storage-e2e-downloaded.txt
+```
+
+Verify downloaded bytes:
+
+```bash
+cmp /tmp/cloud-file-storage-e2e.txt /tmp/cloud-file-storage-e2e-downloaded.txt
+```
+
+Expected:
+
+```text
+cmp exits with code 0
+```
+
+Negative checks:
+
+- requesting upload for a missing folder returns 404;
+- completing upload before PUT returns 400;
+- completing upload with wrong `size_bytes` returns 400;
+- completing upload twice with the same filename in the same folder returns 409;
+- requesting download for another user's file returns 404.
+
+Cleanup:
+
+Remove the test DB row through the app or direct local DB cleanup. The MinIO object can remain because object keys are content-addressed by hash.
+
 Acceptance criteria:
 
 - MinIO bucket exists;
@@ -1471,6 +1661,9 @@ Acceptance criteria:
 - completed file appears in folder listing;
 - download URL returns the uploaded bytes;
 - backend never proxies file bytes.
+- local DB remains at Alembic head;
+- duplicate filename protection is active;
+- test object key is under `sha256/`.
 
 ### Endpoint detail: `POST /api/v1/files/presign-upload`
 
