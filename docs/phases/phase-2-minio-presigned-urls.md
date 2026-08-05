@@ -155,7 +155,278 @@ filetype
 
 Those can be used for server-side MIME validation, but Phase 2 can initially accept MIME/category from the frontend and validate the shape.
 
-## 2. Add API endpoints
+## 2. Refactor backend project structure
+
+Before adding presigned upload/download endpoints, split the file-storage backend code by responsibility.
+
+The current structure is acceptable for a small starter app, but it is not the right shape for Phase 2 if MinIO, presigned URLs, metadata validation, and ownership checks are added directly to `backend/app/api/routes/files.py`.
+
+Current problems:
+
+- `backend/app/api/routes/files.py` mixes HTTP routing, folder lookup, lazy root creation, DB queries, and response construction.
+- `backend/app/models.py` mixes global app models, DB tables, and API response schemas.
+- Adding S3/MinIO calls directly to route handlers would make the API layer hard to test.
+- `backend/app/crud.py` is template-style shared CRUD and should not become the file-storage dumping ground.
+
+Recommended Phase 2 structure:
+
+```text
+backend/app/
+  api/routes/files.py          # thin HTTP layer only
+  files/
+    __init__.py
+    models.py                  # Folder, StoredFile, LtreeType
+    schemas.py                 # file/folder request and response schemas
+    repository.py              # SQL queries and persistence
+    service.py                 # ownership checks, path lookup, upload/download orchestration
+  core/storage.py              # configured S3/MinIO client and presigned URL helpers
+```
+
+Responsibilities:
+
+- `api/routes/files.py`
+  - parse request parameters and bodies;
+  - inject `session` and `current_user`;
+  - call file service functions;
+  - return API schemas.
+- `files/repository.py`
+  - load folder by owner/path;
+  - list folder children;
+  - load files by id/owner;
+  - insert file metadata;
+  - enforce DB-facing duplicate checks where needed.
+- `files/service.py`
+  - validate ownership and folder existence;
+  - keep lazy root-folder behavior explicit;
+  - validate upload metadata;
+  - coordinate repository and storage wrapper calls.
+- `core/storage.py`
+  - create the boto3 S3 client;
+  - derive object keys;
+  - generate presigned PUT/GET URLs;
+  - call `head_object`;
+  - rewrite Docker-internal MinIO URLs to browser-visible URLs when needed.
+
+Refactor scope:
+
+- Move only the file-storage domain first.
+- Leave user/item/login/template code in the current layout unless it blocks Phase 2.
+- Keep existing endpoint behavior stable during the refactor:
+  ```text
+  GET /api/v1/files?path=<ltree-path>
+  ```
+- Add tests around the refactored file service before adding upload/download endpoints.
+
+### Phase 2.2 implementation plan
+
+Goal: reorganize the file-storage backend code without changing API behavior.
+
+This step should be a pure structure/refactor step. It should not add MinIO upload/download endpoints yet.
+
+#### Step 1: Create the file-storage package
+
+Add:
+
+```text
+backend/app/files/__init__.py
+backend/app/files/models.py
+backend/app/files/schemas.py
+backend/app/files/repository.py
+backend/app/files/service.py
+```
+
+No behavior change in this step.
+
+#### Step 2: Move file-storage models and schemas
+
+Move these classes out of `backend/app/models.py` into `backend/app/files/models.py`:
+
+```text
+LtreeType
+FolderBase
+Folder
+StoredFileBase
+StoredFile
+```
+
+Move these API schemas into `backend/app/files/schemas.py`:
+
+```text
+FolderPublic
+StoredFilePublic
+FolderContentPublic
+FolderWithContentsPublic
+```
+
+`backend/app/models.py` should continue to hold unrelated template/domain models:
+
+```text
+User
+Item
+Token
+Message
+NewPassword
+```
+
+Compatibility option:
+
+- If too many imports break at once, temporarily re-export file models/schemas from `backend/app/models.py`.
+- Remove the compatibility exports after imports are updated.
+
+Preferred final state:
+
+```python
+from app.files.models import Folder, StoredFile
+from app.files.schemas import FolderWithContentsPublic
+```
+
+#### Step 3: Add repository functions
+
+Add SQL-only functions to `backend/app/files/repository.py`.
+
+Suggested functions:
+
+```python
+def get_folder_by_path(*, session, owner_id, path):
+    ...
+
+
+def create_root_folder(*, session, owner_id):
+    ...
+
+
+def list_child_folders(*, session, owner_id, parent_id):
+    ...
+
+
+def list_folder_files(*, session, owner_id, folder_id):
+    ...
+
+
+def get_file_by_id(*, session, owner_id, file_id):
+    ...
+```
+
+Rules:
+
+- repository functions should not know about FastAPI;
+- repository functions should not raise `HTTPException`;
+- repository functions should not generate API response schemas;
+- repository functions should only query or persist data.
+
+#### Step 4: Add file service functions
+
+Add business logic to `backend/app/files/service.py`.
+
+Suggested function:
+
+```python
+def get_folder_contents(*, session, owner_id, path):
+    ...
+```
+
+Responsibilities:
+
+- load folder by `owner_id + path`;
+- if `path == "root"` and no root exists, create a real root folder row;
+- return not-found state for missing non-root folders;
+- call repository functions to load child folders and files;
+- build `FolderWithContentsPublic`.
+
+Keep lazy root creation explicit in this service. It currently creates a real DB row, not mock data.
+
+#### Step 5: Make the API route thin
+
+Update `backend/app/api/routes/files.py` so the route only:
+
+1. receives `session`, `current_user`, and `path`;
+2. calls `get_folder_contents`;
+3. translates not-found errors into HTTP 404 if needed;
+4. returns the schema.
+
+Target route shape:
+
+```python
+@router.get("", response_model=FolderWithContentsPublic)
+def read_files(
+    session: SessionDep,
+    current_user: CurrentUser,
+    path: str = Query(default="root", min_length=1, max_length=1024),
+) -> Any:
+    return get_folder_contents(
+        session=session,
+        owner_id=current_user.id,
+        path=path,
+    )
+```
+
+If the service uses a domain exception, the route should translate it:
+
+```python
+except FolderNotFoundError:
+    raise HTTPException(status_code=404, detail="Folder not found")
+```
+
+#### Step 6: Update imports
+
+Replace imports from `app.models` for file-storage classes.
+
+Examples:
+
+```python
+from app.files.models import Folder, StoredFile
+from app.files.schemas import FolderContentPublic, FolderWithContentsPublic
+```
+
+Also check:
+
+```text
+backend/app/alembic/env.py
+backend/app/initial_data.py
+backend/app/api/routes/files.py
+backend/tests
+```
+
+Alembic must still import all table models so metadata contains `folders` and `files`.
+
+#### Step 7: Add tests for the refactored behavior
+
+Add or update tests for current behavior:
+
+- `GET /api/v1/files` returns root contents;
+- `GET /api/v1/files?path=root.documents` returns that folder contents;
+- missing non-root path returns 404;
+- root path creates a real root folder row if missing;
+- another user's folders/files are not returned.
+
+Do not involve MinIO in these tests.
+
+#### Step 8: Verify
+
+Run:
+
+```text
+docker compose exec backend pytest
+docker compose exec backend alembic current
+docker compose exec backend python -c "from app.files.models import Folder, StoredFile; print(Folder.__tablename__, StoredFile.__tablename__)"
+```
+
+Manual API check:
+
+```text
+GET /api/v1/files
+GET /api/v1/files?path=root.documents
+```
+
+Acceptance criteria:
+
+- existing `GET /api/v1/files?path=<ltree-path>` behavior is unchanged;
+- route file contains no raw SQLModel `select(...)` queries;
+- file-storage DB models are no longer defined in global `app.models`;
+- all file-storage API schemas live under `app.files.schemas`;
+- tests pass without requiring MinIO.
+
+## 3. Add API endpoints
 
 ### `POST /api/v1/files/presign-upload`
 
@@ -437,6 +708,7 @@ compose MinIO service
 bucket bootstrap service
 backend S3 config
 boto3 dependency
+backend file-storage structure refactor
 storage wrapper
 presign-upload endpoint
 complete-upload endpoint

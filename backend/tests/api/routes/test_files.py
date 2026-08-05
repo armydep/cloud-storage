@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import settings
-from app.models import Folder, StoredFile
+from app.files.models import Folder, StoredFile
 
 
 def test_read_root_creates_user_root(
