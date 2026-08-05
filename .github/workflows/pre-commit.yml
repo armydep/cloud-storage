@@ -37,6 +37,8 @@ jobs:
         # To be able to commit it needs the head branch of the PR, the remote one
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+      - name: Create .env from the committed example
+        run: cp .env.example .env
       - uses: oven-sh/setup-bun@v2
       - name: Set up Python
         uses: actions/setup-python@v7
