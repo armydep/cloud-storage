@@ -680,3 +680,124 @@ def test_complete_upload_rejects_another_users_folder(
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Folder not found"
+
+
+def _create_unique_file(
+    *,
+    client: TestClient,
+    headers: dict[str, str],
+    db: Session,
+    name_prefix: str = "Download",
+    blob_hash: str = "a" * 64,
+) -> StoredFile:
+    folder = _create_unique_folder(
+        client=client,
+        headers=headers,
+        db=db,
+        name_prefix=name_prefix,
+    )
+    file = StoredFile(
+        owner_id=folder.owner_id,
+        folder_id=folder.id,
+        name=f"{name_prefix.lower()}-{uuid.uuid4().hex}.pdf",
+        mime_type="application/pdf",
+        category="document",
+        blob_hash=blob_hash,
+        size_bytes=123,
+    )
+    db.add(file)
+    db.commit()
+    db.refresh(file)
+    return file
+
+
+def test_presign_download_succeeds_for_owned_file(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="Download",
+        blob_hash="a" * 64,
+    )
+    calls = []
+
+    def mock_create_presigned_download_url(*, object_key: str) -> str:
+        calls.append({"object_key": object_key})
+        return "http://localhost:9000/cloud-file-storage/sha256/download?sig=1"
+
+    monkeypatch.setattr(
+        "app.files.service.storage.create_presigned_download_url",
+        mock_create_presigned_download_url,
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/presign-download",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "download_url": "http://localhost:9000/cloud-file-storage/sha256/download?sig=1",
+        "method": "GET",
+        "expires_in": settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
+    }
+    assert calls == [{"object_key": f"sha256/{'a' * 64}"}]
+
+
+def test_presign_download_missing_file_returns_404(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/{uuid.uuid4()}/presign-download",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "File not found"
+
+
+def test_presign_download_rejects_another_users_file(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="DownloadSuper",
+        blob_hash="b" * 64,
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/presign-download",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "File not found"
+
+
+def test_presign_download_invalid_uuid_returns_422(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/not-a-uuid/presign-download",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 422
+
+
+def test_presign_download_requires_authentication(client: TestClient) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/{uuid.uuid4()}/presign-download",
+    )
+
+    assert response.status_code == 401

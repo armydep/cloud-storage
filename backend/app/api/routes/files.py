@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -6,6 +7,7 @@ from app.api.deps import CurrentUser, SessionDep
 from app.files.schemas import (
     CompleteUploadRequest,
     FolderWithContentsPublic,
+    PresignDownloadResponse,
     PresignUploadRequest,
     PresignUploadResponse,
     StoredFilePublic,
@@ -16,7 +18,9 @@ from app.files.service import (
     ObjectContentTypeMismatchError,
     ObjectNotUploadedError,
     ObjectSizeMismatchError,
+    StoredFileNotFoundError,
     complete_upload,
+    create_presigned_download,
     create_presigned_upload,
     get_folder_contents,
 )
@@ -44,6 +48,22 @@ def read_files(
         )
     except FolderNotFoundError:
         raise HTTPException(status_code=404, detail="Folder not found")
+
+
+@router.post("/{file_id}/presign-download", response_model=PresignDownloadResponse)
+def presign_download(
+    session: SessionDep,
+    current_user: CurrentUser,
+    file_id: uuid.UUID,
+) -> Any:
+    try:
+        return create_presigned_download(
+            session=session,
+            owner_id=current_user.id,
+            file_id=file_id,
+        )
+    except StoredFileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
 
 
 @router.post("/complete-upload", response_model=StoredFilePublic)

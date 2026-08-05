@@ -9,6 +9,7 @@ from app.files.schemas import (
     CompleteUploadRequest,
     FolderContentPublic,
     FolderWithContentsPublic,
+    PresignDownloadResponse,
     PresignUploadRequest,
     PresignUploadResponse,
     StoredFilePublic,
@@ -16,6 +17,10 @@ from app.files.schemas import (
 
 
 class FolderNotFoundError(Exception):
+    pass
+
+
+class StoredFileNotFoundError(Exception):
     pass
 
 
@@ -146,3 +151,23 @@ def complete_upload(
         request=request,
     )
     return StoredFilePublic.model_validate(file)
+
+
+def create_presigned_download(
+    *, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID
+) -> PresignDownloadResponse:
+    file = repository.get_file_by_id(
+        session=session,
+        owner_id=owner_id,
+        file_id=file_id,
+    )
+    if not file:
+        raise StoredFileNotFoundError
+
+    object_key = storage.get_object_key(file.blob_hash)
+    download_url = storage.create_presigned_download_url(object_key=object_key)
+
+    return PresignDownloadResponse(
+        download_url=download_url,
+        expires_in=settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
+    )

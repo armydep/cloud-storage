@@ -1152,6 +1152,17 @@ Endpoint:
 POST /api/v1/files/{file_id}/presign-download
 ```
 
+Files:
+
+```text
+backend/app/api/routes/files.py
+backend/app/files/service.py
+backend/app/files/repository.py
+backend/app/files/schemas.py
+backend/app/core/storage.py
+backend/tests/api/routes/test_files.py
+```
+
 Work:
 
 - authenticate current user;
@@ -1161,12 +1172,115 @@ Work:
 - generate presigned GET URL;
 - return URL, method, and expiry.
 
+Service design:
+
+Add a service function:
+
+```python
+def create_presigned_download(
+    *,
+    session: Session,
+    owner_id: uuid.UUID,
+    file_id: uuid.UUID,
+) -> PresignDownloadResponse:
+    ...
+```
+
+Responsibilities:
+
+1. Load file:
+   ```python
+   repository.get_file_by_id(
+       session=session,
+       owner_id=owner_id,
+       file_id=file_id,
+   )
+   ```
+2. If file is missing, raise `FileNotFoundError`.
+3. Derive object key:
+   ```python
+   object_key = storage.get_object_key(file.blob_hash)
+   ```
+4. Generate presigned download URL:
+   ```python
+   storage.create_presigned_download_url(object_key=object_key)
+   ```
+5. Return:
+   ```python
+   PresignDownloadResponse(
+       download_url=download_url,
+       expires_in=settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
+   )
+   ```
+
+Route design:
+
+Add to `backend/app/api/routes/files.py`:
+
+```python
+@router.post("/{file_id}/presign-download", response_model=PresignDownloadResponse)
+def presign_download(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    file_id: uuid.UUID,
+) -> Any:
+    try:
+        return create_presigned_download(
+            session=session,
+            owner_id=current_user.id,
+            file_id=file_id,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+```
+
+Important behavior:
+
+- file ownership is enforced by querying `owner_id + file_id`;
+- missing file and another user's file both return 404;
+- the backend does not call `head_object` in this slice;
+- the backend does not proxy file bytes;
+- the presigned URL may still fail at MinIO if the object was deleted after metadata was recorded.
+
+Testing strategy:
+
+- mock `app.files.service.storage.create_presigned_download_url`;
+- do not require real MinIO;
+- create an owned `StoredFile` metadata row in the test DB;
+- call the endpoint with auth headers;
+- assert response shape and object key used by mocked storage helper.
+
+Test cases:
+
+- success for owned file;
+- missing file returns 404;
+- another user's file returns 404;
+- invalid file UUID returns 422;
+- unauthenticated request returns 401;
+- storage wrapper is called with `sha256/{file.blob_hash}`.
+
 Acceptance criteria:
 
 - owned file returns a presigned download URL;
 - missing file returns 404;
 - another user's file returns 404;
 - storage wrapper is mocked in API tests.
+- response includes:
+  ```json
+  {
+    "method": "GET",
+    "download_url": "<presigned-url>",
+    "expires_in": 900
+  }
+  ```
+
+Verification commands:
+
+```text
+uv run ruff check app/api/routes/files.py app/files/service.py tests/api/routes/test_files.py
+uv run pytest tests/api/routes/test_files.py -k presign_download
+```
 
 ### Phase 2.3.6: DB constraints and repository hardening
 
