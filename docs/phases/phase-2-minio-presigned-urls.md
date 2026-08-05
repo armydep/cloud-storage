@@ -428,7 +428,358 @@ Acceptance criteria:
 
 ## 3. Add API endpoints
 
-### `POST /api/v1/files/presign-upload`
+Implement this as small Phase 2.3 slices. Each slice should be independently reviewable and should keep the app runnable.
+
+### Phase 2.3.1: Storage wrapper foundation
+
+Goal: add the MinIO/S3 integration layer without exposing new API behavior yet.
+
+Files:
+
+```text
+backend/app/core/storage.py
+backend/app/core/config.py
+backend/pyproject.toml
+backend/tests/core/test_storage.py
+```
+
+Work:
+
+- add `boto3` dependency;
+- confirm these settings exist in `backend/app/core/config.py`:
+  ```text
+  S3_ENDPOINT_URL
+  S3_PUBLIC_ENDPOINT_URL
+  S3_BUCKET
+  S3_ACCESS_KEY
+  S3_SECRET_KEY
+  S3_REGION
+  S3_PRESIGNED_URL_EXPIRES_SECONDS
+  ```
+- create a configured S3 client using those settings;
+- add object-key helper:
+  ```text
+  sha256/{blob_hash}
+  ```
+- add presigned URL helpers for PUT and GET;
+- add `head_object`/stat helper;
+- add internal-to-public URL rewrite for local Docker:
+  ```text
+  http://minio:9000 -> http://localhost:9000
+  ```
+
+Implementation details:
+
+```python
+@dataclass(frozen=True)
+class ObjectStat:
+    size_bytes: int
+    content_type: str | None = None
+
+
+def get_object_key(blob_hash: str) -> str:
+    ...
+
+
+def get_s3_client() -> Any:
+    ...
+
+
+def create_presigned_upload_url(
+    *,
+    object_key: str,
+    mime_type: str,
+    expires_in: int | None = None,
+) -> str:
+    ...
+
+
+def create_presigned_download_url(
+    *,
+    object_key: str,
+    expires_in: int | None = None,
+) -> str:
+    ...
+
+
+def stat_object(*, object_key: str) -> ObjectStat:
+    ...
+```
+
+S3 client configuration:
+
+```python
+boto3.client(
+    "s3",
+    endpoint_url=settings.S3_ENDPOINT_URL,
+    aws_access_key_id=settings.S3_ACCESS_KEY,
+    aws_secret_access_key=settings.S3_SECRET_KEY,
+    region_name=settings.S3_REGION,
+)
+```
+
+Presigned PUT parameters:
+
+```python
+ClientMethod="put_object"
+Params={
+    "Bucket": settings.S3_BUCKET,
+    "Key": object_key,
+    "ContentType": mime_type,
+}
+ExpiresIn=expires_in or settings.S3_PRESIGNED_URL_EXPIRES_SECONDS
+```
+
+Presigned GET parameters:
+
+```python
+ClientMethod="get_object"
+Params={
+    "Bucket": settings.S3_BUCKET,
+    "Key": object_key,
+}
+ExpiresIn=expires_in or settings.S3_PRESIGNED_URL_EXPIRES_SECONDS
+```
+
+URL rewrite rule:
+
+- if `S3_ENDPOINT_URL != S3_PUBLIC_ENDPOINT_URL`, replace only the URL prefix;
+- do not parse or rebuild the query string, because that can break the signature;
+- example:
+  ```text
+  http://minio:9000/cloud-file-storage/sha256/abc?...
+  -> http://localhost:9000/cloud-file-storage/sha256/abc?...
+  ```
+
+Error behavior:
+
+- `stat_object` should return `ObjectStat` for an existing object;
+- missing object should raise a storage-specific exception, for example:
+  ```python
+  class ObjectNotFoundError(Exception):
+      pass
+  ```
+- do not raise `HTTPException` from `core/storage.py`;
+- API-facing error translation belongs in later service/route slices.
+
+Tests:
+
+- unit-test `get_object_key`;
+- unit-test internal-to-public URL rewrite;
+- unit-test presigned PUT calls `generate_presigned_url` with `put_object`, bucket, key, content type, and expiry;
+- unit-test presigned GET calls `generate_presigned_url` with `get_object`, bucket, key, and expiry;
+- unit-test `stat_object` maps `ContentLength` and `ContentType` into `ObjectStat`;
+- unit-test missing object maps to `ObjectNotFoundError`.
+
+Mocking strategy:
+
+- do not require real MinIO for tests in this slice;
+- monkeypatch/mock `get_s3_client()` or the boto3 client object;
+- verify parameters passed to the mocked client.
+
+Acceptance criteria:
+
+- `backend/app/core/storage.py` imports cleanly;
+- object key generation is deterministic;
+- storage wrapper can be unit-tested without FastAPI route changes;
+- no new file API endpoints are exposed in this slice.
+- Ruff passes for `backend/app/core/storage.py` and `backend/tests/core/test_storage.py`.
+- Targeted storage tests pass.
+
+Verification commands:
+
+```text
+docker compose exec backend ruff check app tests/core/test_storage.py
+docker compose exec backend pytest tests/core/test_storage.py
+docker compose exec backend python -c "from app.core.storage import get_object_key; print(get_object_key('abc'))"
+```
+
+### Phase 2.3.2: Upload/download API schemas and validation
+
+Goal: define request/response contracts before implementing endpoint behavior.
+
+Files:
+
+```text
+backend/app/files/schemas.py
+backend/app/files/service.py
+backend/tests/api/routes/test_files.py
+```
+
+Add schemas:
+
+```text
+PresignUploadRequest
+PresignUploadResponse
+CompleteUploadRequest
+PresignDownloadResponse
+```
+
+Validation rules:
+
+- `folder_path` must be present;
+- `blob_hash` must be 64 lowercase/uppercase hex characters;
+- `size_bytes > 0`;
+- `name` must be non-empty;
+- `mime_type` must be non-empty;
+- `category` must be one of:
+  ```text
+  image
+  video
+  audio
+  document
+  spreadsheet
+  archive
+  other
+  ```
+
+Acceptance criteria:
+
+- invalid request payloads fail with 422;
+- validation can be tested without MinIO;
+- no DB insert happens in this slice.
+
+### Phase 2.3.3: Presign upload endpoint
+
+Goal: allow the frontend to request a short-lived presigned PUT URL.
+
+Endpoint:
+
+```text
+POST /api/v1/files/presign-upload
+```
+
+Work:
+
+- authenticate current user;
+- validate request schema;
+- load folder by `owner_id + folder_path`;
+- return 404 if folder does not exist or does not belong to user;
+- derive object key from `blob_hash`;
+- generate presigned PUT URL;
+- return URL, method, required headers, object key, and expiry.
+
+Do not insert a `files` row here.
+
+Acceptance criteria:
+
+- owned folder returns a presigned upload response;
+- missing folder returns 404;
+- invalid hash returns 422;
+- another user's folder cannot be used;
+- storage wrapper is mocked in API tests.
+
+### Phase 2.3.4: Complete upload endpoint
+
+Goal: record file metadata only after the browser successfully uploads bytes to MinIO.
+
+Endpoint:
+
+```text
+POST /api/v1/files/complete-upload
+```
+
+Work:
+
+- authenticate current user;
+- validate request schema;
+- load folder by `owner_id + folder_path`;
+- derive object key from `blob_hash`;
+- call storage `head_object`;
+- verify object exists;
+- verify object size matches `size_bytes`;
+- optionally verify content type matches `mime_type`;
+- reject duplicate filename in the same folder;
+- insert row into `files`;
+- return created file metadata.
+
+Acceptance criteria:
+
+- successful completion inserts one `files` row;
+- missing object is rejected;
+- size mismatch is rejected;
+- duplicate name in same folder is rejected;
+- same `blob_hash` can still be used in another folder/name;
+- `GET /api/v1/files?path=<folder_path>` shows the completed file.
+
+### Phase 2.3.5: Presign download endpoint
+
+Goal: allow the frontend to download a stored file through a short-lived presigned GET URL.
+
+Endpoint:
+
+```text
+POST /api/v1/files/{file_id}/presign-download
+```
+
+Work:
+
+- authenticate current user;
+- load file by `owner_id + file_id`;
+- return 404 if file does not exist or belongs to another user;
+- derive object key from `file.blob_hash`;
+- generate presigned GET URL;
+- return URL, method, and expiry.
+
+Acceptance criteria:
+
+- owned file returns a presigned download URL;
+- missing file returns 404;
+- another user's file returns 404;
+- storage wrapper is mocked in API tests.
+
+### Phase 2.3.6: DB constraints and repository hardening
+
+Goal: make file/folder uniqueness rules explicit at the database layer.
+
+Work:
+
+- add migration for:
+  ```sql
+  CREATE INDEX ix_files_owner_id ON files(owner_id);
+  CREATE INDEX ix_files_folder_id ON files(folder_id);
+  CREATE INDEX ix_files_blob_hash ON files(blob_hash);
+  CREATE UNIQUE INDEX uq_files_folder_name ON files(folder_id, name);
+  CREATE INDEX ix_folders_owner_id ON folders(owner_id);
+  CREATE UNIQUE INDEX uq_folders_owner_path ON folders(owner_id, path);
+  CREATE UNIQUE INDEX uq_folders_parent_name ON folders(parent_id, name);
+  CREATE INDEX ix_folders_path_gist ON folders USING GIST(path);
+  ```
+- update repository/service code to translate duplicate filename conflicts into stable API errors.
+
+Acceptance criteria:
+
+- Alembic migration applies cleanly;
+- duplicate file name in same folder is blocked;
+- duplicate folder path per owner is blocked;
+- existing folder listing still works.
+
+### Phase 2.3.7: End-to-end local verification
+
+Goal: verify the full local upload/download flow with MinIO.
+
+Manual flow:
+
+```text
+1. Start compose stack.
+2. Login in frontend or Swagger.
+3. Request presigned upload URL.
+4. PUT file bytes directly to MinIO.
+5. Call complete-upload.
+6. Refresh GET /api/v1/files?path=<current-path>.
+7. Request presigned download URL.
+8. Download file bytes from MinIO.
+```
+
+Acceptance criteria:
+
+- MinIO bucket exists;
+- upload URL works from browser/curl using `localhost:9000`;
+- completed file appears in folder listing;
+- download URL returns the uploaded bytes;
+- backend never proxies file bytes.
+
+### Endpoint detail: `POST /api/v1/files/presign-upload`
 
 Creates a short-lived presigned PUT URL for direct upload to MinIO.
 
@@ -471,7 +822,7 @@ Backend behavior:
 5. Generate presigned PUT URL.
 6. Return URL and required headers.
 
-### `POST /api/v1/files/complete-upload`
+### Endpoint detail: `POST /api/v1/files/complete-upload`
 
 Records uploaded file metadata after the browser successfully uploads to MinIO.
 
@@ -519,7 +870,7 @@ Backend behavior:
 
 Do not insert the DB row before upload completion. Otherwise the DB can point to missing objects.
 
-### `POST /api/v1/files/{file_id}/presign-download`
+### Endpoint detail: `POST /api/v1/files/{file_id}/presign-download`
 
 Creates a short-lived presigned GET URL for direct browser download from MinIO.
 
