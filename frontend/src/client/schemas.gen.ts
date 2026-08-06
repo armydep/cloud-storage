@@ -144,6 +144,25 @@ export const FileSharePublicSchema = {
     title: 'FileSharePublic'
 } as const;
 
+export const FileSharesPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/FileSharePublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'FileSharesPublic'
+} as const;
+
 export const FolderContentPublicSchema = {
     properties: {
         id: {

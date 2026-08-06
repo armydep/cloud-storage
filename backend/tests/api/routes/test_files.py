@@ -1190,3 +1190,94 @@ def test_shared_with_me_is_empty_for_user_without_shares(
 
     assert response.status_code == 200
     assert response.json() == {"data": [], "count": 0}
+
+
+def test_owner_lists_and_revokes_file_share(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="ManagedShare",
+    )
+    shares_url = f"{settings.API_V1_STR}/files/{file.id}/shares"
+    create_response = client.post(
+        shares_url,
+        headers=normal_user_token_headers,
+        json={"recipient_email": settings.FIRST_SUPERUSER},
+    )
+    assert create_response.status_code == 201
+    share = create_response.json()
+
+    list_response = client.get(shares_url, headers=normal_user_token_headers)
+    assert list_response.status_code == 200
+    assert list_response.json() == {"data": [share], "count": 1}
+
+    revoke_url = f"{shares_url}/{share['id']}"
+    revoke_response = client.delete(
+        revoke_url,
+        headers=normal_user_token_headers,
+    )
+    assert revoke_response.status_code == 204
+    assert revoke_response.content == b""
+
+    recipient_listing = client.get(
+        f"{settings.API_V1_STR}/files/shared-with-me",
+        headers=superuser_token_headers,
+    )
+    assert recipient_listing.status_code == 200
+    assert all(item["id"] != str(file.id) for item in recipient_listing.json()["data"])
+
+    download_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/presign-download",
+        headers=superuser_token_headers,
+    )
+    assert download_response.status_code == 404
+
+    repeated_response = client.delete(
+        revoke_url,
+        headers=normal_user_token_headers,
+    )
+    assert repeated_response.status_code == 404
+    assert repeated_response.json()["detail"] == "File share not found"
+
+
+def test_share_management_is_owner_scoped_and_requires_authentication(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="PrivateManagedShare",
+    )
+    shares_url = f"{settings.API_V1_STR}/files/{file.id}/shares"
+    share_response = client.post(
+        shares_url,
+        headers=normal_user_token_headers,
+        json={"recipient_email": settings.FIRST_SUPERUSER},
+    )
+    assert share_response.status_code == 201
+    revoke_url = f"{shares_url}/{share_response.json()['id']}"
+
+    list_response = client.get(shares_url, headers=superuser_token_headers)
+    assert list_response.status_code == 404
+    assert list_response.json()["detail"] == "File not found"
+    revoke_response = client.delete(revoke_url, headers=superuser_token_headers)
+    assert revoke_response.status_code == 404
+    assert revoke_response.json()["detail"] == "File not found"
+
+    owner_listing = client.get(shares_url, headers=normal_user_token_headers)
+    assert owner_listing.status_code == 200
+    assert owner_listing.json()["count"] == 1
+    assert owner_listing.json()["data"][0]["id"] == share_response.json()["id"]
+
+    assert client.get(shares_url).status_code == 401
+    assert client.delete(revoke_url).status_code == 401

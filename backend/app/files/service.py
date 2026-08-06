@@ -11,6 +11,7 @@ from app.files.schemas import (
     CompleteUploadRequest,
     FileShareCreate,
     FileSharePublic,
+    FileSharesPublic,
     FolderContentPublic,
     FolderCreate,
     FolderPublic,
@@ -69,6 +70,10 @@ class CannotShareWithOwnerError(Exception):
 
 
 class DuplicateFileShareError(Exception):
+    pass
+
+
+class FileShareNotFoundError(Exception):
     pass
 
 
@@ -315,3 +320,55 @@ def get_files_shared_with_user(
         for file, owner_email, shared_at in rows
     ]
     return SharedFilesPublic(data=data, count=len(data))
+
+
+def get_file_shares(
+    *, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID
+) -> FileSharesPublic:
+    file = repository.get_file_by_id(
+        session=session,
+        owner_id=owner_id,
+        file_id=file_id,
+    )
+    if not file:
+        raise StoredFileNotFoundError
+
+    data = [
+        FileSharePublic(
+            id=share.id,
+            file_id=share.file_id,
+            recipient_email=recipient_email,
+            created_at=share.created_at,
+        )
+        for share, recipient_email in repository.list_file_shares(
+            session=session,
+            file_id=file.id,
+        )
+    ]
+    return FileSharesPublic(data=data, count=len(data))
+
+
+def revoke_file_share(
+    *,
+    session: Session,
+    owner_id: uuid.UUID,
+    file_id: uuid.UUID,
+    share_id: uuid.UUID,
+) -> None:
+    file = repository.get_file_by_id(
+        session=session,
+        owner_id=owner_id,
+        file_id=file_id,
+    )
+    if not file:
+        raise StoredFileNotFoundError
+
+    share = repository.get_file_share(
+        session=session,
+        file_id=file.id,
+        share_id=share_id,
+    )
+    if not share:
+        raise FileShareNotFoundError
+
+    repository.delete_file_share(session=session, share=share)

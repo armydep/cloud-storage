@@ -149,6 +149,33 @@ def create_file_share(
     return share
 
 
+def list_file_shares(
+    *, session: Session, file_id: uuid.UUID
+) -> list[tuple[FileShare, str]]:
+    statement = (
+        select(FileShare, User.email)
+        .join(User, col(User.id) == col(FileShare.recipient_id))
+        .where(col(FileShare.file_id) == file_id)
+        .order_by(col(FileShare.created_at).desc(), col(FileShare.id).desc())
+    )
+    return list(session.exec(statement).all())
+
+
+def get_file_share(
+    *, session: Session, file_id: uuid.UUID, share_id: uuid.UUID
+) -> FileShare | None:
+    statement = select(FileShare).where(
+        FileShare.file_id == file_id,
+        FileShare.id == share_id,
+    )
+    return session.exec(statement).first()
+
+
+def delete_file_share(*, session: Session, share: FileShare) -> None:
+    session.delete(share)
+    session.commit()
+
+
 def list_files_shared_with_user(
     *, session: Session, recipient_id: uuid.UUID
 ) -> list[tuple[StoredFile, str, datetime]]:

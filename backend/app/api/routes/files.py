@@ -10,6 +10,7 @@ from app.files.schemas import (
     CompleteUploadRequest,
     FileShareCreate,
     FileSharePublic,
+    FileSharesPublic,
     FolderCreate,
     FolderPublic,
     FolderWithContentsPublic,
@@ -24,6 +25,7 @@ from app.files.service import (
     DuplicateFileNameError,
     DuplicateFileShareError,
     DuplicateFolderNameError,
+    FileShareNotFoundError,
     FolderNotFoundError,
     InvalidFolderNameError,
     ObjectContentTypeMismatchError,
@@ -36,8 +38,10 @@ from app.files.service import (
     create_folder,
     create_presigned_download,
     create_presigned_upload,
+    get_file_shares,
     get_files_shared_with_user,
     get_folder_contents,
+    revoke_file_share,
     share_file,
 )
 
@@ -152,6 +156,42 @@ def create_file_share(
             status_code=409,
             detail="File is already shared with this recipient",
         )
+
+
+@router.get("/{file_id}/shares", response_model=FileSharesPublic)
+def read_file_shares(
+    session: SessionDep,
+    current_user: CurrentUser,
+    file_id: uuid.UUID,
+) -> Any:
+    try:
+        return get_file_shares(
+            session=session,
+            owner_id=current_user.id,
+            file_id=file_id,
+        )
+    except StoredFileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+
+
+@router.delete("/{file_id}/shares/{share_id}", status_code=204)
+def delete_file_share(
+    session: SessionDep,
+    current_user: CurrentUser,
+    file_id: uuid.UUID,
+    share_id: uuid.UUID,
+) -> None:
+    try:
+        revoke_file_share(
+            session=session,
+            owner_id=current_user.id,
+            file_id=file_id,
+            share_id=share_id,
+        )
+    except StoredFileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+    except FileShareNotFoundError:
+        raise HTTPException(status_code=404, detail="File share not found")
 
 
 @router.post("/complete-upload", response_model=StoredFilePublic)

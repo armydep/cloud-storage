@@ -31,6 +31,11 @@ export type FileSharePublic = {
     created_at: string;
 };
 
+export type FileSharesPublic = {
+    data: Array<FileSharePublic>;
+    count: number;
+};
+
 export type FolderContentPublic = {
     id: string;
     name: string;
@@ -241,6 +246,19 @@ export type FilesCreateFileShareData = {
 };
 
 export type FilesCreateFileShareResponse = (FileSharePublic);
+
+export type FilesReadFileSharesData = {
+    fileId: string;
+};
+
+export type FilesReadFileSharesResponse = (FileSharesPublic);
+
+export type FilesDeleteFileShareData = {
+    fileId: string;
+    shareId: string;
+};
+
+export type FilesDeleteFileShareResponse = (void);
 
 export type FilesCompleteFileUploadData = {
     requestBody: CompleteUploadRequest;

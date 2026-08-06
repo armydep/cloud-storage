@@ -100,3 +100,34 @@ def test_shared_files_are_listed_newest_first(db: Session) -> None:
     )
 
     assert [file.id for file, _, _ in rows] == [newer_file.id, older_file.id]
+
+
+def test_file_shares_can_be_listed_and_deleted(db: Session) -> None:
+    file = _create_file(db)
+    recipient = create_random_user(db)
+    share = repository.create_file_share(
+        session=db,
+        file_id=file.id,
+        recipient_id=recipient.id,
+    )
+
+    rows = repository.list_file_shares(session=db, file_id=file.id)
+
+    assert [(row.id, email) for row, email in rows] == [(share.id, recipient.email)]
+    stored_share = repository.get_file_share(
+        session=db,
+        file_id=file.id,
+        share_id=share.id,
+    )
+    assert stored_share is not None
+
+    repository.delete_file_share(session=db, share=stored_share)
+
+    assert (
+        repository.get_file_share(
+            session=db,
+            file_id=file.id,
+            share_id=share.id,
+        )
+        is None
+    )

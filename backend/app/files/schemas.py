@@ -134,6 +134,11 @@ class FileSharePublic(SQLModel):
     created_at: datetime
 
 
+class FileSharesPublic(SQLModel):
+    data: list[FileSharePublic]
+    count: int
+
+
 class SharedFilePublic(SQLModel):
     id: uuid.UUID
     name: str
