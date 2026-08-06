@@ -24,7 +24,7 @@ export class FilesService {
             }
         });
     }
-
+    
     /**
      * Read Files
      * Return a folder and its direct contents by ltree path.
