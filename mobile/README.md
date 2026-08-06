@@ -4,8 +4,8 @@ Android-only Flutter application for Cloud File Storage. This directory is a
 standalone client application; it does not belong to the React workspace in
 `frontend/`.
 
-The current scope is infrastructure only. Authentication, file management, and
-synchronization will be added in later issues.
+The application supports secure sign-in, session restoration, and sign-out.
+File management and synchronization will be added in later issues.
 
 ## Prerequisites
 
@@ -13,6 +13,7 @@ synchronization will be added in later issues.
 - Android Studio with an Android SDK and emulator, or a physical Android device
 - Java version supported by the generated Gradle wrapper
 - A running Cloud File Storage backend
+- Android 7.0 (API 24) or newer
 
 Verify the local toolchain:
 
@@ -47,6 +48,16 @@ flutter build apk --dart-define=API_BASE_URL=https://api.example.com
 
 The Android application ID is `com.armydep.cloudestorage`.
 
+## Authentication
+
+Sign in with an existing Cloud File Storage email and password. The access
+token is stored in Android secure storage and validated whenever the app starts.
+Invalid or expired sessions return to sign-in; temporary network or server
+failures retain the token and offer a retry. Signing out deletes the token.
+
+Registration, password recovery, and biometric authentication are not part of
+the current mobile scope.
+
 ## Quality checks
 
 ```bash
@@ -61,9 +72,11 @@ Apply Dart formatting with `dart format .`.
 
 ```text
 lib/
-├── app/             Application widget and top-level composition
+├── app/             Application widget and auth-aware routing
 ├── core/
 │   ├── config/      Compile-time application configuration
 │   └── network/     Reusable backend HTTP client foundation
+├── features/
+│   └── auth/        Session state, secure storage, API, and screens
 └── main.dart        Application bootstrap
 ```
