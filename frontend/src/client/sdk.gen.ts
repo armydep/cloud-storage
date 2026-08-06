@@ -3,9 +3,21 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { FilesCreateChildFolderData, FilesCreateChildFolderResponse, FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { FilesReadFilesSharedWithMeResponse, FilesCreateChildFolderData, FilesCreateChildFolderResponse, FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesCreateFileShareData, FilesCreateFileShareResponse, FilesReadFileSharesData, FilesReadFileSharesResponse, FilesDeleteFileShareData, FilesDeleteFileShareResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class FilesService {
+    /**
+     * Read Files Shared With Me
+     * @returns SharedFilesPublic Successful Response
+     * @throws ApiError
+     */
+    public static readFilesSharedWithMe(): CancelablePromise<FilesReadFilesSharedWithMeResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/files/shared-with-me'
+        });
+    }
+
     /**
      * Create Child Folder
      * @param data The data for the request.
@@ -24,7 +36,7 @@ export class FilesService {
             }
         });
     }
-    
+
     /**
      * Read Files
      * Return a folder and its direct contents by ltree path.
@@ -69,6 +81,71 @@ export class FilesService {
         });
     }
     
+    /**
+     * Create File Share
+     * @param data The data for the request.
+     * @param data.fileId
+     * @param data.requestBody
+     * @returns FileSharePublic Successful Response
+     * @throws ApiError
+     */
+    public static createFileShare(data: FilesCreateFileShareData): CancelablePromise<FilesCreateFileShareResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/files/{file_id}/shares',
+            path: {
+                file_id: data.fileId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read File Shares
+     * @param data The data for the request.
+     * @param data.fileId
+     * @returns FileSharesPublic Successful Response
+     * @throws ApiError
+     */
+    public static readFileShares(data: FilesReadFileSharesData): CancelablePromise<FilesReadFileSharesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/files/{file_id}/shares',
+            path: {
+                file_id: data.fileId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Delete File Share
+     * @param data The data for the request.
+     * @param data.fileId
+     * @param data.shareId
+     * @returns void Successful Response
+     * @throws ApiError
+     */
+    public static deleteFileShare(data: FilesDeleteFileShareData): CancelablePromise<FilesDeleteFileShareResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/files/{file_id}/shares/{share_id}',
+            path: {
+                file_id: data.fileId,
+                share_id: data.shareId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
     /**
      * Complete File Upload
      * @param data The data for the request.

@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import BigInteger, Index, UniqueConstraint, cast
+from sqlalchemy import BigInteger, DateTime, Index, UniqueConstraint, cast
 from sqlalchemy.types import UserDefinedType
 from sqlmodel import Field, SQLModel
 
@@ -67,4 +68,31 @@ class StoredFile(StoredFileBase, table=True):
     )
     folder_id: uuid.UUID = Field(
         foreign_key="folders.id", nullable=False, ondelete="CASCADE"
+    )
+
+
+def get_datetime_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class FileShare(SQLModel, table=True):
+    __tablename__ = "file_shares"
+    __table_args__ = (
+        UniqueConstraint(
+            "file_id", "recipient_id", name="uq_file_shares_file_recipient"
+        ),
+        Index("ix_file_shares_file_id", "file_id"),
+        Index("ix_file_shares_recipient_id", "recipient_id"),
+    )
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    file_id: uuid.UUID = Field(
+        foreign_key="files.id", nullable=False, ondelete="CASCADE"
+    )
+    recipient_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, ondelete="CASCADE"
+    )
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        nullable=False,
     )

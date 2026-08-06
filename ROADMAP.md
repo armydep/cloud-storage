@@ -59,7 +59,9 @@ Improve the main file-management workflow after the core operations are stable.
 
 ## 6. Later phase: Sharing and collaboration
 
-- [ ] **6.1** Share files with specific users
+- [x] **6.1** Share files with specific users
+      ([#48](https://github.com/armydep/cloude-file-storage/issues/48),
+      [design](docs/phases/phase-4-file-sharing.md))
 - [ ] **6.2** Share folders with specific users
 - [ ] **6.3** Share files and folders publicly with anyone
 - [ ] **6.4** Create expiring public links

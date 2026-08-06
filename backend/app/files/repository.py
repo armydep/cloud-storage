@@ -1,10 +1,13 @@
 import uuid
+from datetime import datetime
 
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
-from app.files.models import Folder, StoredFile
+from app.files.models import FileShare, Folder, StoredFile
 from app.files.schemas import CompleteUploadRequest
+from app.models import User
 
 ROOT_FOLDER_PATH = "root"
 
@@ -14,6 +17,10 @@ class DuplicateFileNameRepositoryError(Exception):
 
 
 class DuplicateFolderRepositoryError(Exception):
+    pass
+
+
+class DuplicateFileShareRepositoryError(Exception):
     pass
 
 
@@ -105,6 +112,81 @@ def get_file_by_id(
         StoredFile.id == file_id,
     )
     return session.exec(statement).first()
+
+
+def get_downloadable_file_by_id(
+    *, session: Session, user_id: uuid.UUID, file_id: uuid.UUID
+) -> StoredFile | None:
+    statement = (
+        select(StoredFile)
+        .outerjoin(FileShare, col(FileShare.file_id) == col(StoredFile.id))
+        .where(
+            col(StoredFile.id) == file_id,
+            or_(
+                col(StoredFile.owner_id) == user_id,
+                col(FileShare.recipient_id) == user_id,
+            ),
+        )
+    )
+    return session.exec(statement).first()
+
+
+def get_user_by_email(*, session: Session, email: str) -> User | None:
+    return session.exec(select(User).where(User.email == email)).first()
+
+
+def create_file_share(
+    *, session: Session, file_id: uuid.UUID, recipient_id: uuid.UUID
+) -> FileShare:
+    share = FileShare(file_id=file_id, recipient_id=recipient_id)
+    try:
+        session.add(share)
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise DuplicateFileShareRepositoryError
+    session.refresh(share)
+    return share
+
+
+def list_file_shares(
+    *, session: Session, file_id: uuid.UUID
+) -> list[tuple[FileShare, str]]:
+    statement = (
+        select(FileShare, User.email)
+        .join(User, col(User.id) == col(FileShare.recipient_id))
+        .where(col(FileShare.file_id) == file_id)
+        .order_by(col(FileShare.created_at).desc(), col(FileShare.id).desc())
+    )
+    return list(session.exec(statement).all())
+
+
+def get_file_share(
+    *, session: Session, file_id: uuid.UUID, share_id: uuid.UUID
+) -> FileShare | None:
+    statement = select(FileShare).where(
+        FileShare.file_id == file_id,
+        FileShare.id == share_id,
+    )
+    return session.exec(statement).first()
+
+
+def delete_file_share(*, session: Session, share: FileShare) -> None:
+    session.delete(share)
+    session.commit()
+
+
+def list_files_shared_with_user(
+    *, session: Session, recipient_id: uuid.UUID
+) -> list[tuple[StoredFile, str, datetime]]:
+    statement = (
+        select(StoredFile, User.email, FileShare.created_at)
+        .join(FileShare, col(FileShare.file_id) == col(StoredFile.id))
+        .join(User, col(User.id) == col(StoredFile.owner_id))
+        .where(col(FileShare.recipient_id) == recipient_id)
+        .order_by(col(FileShare.created_at).desc(), col(FileShare.id).desc())
+    )
+    return list(session.exec(statement).all())
 
 
 def get_file_by_folder_and_name(
