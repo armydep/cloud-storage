@@ -1,12 +1,29 @@
 FROM mcr.microsoft.com/playwright:v1.62.1-noble
 
+# Optional, inert unless explicitly invoked: some sandboxed CI/dev environments
+# intercept outbound TLS with their own CA. Installing it here (opt-in, no-op
+# without the secret) lets apt/bun reach their real upstreams in that case.
+RUN --mount=type=secret,id=sandbox_ca,required=false \
+    if [ -s /run/secrets/sandbox_ca ]; then \
+      cp /run/secrets/sandbox_ca /usr/local/share/ca-certificates/sandbox-ca.crt && \
+      update-ca-certificates; \
+    fi
+ENV NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y unzip \
+# The base image already bundles the Node.js runtime Playwright needs; the
+# preconfigured nodesource apt source is unused here and dropped so
+# `apt-get update` doesn't depend on reaching it.
+RUN rm -f /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update && apt-get install -y unzip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:$PATH"
+# Get bun from its own official image rather than curling bun.sh's install
+# script, which some sandboxed environments block outright.
+COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
+RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
+ENV PATH="/usr/local/bin:$PATH"
 
 COPY package.json bun.lock /app/
 

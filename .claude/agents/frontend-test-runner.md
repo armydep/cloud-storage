@@ -52,35 +52,43 @@ Steps:
    retrying will fix it.
 
    **If `docker build`/`docker compose build` fails with
-   `SELF_SIGNED_CERT_IN_CHAIN`** (typically inside `bun install`), you
-   are in a sandboxed environment that intercepts outbound TLS with its
-   own CA, which the build container does not trust by default — this
-   is not a code problem. Check for that CA at `/root/.ccr/ca-bundle.crt`
-   (the path this class of sandbox uses):
-   - If it exists, `frontend/Dockerfile` already has an opt-in hook for
-     exactly this. Build it directly with:
-     `docker build --secret id=sandbox_ca,src=/root/.ccr/ca-bundle.crt -f frontend/Dockerfile ...`
-     This is harmless everywhere else — without the secret it is a
-     no-op, which is what every real CI run and production build does.
-   - If that path does not exist, this is a different environment than
-     the one this hook was written for; report the cert error plainly
-     rather than guessing at a fix.
+   `SELF_SIGNED_CERT_IN_CHAIN`** (typically inside `bun install` or
+   `uv sync`), you are in a sandboxed environment that intercepts
+   outbound TLS with its own CA, which the build container does not
+   trust by default — this is not a code problem. Check for that CA at
+   `/root/.ccr/ca-bundle.crt` (the path this class of sandbox uses). If
+   it exists, `backend/Dockerfile`, `frontend/Dockerfile`, and
+   `frontend/Dockerfile.playwright` all have an opt-in hook for exactly
+   this — harmless everywhere else, since without the secret it's a
+   no-op (what every real CI run and production build does). `docker
+   compose build` in this Compose version does not reliably thread
+   `build.secrets` through to BuildKit in this sandbox (confirmed: the
+   secret file lands empty/corrupt inside the build even when declared
+   in a compose override), so don't fight that — build each image
+   directly instead, then bring the stack up from the pre-built images:
+   ```
+   docker build --secret id=sandbox_ca,src=/root/.ccr/ca-bundle.crt -f backend/Dockerfile -t backend:latest .
+   docker build --secret id=sandbox_ca,src=/root/.ccr/ca-bundle.crt -f frontend/Dockerfile --build-arg VITE_API_URL=http://localhost:8000 --build-arg NODE_ENV=development -t frontend:latest .
+   docker build --secret id=sandbox_ca,src=/root/.ccr/ca-bundle.crt -f frontend/Dockerfile.playwright --build-arg VITE_API_URL=http://backend:8000 --build-arg NODE_ENV=production -t cloude-file-storage-playwright:latest .
+   docker compose up -d --wait backend frontend
+   docker compose run --rm playwright bunx playwright test
+   ```
+   (Image tags must match what `docker compose config --images` reports
+   for this project, since compose reuses a matching local tag instead
+   of rebuilding.) If that CA path does not exist, this is a different
+   environment than the one this hook was written for; report the cert
+   error plainly rather than guessing at a fix.
 
-   Two *separate* things currently block the full e2e path in that same
-   class of sandbox, and neither is a CA problem — do not spend time
-   re-diagnosing them, and do not retry past them (they are the proxy's
-   own policy denials, confirmable via
+   Two other things used to block the full e2e path outright in this
+   class of sandbox (policy denials, not CA problems) — both are now
+   routed around at the Dockerfile level, so you should not hit them:
+   `backend/Dockerfile` no longer pulls `uv` from `ghcr.io` (installs
+   via `pip` from PyPI instead), and `frontend/Dockerfile.playwright`
+   no longer depends on `deb.nodesource.com` or `bun.sh`. If a *new*
+   host turns up blocked, confirm via
    `curl -sS "$HTTPS_PROXY/__agentproxy/status"` under
-   `recentRelayFailures`):
-   - `backend/Dockerfile` pulls `ghcr.io/astral-sh/uv:0.9.26` via
-     `COPY --from=`; that registry is blocked outright (403).
-   - `frontend/Dockerfile.playwright`'s base image runs
-     `apt-get update` against a pre-configured `deb.nodesource.com`
-     source; also blocked outright (403), and it fails before that
-     Dockerfile's own `bun install` step is ever reached, so the CA fix
-     above does not help it.
-   If you hit either, report it as an environment policy block naming
-   the host, not as a build failure to fix.
+   `recentRelayFailures`, report it as an environment policy block
+   naming the host, and don't retry past it.
 
 If all four pass, reply with exactly one line:
 "All checks pass (lint, build, N e2e tests)."

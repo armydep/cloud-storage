@@ -2,9 +2,23 @@ FROM python:3.14
 
 ENV PYTHONUNBUFFERED=1
 
+# Optional, inert unless explicitly invoked: some sandboxed CI/dev environments
+# intercept outbound TLS with their own CA, which pypi.org does not trust by
+# default, and pip install fails with SELF_SIGNED_CERT_IN_CHAIN. Passing
+# --secret id=sandbox_ca,src=<path-to-that-CA> installs it for this build
+# only; without it (every normal build, including CI) this is a no-op since
+# it points at the system's own default trust store.
+RUN --mount=type=secret,id=sandbox_ca,required=false \
+    if [ -s /run/secrets/sandbox_ca ]; then \
+      cp /run/secrets/sandbox_ca /usr/local/share/ca-certificates/sandbox-ca.crt && \
+      update-ca-certificates; \
+    fi
+ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
 # Install uv
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
-COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /uvx /bin/
+RUN pip install --no-cache-dir uv==0.9.26
 
 # Compile bytecode
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#compiling-bytecode
