@@ -20,6 +20,17 @@ export type CompleteUploadRequest = {
 
 export type FileCategory = 'image' | 'video' | 'audio' | 'document' | 'spreadsheet' | 'archive' | 'other';
 
+export type FileShareCreate = {
+    recipient_email: string;
+};
+
+export type FileSharePublic = {
+    id: string;
+    file_id: string;
+    recipient_email: string;
+    created_at: string;
+};
+
 export type FolderContentPublic = {
     id: string;
     name: string;
@@ -121,6 +132,21 @@ export type PrivateUserCreate = {
     is_verified?: boolean;
 };
 
+export type SharedFilePublic = {
+    id: string;
+    name: string;
+    mime_type: string;
+    category: string;
+    size_bytes: number;
+    owner_email: string;
+    shared_at: string;
+};
+
+export type SharedFilesPublic = {
+    data: Array<SharedFilePublic>;
+    count: number;
+};
+
 export type StoredFilePublic = {
     name: string;
     mime_type: string;
@@ -189,6 +215,8 @@ export type ValidationError = {
     type: string;
 };
 
+export type FilesReadFilesSharedWithMeResponse = (SharedFilesPublic);
+
 export type FilesCreateChildFolderData = {
     requestBody: FolderCreate;
 };
@@ -206,6 +234,13 @@ export type FilesPresignDownloadData = {
 };
 
 export type FilesPresignDownloadResponse = (PresignDownloadResponse);
+
+export type FilesCreateFileShareData = {
+    fileId: string;
+    requestBody: FileShareCreate;
+};
+
+export type FilesCreateFileShareResponse = (FileSharePublic);
 
 export type FilesCompleteFileUploadData = {
     requestBody: CompleteUploadRequest;

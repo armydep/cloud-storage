@@ -9,6 +9,8 @@ from app.files import repository
 from app.files.repository import ROOT_FOLDER_PATH
 from app.files.schemas import (
     CompleteUploadRequest,
+    FileShareCreate,
+    FileSharePublic,
     FolderContentPublic,
     FolderCreate,
     FolderPublic,
@@ -16,6 +18,8 @@ from app.files.schemas import (
     PresignDownloadResponse,
     PresignUploadRequest,
     PresignUploadResponse,
+    SharedFilePublic,
+    SharedFilesPublic,
     StoredFilePublic,
 )
 
@@ -49,6 +53,22 @@ class DuplicateFolderNameError(Exception):
 
 
 class InvalidFolderNameError(Exception):
+    pass
+
+
+class ShareRecipientNotFoundError(Exception):
+    pass
+
+
+class ShareRecipientInactiveError(Exception):
+    pass
+
+
+class CannotShareWithOwnerError(Exception):
+    pass
+
+
+class DuplicateFileShareError(Exception):
     pass
 
 
@@ -210,11 +230,11 @@ def complete_upload(
 
 
 def create_presigned_download(
-    *, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID
+    *, session: Session, user_id: uuid.UUID, file_id: uuid.UUID
 ) -> PresignDownloadResponse:
-    file = repository.get_file_by_id(
+    file = repository.get_downloadable_file_by_id(
         session=session,
-        owner_id=owner_id,
+        user_id=user_id,
         file_id=file_id,
     )
     if not file:
@@ -230,3 +250,68 @@ def create_presigned_download(
         download_url=download_url,
         expires_in=settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
     )
+
+
+def share_file(
+    *,
+    session: Session,
+    owner_id: uuid.UUID,
+    file_id: uuid.UUID,
+    request: FileShareCreate,
+) -> FileSharePublic:
+    file = repository.get_file_by_id(
+        session=session,
+        owner_id=owner_id,
+        file_id=file_id,
+    )
+    if not file:
+        raise StoredFileNotFoundError
+
+    recipient = repository.get_user_by_email(
+        session=session,
+        email=str(request.recipient_email),
+    )
+    if not recipient:
+        raise ShareRecipientNotFoundError
+    if recipient.id == owner_id:
+        raise CannotShareWithOwnerError
+    if not recipient.is_active:
+        raise ShareRecipientInactiveError
+
+    try:
+        share = repository.create_file_share(
+            session=session,
+            file_id=file.id,
+            recipient_id=recipient.id,
+        )
+    except repository.DuplicateFileShareRepositoryError:
+        raise DuplicateFileShareError
+
+    return FileSharePublic(
+        id=share.id,
+        file_id=share.file_id,
+        recipient_email=recipient.email,
+        created_at=share.created_at,
+    )
+
+
+def get_files_shared_with_user(
+    *, session: Session, recipient_id: uuid.UUID
+) -> SharedFilesPublic:
+    rows = repository.list_files_shared_with_user(
+        session=session,
+        recipient_id=recipient_id,
+    )
+    data = [
+        SharedFilePublic(
+            id=file.id,
+            name=file.name,
+            mime_type=file.mime_type,
+            category=file.category,
+            size_bytes=file.size_bytes,
+            owner_email=owner_email,
+            shared_at=shared_at,
+        )
+        for file, owner_email, shared_at in rows
+    ]
+    return SharedFilesPublic(data=data, count=len(data))

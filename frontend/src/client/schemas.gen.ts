@@ -103,6 +103,47 @@ export const FileCategorySchema = {
     title: 'FileCategory'
 } as const;
 
+export const FileShareCreateSchema = {
+    properties: {
+        recipient_email: {
+            type: 'string',
+            format: 'email',
+            title: 'Recipient Email'
+        }
+    },
+    type: 'object',
+    required: ['recipient_email'],
+    title: 'FileShareCreate'
+} as const;
+
+export const FileSharePublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        file_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'File Id'
+        },
+        recipient_email: {
+            type: 'string',
+            format: 'email',
+            title: 'Recipient Email'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'file_id', 'recipient_email', 'created_at'],
+    title: 'FileSharePublic'
+} as const;
+
 export const FolderContentPublicSchema = {
     properties: {
         id: {
@@ -575,6 +616,64 @@ export const PrivateUserCreateSchema = {
     type: 'object',
     required: ['email', 'password', 'full_name'],
     title: 'PrivateUserCreate'
+} as const;
+
+export const SharedFilePublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        name: {
+            type: 'string',
+            title: 'Name'
+        },
+        mime_type: {
+            type: 'string',
+            title: 'Mime Type'
+        },
+        category: {
+            type: 'string',
+            title: 'Category'
+        },
+        size_bytes: {
+            type: 'integer',
+            title: 'Size Bytes'
+        },
+        owner_email: {
+            type: 'string',
+            format: 'email',
+            title: 'Owner Email'
+        },
+        shared_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Shared At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'name', 'mime_type', 'category', 'size_bytes', 'owner_email', 'shared_at'],
+    title: 'SharedFilePublic'
+} as const;
+
+export const SharedFilesPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/SharedFilePublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'SharedFilesPublic'
 } as const;
 
 export const StoredFilePublicSchema = {

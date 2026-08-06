@@ -1,8 +1,9 @@
 import re
 import uuid
+from datetime import datetime
 from enum import Enum
 
-from pydantic import field_validator
+from pydantic import EmailStr, field_validator
 from sqlmodel import Field, SQLModel
 
 from app.files.models import FolderBase, StoredFileBase
@@ -120,3 +121,29 @@ class FolderContentPublic(SQLModel):
 
 class FolderWithContentsPublic(FolderPublic):
     contents: list[FolderContentPublic]
+
+
+class FileShareCreate(SQLModel):
+    recipient_email: EmailStr
+
+
+class FileSharePublic(SQLModel):
+    id: uuid.UUID
+    file_id: uuid.UUID
+    recipient_email: EmailStr
+    created_at: datetime
+
+
+class SharedFilePublic(SQLModel):
+    id: uuid.UUID
+    name: str
+    mime_type: str
+    category: str
+    size_bytes: int
+    owner_email: EmailStr
+    shared_at: datetime
+
+
+class SharedFilesPublic(SQLModel):
+    data: list[SharedFilePublic]
+    count: int

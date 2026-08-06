@@ -3,6 +3,10 @@
 Cloud File Storage is a web application for authenticated users to manage files
 and folders in a private cloud-style workspace.
 
+Feature designs:
+
+- [File sharing with specific users](docs/phases/phase-4-file-sharing.md)
+
 ## Phase 1 scope
 
 Phase 1 starts the file-management API.

@@ -4,9 +4,13 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+from app import crud
 from app.core.config import settings
 from app.core.storage import ObjectNotFoundError, ObjectStat
 from app.files.models import Folder, StoredFile
+from app.models import UserCreate
+from tests.utils.user import authentication_token_from_email
+from tests.utils.utils import random_email
 
 
 def test_read_root_creates_user_root(
@@ -1014,3 +1018,175 @@ def test_presign_download_requires_authentication(client: TestClient) -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_share_file_lists_for_recipient_and_allows_download(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="Shared",
+        blob_hash="c" * 64,
+    )
+    share_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/shares",
+        headers=normal_user_token_headers,
+        json={"recipient_email": settings.FIRST_SUPERUSER},
+    )
+
+    assert share_response.status_code == 201
+    share = share_response.json()
+    assert share["file_id"] == str(file.id)
+    assert share["recipient_email"] == settings.FIRST_SUPERUSER
+
+    listing_response = client.get(
+        f"{settings.API_V1_STR}/files/shared-with-me",
+        headers=superuser_token_headers,
+    )
+    assert listing_response.status_code == 200
+    listing = listing_response.json()
+    shared_file = next(item for item in listing["data"] if item["id"] == str(file.id))
+    assert shared_file == {
+        "id": str(file.id),
+        "name": file.name,
+        "mime_type": file.mime_type,
+        "category": file.category,
+        "size_bytes": file.size_bytes,
+        "owner_email": settings.EMAIL_TEST_USER,
+        "shared_at": share["created_at"],
+    }
+    assert listing["count"] == len(listing["data"])
+    assert "blob_hash" not in shared_file
+
+    monkeypatch.setattr(
+        "app.files.service.storage.create_presigned_download_url",
+        lambda *, object_key, filename: "http://localhost/shared-download",
+    )
+    download_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/presign-download",
+        headers=superuser_token_headers,
+    )
+    assert download_response.status_code == 200
+    assert (
+        download_response.json()["download_url"] == "http://localhost/shared-download"
+    )
+
+
+def test_share_file_rejects_duplicate_recipient(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DuplicateShare",
+    )
+    url = f"{settings.API_V1_STR}/files/{file.id}/shares"
+    payload = {"recipient_email": settings.FIRST_SUPERUSER}
+
+    assert (
+        client.post(url, headers=normal_user_token_headers, json=payload).status_code
+        == 201
+    )
+    response = client.post(url, headers=normal_user_token_headers, json=payload)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "File is already shared with this recipient"
+
+
+def test_share_file_rejects_self_unknown_and_inactive_recipients(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="InvalidShare",
+    )
+    url = f"{settings.API_V1_STR}/files/{file.id}/shares"
+
+    self_response = client.post(
+        url,
+        headers=normal_user_token_headers,
+        json={"recipient_email": settings.EMAIL_TEST_USER},
+    )
+    assert self_response.status_code == 422
+
+    missing_response = client.post(
+        url,
+        headers=normal_user_token_headers,
+        json={"recipient_email": random_email()},
+    )
+    assert missing_response.status_code == 404
+    assert missing_response.json()["detail"] == "Recipient not found"
+
+    inactive_email = random_email()
+    inactive = crud.create_user(
+        session=db,
+        user_create=UserCreate(
+            email=inactive_email,
+            password="inactive-password",
+            is_active=False,
+        ),
+    )
+    assert inactive.is_active is False
+    inactive_response = client.post(
+        url,
+        headers=normal_user_token_headers,
+        json={"recipient_email": inactive_email},
+    )
+    assert inactive_response.status_code == 422
+    assert inactive_response.json()["detail"] == "Recipient is inactive"
+
+
+def test_share_file_rejects_non_owner_and_requires_authentication(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="PrivateShare",
+    )
+    url = f"{settings.API_V1_STR}/files/{file.id}/shares"
+    payload = {"recipient_email": settings.FIRST_SUPERUSER}
+
+    response = client.post(url, headers=normal_user_token_headers, json=payload)
+    assert response.status_code == 404
+    assert response.json()["detail"] == "File not found"
+    assert client.post(url, json=payload).status_code == 401
+
+
+def test_shared_with_me_requires_authentication(client: TestClient) -> None:
+    response = client.get(f"{settings.API_V1_STR}/files/shared-with-me")
+
+    assert response.status_code == 401
+
+
+def test_shared_with_me_is_empty_for_user_without_shares(
+    client: TestClient,
+    db: Session,
+) -> None:
+    email = random_email()
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+
+    response = client.get(
+        f"{settings.API_V1_STR}/files/shared-with-me",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"data": [], "count": 0}

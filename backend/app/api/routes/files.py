@@ -8,31 +8,51 @@ from app.files.repository import ROOT_FOLDER_PATH
 from app.files.schemas import (
     LTREE_PATH_PATTERN,
     CompleteUploadRequest,
+    FileShareCreate,
+    FileSharePublic,
     FolderCreate,
     FolderPublic,
     FolderWithContentsPublic,
     PresignDownloadResponse,
     PresignUploadRequest,
     PresignUploadResponse,
+    SharedFilesPublic,
     StoredFilePublic,
 )
 from app.files.service import (
+    CannotShareWithOwnerError,
     DuplicateFileNameError,
+    DuplicateFileShareError,
     DuplicateFolderNameError,
     FolderNotFoundError,
     InvalidFolderNameError,
     ObjectContentTypeMismatchError,
     ObjectNotUploadedError,
     ObjectSizeMismatchError,
+    ShareRecipientInactiveError,
+    ShareRecipientNotFoundError,
     StoredFileNotFoundError,
     complete_upload,
     create_folder,
     create_presigned_download,
     create_presigned_upload,
+    get_files_shared_with_user,
     get_folder_contents,
+    share_file,
 )
 
 router = APIRouter(prefix="/files", tags=["files"])
+
+
+@router.get("/shared-with-me", response_model=SharedFilesPublic)
+def read_files_shared_with_me(
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> Any:
+    return get_files_shared_with_user(
+        session=session,
+        recipient_id=current_user.id,
+    )
 
 
 @router.post("/folders", response_model=FolderPublic, status_code=201)
@@ -95,11 +115,43 @@ def presign_download(
     try:
         return create_presigned_download(
             session=session,
-            owner_id=current_user.id,
+            user_id=current_user.id,
             file_id=file_id,
         )
     except StoredFileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
+
+
+@router.post("/{file_id}/shares", response_model=FileSharePublic, status_code=201)
+def create_file_share(
+    session: SessionDep,
+    current_user: CurrentUser,
+    file_id: uuid.UUID,
+    request: FileShareCreate,
+) -> Any:
+    try:
+        return share_file(
+            session=session,
+            owner_id=current_user.id,
+            file_id=file_id,
+            request=request,
+        )
+    except StoredFileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+    except ShareRecipientNotFoundError:
+        raise HTTPException(status_code=404, detail="Recipient not found")
+    except ShareRecipientInactiveError:
+        raise HTTPException(status_code=422, detail="Recipient is inactive")
+    except CannotShareWithOwnerError:
+        raise HTTPException(
+            status_code=422,
+            detail="A file cannot be shared with its owner",
+        )
+    except DuplicateFileShareError:
+        raise HTTPException(
+            status_code=409,
+            detail="File is already shared with this recipient",
+        )
 
 
 @router.post("/complete-upload", response_model=StoredFilePublic)
