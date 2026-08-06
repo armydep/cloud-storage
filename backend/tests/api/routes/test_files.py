@@ -140,6 +140,32 @@ def test_create_folder_in_missing_parent_returns_404(
     assert response.json()["detail"] == "Parent folder not found"
 
 
+def test_create_folder_rejects_another_users_parent(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    normal_user_token_headers: dict[str, str],
+) -> None:
+    suffix = uuid.uuid4().hex
+    parent_response = client.post(
+        f"{settings.API_V1_STR}/files/folders",
+        headers=superuser_token_headers,
+        json={"parent_path": "root", "name": f"Private {suffix}"},
+    )
+    assert parent_response.status_code == 201
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/folders",
+        headers=normal_user_token_headers,
+        json={
+            "parent_path": parent_response.json()["path"],
+            "name": "Unauthorized child",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Parent folder not found"
+
+
 def test_create_folder_requires_authentication(client: TestClient) -> None:
     response = client.post(
         f"{settings.API_V1_STR}/files/folders",
