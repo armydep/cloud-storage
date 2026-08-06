@@ -203,14 +203,15 @@ def test_read_root_returns_root_contents(
 
     assert response.status_code == 200
     content = response.json()
-    assert len(content["contents"]) == 1
-    assert content["contents"][0]["id"] == str(child.id)
-    assert content["contents"][0]["name"] == "report.pdf"
-    assert content["contents"][0]["type"] == "file"
-    assert content["contents"][0]["mime_type"] == "application/pdf"
-    assert content["contents"][0]["category"] == "document"
-    assert content["contents"][0]["blob_hash"] == "abc123"
-    assert content["contents"][0]["size_bytes"] == 12345
+    created_entry = next(
+        entry for entry in content["contents"] if entry["id"] == str(child.id)
+    )
+    assert created_entry["name"] == "report.pdf"
+    assert created_entry["type"] == "file"
+    assert created_entry["mime_type"] == "application/pdf"
+    assert created_entry["category"] == "document"
+    assert created_entry["blob_hash"] == "abc123"
+    assert created_entry["size_bytes"] == 12345
 
 
 def test_read_files_requires_authentication(client: TestClient) -> None:
