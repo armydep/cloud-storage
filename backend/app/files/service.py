@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from sqlmodel import Session
@@ -9,6 +10,8 @@ from app.files.repository import ROOT_FOLDER_PATH
 from app.files.schemas import (
     CompleteUploadRequest,
     FolderContentPublic,
+    FolderCreate,
+    FolderPublic,
     FolderWithContentsPublic,
     PresignDownloadResponse,
     PresignUploadRequest,
@@ -39,6 +42,53 @@ class ObjectContentTypeMismatchError(Exception):
 
 class DuplicateFileNameError(Exception):
     pass
+
+
+class DuplicateFolderNameError(Exception):
+    pass
+
+
+class InvalidFolderNameError(Exception):
+    pass
+
+
+def _folder_path_segment(name: str) -> str:
+    segment = re.sub(r"[^a-z0-9_]+", "_", name.lower()).strip("_")
+    if not segment:
+        raise InvalidFolderNameError
+    if segment[0].isdigit():
+        segment = f"_{segment}"
+    return segment
+
+
+def create_folder(
+    *, session: Session, owner_id: uuid.UUID, request: FolderCreate
+) -> FolderPublic:
+    parent = repository.get_folder_by_path(
+        session=session,
+        owner_id=owner_id,
+        path=request.parent_path,
+    )
+    if not parent and request.parent_path == ROOT_FOLDER_PATH:
+        parent = repository.create_root_folder(session=session, owner_id=owner_id)
+    if not parent:
+        raise FolderNotFoundError
+
+    path = f"{parent.path}.{_folder_path_segment(request.name)}"
+    if len(path) > 1024:
+        raise InvalidFolderNameError
+
+    try:
+        folder = repository.create_folder(
+            session=session,
+            owner_id=owner_id,
+            parent_id=parent.id,
+            name=request.name,
+            path=path,
+        )
+    except repository.DuplicateFolderRepositoryError:
+        raise DuplicateFolderNameError
+    return FolderPublic.model_validate(folder)
 
 
 def get_folder_contents(

@@ -179,6 +179,68 @@ export const FolderContentPublicSchema = {
     title: 'FolderContentPublic'
 } as const;
 
+export const FolderCreateSchema = {
+    properties: {
+        parent_path: {
+            type: 'string',
+            maxLength: 1024,
+            minLength: 1,
+            title: 'Parent Path'
+        },
+        name: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Name'
+        }
+    },
+    type: 'object',
+    required: ['parent_path', 'name'],
+    title: 'FolderCreate'
+} as const;
+
+export const FolderPublicSchema = {
+    properties: {
+        path: {
+            type: 'string',
+            maxLength: 1024,
+            minLength: 1,
+            title: 'Path'
+        },
+        name: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Name'
+        },
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        owner_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Owner Id'
+        },
+        parent_id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Parent Id'
+        }
+    },
+    type: 'object',
+    required: ['path', 'name', 'id', 'owner_id'],
+    title: 'FolderPublic'
+} as const;
+
 export const FolderWithContentsPublicSchema = {
     properties: {
         path: {

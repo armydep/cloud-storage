@@ -4,12 +4,25 @@ from pydantic import ValidationError
 from app.files.schemas import (
     CompleteUploadRequest,
     FileCategory,
+    FolderCreate,
     PresignDownloadResponse,
     PresignUploadRequest,
     PresignUploadResponse,
 )
 
 VALID_HASH = "a" * 64
+
+
+def test_folder_create_trims_name() -> None:
+    request = FolderCreate(parent_path="root.documents", name="  Project Files  ")
+
+    assert request.name == "Project Files"
+
+
+@pytest.mark.parametrize("name", ["", "   ", "reports/2026"])
+def test_folder_create_rejects_invalid_name(name: str) -> None:
+    with pytest.raises(ValidationError):
+        FolderCreate(parent_path="root", name=name)
 
 
 def valid_payload() -> dict[str, object]:

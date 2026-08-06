@@ -31,6 +31,19 @@ export type FolderContentPublic = {
     size_bytes?: (number | null);
 };
 
+export type FolderCreate = {
+    parent_path: string;
+    name: string;
+};
+
+export type FolderPublic = {
+    path: string;
+    name: string;
+    id: string;
+    owner_id: string;
+    parent_id?: (string | null);
+};
+
 export type FolderWithContentsPublic = {
     path: string;
     name: string;
@@ -175,6 +188,12 @@ export type ValidationError = {
     msg: string;
     type: string;
 };
+
+export type FilesCreateChildFolderData = {
+    requestBody: FolderCreate;
+};
+
+export type FilesCreateChildFolderResponse = (FolderPublic);
 
 export type FilesReadFilesData = {
     path?: string;

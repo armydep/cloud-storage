@@ -81,6 +81,87 @@ test("Files page shows current path and upload button", async ({ page }) => {
   await expect(page.getByText("Current path:")).toBeVisible()
   await expect(page.getByRole("button", { name: "root" })).toBeVisible()
   await expect(page.getByRole("button", { name: "Upload" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "New folder" })).toBeVisible()
+})
+
+test("Create folder submits the current path and refreshes the listing", async ({
+  page,
+}) => {
+  let requestBody: unknown
+  let folderCreated = false
+
+  await page.route("**/api/v1/files/folders", async (route) => {
+    requestBody = route.request().postDataJSON()
+    folderCreated = true
+    await route.fulfill({
+      status: 201,
+      json: {
+        id: "00000000-0000-0000-0000-000000000006",
+        owner_id: rootFolder.owner_id,
+        parent_id: rootFolder.id,
+        path: "root.project_files",
+        name: "Project Files",
+      },
+    })
+  })
+  await page.route("**/api/v1/files?**", async (route) => {
+    await route.fulfill({
+      json: folderCreated
+        ? {
+            ...rootFolder,
+            contents: [
+              ...rootFolder.contents,
+              {
+                id: "00000000-0000-0000-0000-000000000006",
+                name: "Project Files",
+                type: "folder",
+                path: "root.project_files",
+              },
+            ],
+          }
+        : rootFolder,
+    })
+  })
+
+  await page.goto("/files")
+  await page.getByRole("button", { name: "New folder" }).click()
+  await page.getByLabel("Folder name").fill("Project Files")
+  await page.getByRole("button", { name: "Create", exact: true }).click()
+
+  await expect(page.getByText("Folder created successfully")).toBeVisible()
+  await expect(
+    page.getByRole("button", { name: "Project Files" }),
+  ).toBeVisible()
+  expect(requestBody).toEqual({
+    parent_path: "root",
+    name: "Project Files",
+  })
+})
+
+test("Create folder validates a blank name", async ({ page }) => {
+  await page.goto("/files")
+  await page.getByRole("button", { name: "New folder" }).click()
+  await page.getByRole("button", { name: "Create", exact: true }).click()
+
+  await expect(page.getByText("Folder name is required")).toBeVisible()
+})
+
+test("Create folder shows a duplicate-name error", async ({ page }) => {
+  await page.route("**/api/v1/files/folders", async (route) => {
+    await route.fulfill({
+      status: 409,
+      json: { detail: "Folder name already exists" },
+    })
+  })
+
+  await page.goto("/files")
+  await page.getByRole("button", { name: "New folder" }).click()
+  await page.getByLabel("Folder name").fill("Documents")
+  await page.getByRole("button", { name: "Create", exact: true }).click()
+
+  await expect(
+    page.getByText("A folder with this name already exists in this folder."),
+  ).toBeVisible()
 })
 
 test("Folder row click navigates to child folder path", async ({ page }) => {

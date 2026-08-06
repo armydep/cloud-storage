@@ -73,6 +73,28 @@ class PresignDownloadResponse(SQLModel):
     expires_in: int
 
 
+class FolderCreate(SQLModel):
+    parent_path: str = Field(min_length=1, max_length=1024)
+    name: str = Field(min_length=1, max_length=255)
+
+    @field_validator("parent_path")
+    @classmethod
+    def validate_parent_path(cls, value: str) -> str:
+        if not LTREE_PATH_PATTERN.fullmatch(value):
+            raise ValueError("parent_path must be a valid ltree path")
+        return value
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("name must not be blank")
+        if "/" in value:
+            raise ValueError("name must not contain '/'")
+        return value
+
+
 class FolderPublic(FolderBase):
     id: uuid.UUID
     owner_id: uuid.UUID

@@ -13,6 +13,10 @@ class DuplicateFileNameRepositoryError(Exception):
     pass
 
 
+class DuplicateFolderRepositoryError(Exception):
+    pass
+
+
 def get_folder_by_path(
     *, session: Session, owner_id: uuid.UUID, path: str
 ) -> Folder | None:
@@ -67,6 +71,30 @@ def list_folder_files(
         .order_by(StoredFile.name)
     )
     return list(session.exec(statement).all())
+
+
+def create_folder(
+    *,
+    session: Session,
+    owner_id: uuid.UUID,
+    parent_id: uuid.UUID,
+    name: str,
+    path: str,
+) -> Folder:
+    folder = Folder(
+        owner_id=owner_id,
+        parent_id=parent_id,
+        name=name,
+        path=path,
+    )
+    try:
+        session.add(folder)
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise DuplicateFolderRepositoryError
+    session.refresh(folder)
+    return folder
 
 
 def get_file_by_id(

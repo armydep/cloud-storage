@@ -8,6 +8,8 @@ from app.files.repository import ROOT_FOLDER_PATH
 from app.files.schemas import (
     LTREE_PATH_PATTERN,
     CompleteUploadRequest,
+    FolderCreate,
+    FolderPublic,
     FolderWithContentsPublic,
     PresignDownloadResponse,
     PresignUploadRequest,
@@ -16,18 +18,41 @@ from app.files.schemas import (
 )
 from app.files.service import (
     DuplicateFileNameError,
+    DuplicateFolderNameError,
     FolderNotFoundError,
+    InvalidFolderNameError,
     ObjectContentTypeMismatchError,
     ObjectNotUploadedError,
     ObjectSizeMismatchError,
     StoredFileNotFoundError,
     complete_upload,
+    create_folder,
     create_presigned_download,
     create_presigned_upload,
     get_folder_contents,
 )
 
 router = APIRouter(prefix="/files", tags=["files"])
+
+
+@router.post("/folders", response_model=FolderPublic, status_code=201)
+def create_child_folder(
+    session: SessionDep,
+    current_user: CurrentUser,
+    request: FolderCreate,
+) -> Any:
+    try:
+        return create_folder(
+            session=session,
+            owner_id=current_user.id,
+            request=request,
+        )
+    except FolderNotFoundError:
+        raise HTTPException(status_code=404, detail="Parent folder not found")
+    except DuplicateFolderNameError:
+        raise HTTPException(status_code=409, detail="Folder name already exists")
+    except InvalidFolderNameError:
+        raise HTTPException(status_code=422, detail="Folder name is invalid")
 
 
 @router.get("", response_model=FolderWithContentsPublic)
