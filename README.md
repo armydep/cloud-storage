@@ -85,6 +85,16 @@ MinIO S3 API:   http://localhost:9000
 MinIO console:  http://localhost:9001
 ```
 
+### Android application
+
+The Android-only Flutter client lives in `mobile/`, independently from the
+React application in `frontend/`. Its current scope is application
+infrastructure; mobile authentication, file management, and synchronization are
+not implemented yet.
+
+See [`mobile/README.md`](mobile/README.md) for Flutter prerequisites, API URL
+configuration, and run, build, analysis, and test commands.
+
 Run backend database migrations:
 
 ```bash
@@ -122,5 +132,6 @@ frontend/.env
 - PostgreSQL database
 - SQLModel and Alembic
 - React frontend
+- Flutter Android application
 - Docker Compose for local development
 - Traefik reverse proxy
