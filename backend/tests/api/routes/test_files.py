@@ -48,6 +48,107 @@ def test_read_root_is_idempotent_for_same_user(
     assert second_response.json()["id"] == first_response.json()["id"]
 
 
+def test_create_folder_in_root(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    suffix = uuid.uuid4().hex
+    name = f"Project Files {suffix}"
+    response = client.post(
+        f"{settings.API_V1_STR}/files/folders",
+        headers=normal_user_token_headers,
+        json={"parent_path": "root", "name": name},
+    )
+
+    assert response.status_code == 201
+    folder = response.json()
+    assert folder["name"] == name
+    assert folder["path"] == f"root.project_files_{suffix}"
+    assert folder["parent_id"] is not None
+
+    contents_response = client.get(
+        f"{settings.API_V1_STR}/files",
+        headers=normal_user_token_headers,
+    )
+    assert contents_response.status_code == 200
+    created_entry = next(
+        entry
+        for entry in contents_response.json()["contents"]
+        if entry["id"] == folder["id"]
+    )
+    assert created_entry["name"] == name
+    assert created_entry["type"] == "folder"
+    assert created_entry["path"] == f"root.project_files_{suffix}"
+
+
+def test_create_nested_folder(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    suffix = uuid.uuid4().hex
+    parent_name = f"Projects {suffix}"
+    parent_response = client.post(
+        f"{settings.API_V1_STR}/files/folders",
+        headers=normal_user_token_headers,
+        json={"parent_path": "root", "name": parent_name},
+    )
+    assert parent_response.status_code == 201
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/folders",
+        headers=normal_user_token_headers,
+        json={
+            "parent_path": f"root.projects_{suffix}",
+            "name": "2026 Plans",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["path"] == f"root.projects_{suffix}._2026_plans"
+    assert response.json()["parent_id"] == parent_response.json()["id"]
+
+
+def test_create_duplicate_folder_returns_409(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    suffix = uuid.uuid4().hex
+    url = f"{settings.API_V1_STR}/files/folders"
+    first_response = client.post(
+        url,
+        headers=normal_user_token_headers,
+        json={"parent_path": "root", "name": f"Project Files {suffix}"},
+    )
+    second_response = client.post(
+        url,
+        headers=normal_user_token_headers,
+        json={"parent_path": "root", "name": f"Project-Files-{suffix}"},
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 409
+    assert second_response.json()["detail"] == "Folder name already exists"
+
+
+def test_create_folder_in_missing_parent_returns_404(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/folders",
+        headers=normal_user_token_headers,
+        json={"parent_path": "root.missing", "name": "Reports"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Parent folder not found"
+
+
+def test_create_folder_requires_authentication(client: TestClient) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/files/folders",
+        json={"parent_path": "root", "name": "Reports"},
+    )
+
+    assert response.status_code == 401
+
+
 def test_read_root_returns_root_contents(
     client: TestClient, normal_user_token_headers: dict[str, str], db: Session
 ) -> None:
