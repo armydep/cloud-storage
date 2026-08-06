@@ -1,8 +1,9 @@
 import { useMutation } from "@tanstack/react-query"
-import { Download, EllipsisVertical, Loader2 } from "lucide-react"
+import { Download, EllipsisVertical, Loader2, Share2 } from "lucide-react"
 import { useState } from "react"
 
 import type { FolderContentPublic } from "@/client"
+import ShareFileDialog from "@/components/Files/ShareFileDialog"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -19,6 +20,7 @@ type FileActionsMenuProps = {
 
 export default function FileActionsMenu({ file }: FileActionsMenuProps) {
   const [open, setOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const { showErrorToast } = useCustomToast()
 
   const downloadMutation = useMutation({
@@ -30,33 +32,50 @@ export default function FileActionsMenu({ file }: FileActionsMenuProps) {
   })
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={downloadMutation.isPending}
-        >
-          {downloadMutation.isPending ? (
-            <Loader2 className="animate-spin" />
-          ) : (
-            <EllipsisVertical />
-          )}
-          <span className="sr-only">Open file actions</span>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          disabled={downloadMutation.isPending}
-          onSelect={(event) => {
-            event.preventDefault()
-            downloadMutation.mutate()
-          }}
-        >
-          <Download />
-          Download
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            disabled={downloadMutation.isPending}
+          >
+            {downloadMutation.isPending ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <EllipsisVertical />
+            )}
+            <span className="sr-only">Open file actions</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onSelect={() => {
+              setOpen(false)
+              setShareOpen(true)
+            }}
+          >
+            <Share2 />
+            Share
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={downloadMutation.isPending}
+            onSelect={(event) => {
+              event.preventDefault()
+              downloadMutation.mutate()
+            }}
+          >
+            <Download />
+            Download
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <ShareFileDialog
+        fileId={file.id}
+        fileName={file.name}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+      />
+    </>
   )
 }

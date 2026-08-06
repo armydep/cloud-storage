@@ -56,6 +56,17 @@ const emptyFolder = {
 }
 
 test.beforeEach(async ({ page }) => {
+  await page.route("**/api/v1/users/me", async (route) => {
+    await route.fulfill({
+      json: {
+        id: "00000000-0000-0000-0000-000000000010",
+        email: "owner@example.com",
+        is_active: true,
+        is_superuser: false,
+        full_name: "File Owner",
+      },
+    })
+  })
   await page.route("**/api/v1/files?**", async (route) => {
     const url = new URL(route.request().url())
     const path = url.searchParams.get("path") || "root"
@@ -226,4 +237,92 @@ test("Download action calls presign-download", async ({ page }) => {
   await page.getByRole("menuitem", { name: "Download" }).click()
 
   await expect.poll(() => presignDownloadCalled).toBe(true)
+})
+
+test("Share action submits recipient email and closes the dialog", async ({
+  page,
+}) => {
+  let requestBody: unknown
+  await page.route("**/api/v1/files/*/shares", async (route) => {
+    requestBody = route.request().postDataJSON()
+    await route.fulfill({
+      status: 201,
+      json: {
+        id: "00000000-0000-0000-0000-000000000020",
+        file_id: rootFolder.contents[1].id,
+        recipient_email: "friend@example.com",
+        created_at: "2026-08-06T12:00:00Z",
+      },
+    })
+  })
+
+  await page.goto("/files")
+  const fileRow = page.getByRole("row").filter({ hasText: "welcome.txt" })
+  await fileRow.getByRole("button", { name: "Open file actions" }).click()
+  await page.getByRole("menuitem", { name: "Share" }).click()
+  await page.getByLabel("Recipient email").fill("friend@example.com")
+  await page.getByRole("button", { name: "Share", exact: true }).click()
+
+  await expect(page.getByText("File shared successfully")).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  expect(requestBody).toEqual({ recipient_email: "friend@example.com" })
+})
+
+test("Share dialog validates recipient email before submitting", async ({
+  page,
+}) => {
+  let requestCount = 0
+  await page.route("**/api/v1/files/*/shares", async (route) => {
+    requestCount += 1
+    await route.fulfill({ status: 500 })
+  })
+
+  await page.goto("/files")
+  const fileRow = page.getByRole("row").filter({ hasText: "welcome.txt" })
+  await fileRow.getByRole("button", { name: "Open file actions" }).click()
+  await page.getByRole("menuitem", { name: "Share" }).click()
+  await page.getByLabel("Recipient email").fill("not-an-email")
+  await page.getByRole("button", { name: "Share", exact: true }).click()
+
+  await expect(page.getByText("Enter a valid email address")).toBeVisible()
+  expect(requestCount).toBe(0)
+})
+
+test("Canceling the share dialog does not share the file", async ({ page }) => {
+  let requestCount = 0
+  await page.route("**/api/v1/files/*/shares", async (route) => {
+    requestCount += 1
+    await route.fulfill({ status: 201, json: {} })
+  })
+
+  await page.goto("/files")
+  const fileRow = page.getByRole("row").filter({ hasText: "welcome.txt" })
+  await fileRow.getByRole("button", { name: "Open file actions" }).click()
+  await page.getByRole("menuitem", { name: "Share" }).click()
+  await page.getByLabel("Recipient email").fill("friend@example.com")
+  await page.getByRole("button", { name: "Cancel" }).click()
+
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  expect(requestCount).toBe(0)
+})
+
+test("Share dialog reports an existing share", async ({ page }) => {
+  await page.route("**/api/v1/files/*/shares", async (route) => {
+    await route.fulfill({
+      status: 409,
+      json: { detail: "File is already shared with this recipient" },
+    })
+  })
+
+  await page.goto("/files")
+  const fileRow = page.getByRole("row").filter({ hasText: "welcome.txt" })
+  await fileRow.getByRole("button", { name: "Open file actions" }).click()
+  await page.getByRole("menuitem", { name: "Share" }).click()
+  await page.getByLabel("Recipient email").fill("friend@example.com")
+  await page.getByRole("button", { name: "Share", exact: true }).click()
+
+  await expect(
+    page.getByText("This file is already shared with that user."),
+  ).toBeVisible()
+  await expect(page.getByRole("dialog")).toBeVisible()
 })
