@@ -51,6 +51,37 @@ Steps:
    name both versions — it is not a test failure and no amount of
    retrying will fix it.
 
+   **If `docker build`/`docker compose build` fails with
+   `SELF_SIGNED_CERT_IN_CHAIN`** (typically inside `bun install`), you
+   are in a sandboxed environment that intercepts outbound TLS with its
+   own CA, which the build container does not trust by default — this
+   is not a code problem. Check for that CA at `/root/.ccr/ca-bundle.crt`
+   (the path this class of sandbox uses):
+   - If it exists, `frontend/Dockerfile` already has an opt-in hook for
+     exactly this. Build it directly with:
+     `docker build --secret id=sandbox_ca,src=/root/.ccr/ca-bundle.crt -f frontend/Dockerfile ...`
+     This is harmless everywhere else — without the secret it is a
+     no-op, which is what every real CI run and production build does.
+   - If that path does not exist, this is a different environment than
+     the one this hook was written for; report the cert error plainly
+     rather than guessing at a fix.
+
+   Two *separate* things currently block the full e2e path in that same
+   class of sandbox, and neither is a CA problem — do not spend time
+   re-diagnosing them, and do not retry past them (they are the proxy's
+   own policy denials, confirmable via
+   `curl -sS "$HTTPS_PROXY/__agentproxy/status"` under
+   `recentRelayFailures`):
+   - `backend/Dockerfile` pulls `ghcr.io/astral-sh/uv:0.9.26` via
+     `COPY --from=`; that registry is blocked outright (403).
+   - `frontend/Dockerfile.playwright`'s base image runs
+     `apt-get update` against a pre-configured `deb.nodesource.com`
+     source; also blocked outright (403), and it fails before that
+     Dockerfile's own `bun install` step is ever reached, so the CA fix
+     above does not help it.
+   If you hit either, report it as an environment policy block naming
+   the host, not as a build failure to fix.
+
 If all four pass, reply with exactly one line:
 "All checks pass (lint, build, N e2e tests)."
 
