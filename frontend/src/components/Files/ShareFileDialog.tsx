@@ -1,9 +1,15 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { Loader2, Trash2 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
-import { ApiError, FilesService } from "@/client"
+import {
+  ApiError,
+  type FileSharePublic,
+  type FileSharesPublic,
+  FilesService,
+} from "@/client"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -79,12 +85,63 @@ function shareErrorMessage(error: Error): string {
   return "File sharing failed. Try again."
 }
 
+const fileSharesQueryKey = (fileId: string) => ["file-shares", fileId]
+
+function ShareRecipient({
+  fileId,
+  share,
+}: {
+  fileId: string
+  share: FileSharePublic
+}) {
+  const queryClient = useQueryClient()
+  const { showSuccessToast, showErrorToast } = useCustomToast()
+  const mutation = useMutation({
+    mutationFn: () =>
+      FilesService.deleteFileShare({ fileId, shareId: share.id }),
+    onSuccess: () => {
+      queryClient.setQueryData<FileSharesPublic>(
+        fileSharesQueryKey(fileId),
+        (current) => {
+          if (!current) return current
+          const data = current.data.filter((item) => item.id !== share.id)
+          return { data, count: data.length }
+        },
+      )
+      void queryClient.invalidateQueries({
+        queryKey: fileSharesQueryKey(fileId),
+      })
+      showSuccessToast("Access revoked")
+    },
+    onError: () => showErrorToast("Access could not be revoked. Try again."),
+  })
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+      <span className="min-w-0 truncate text-sm">{share.recipient_email}</span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        disabled={mutation.isPending}
+        onClick={() => mutation.mutate()}
+      >
+        {mutation.isPending ? <Loader2 className="animate-spin" /> : <Trash2 />}
+        <span className="sr-only">
+          Revoke access for {share.recipient_email}
+        </span>
+      </Button>
+    </div>
+  )
+}
+
 export default function ShareFileDialog({
   fileId,
   fileName,
   open,
   onOpenChange,
 }: ShareFileDialogProps) {
+  const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -99,10 +156,19 @@ export default function ShareFileDialog({
       }),
     onSuccess: () => {
       showSuccessToast("File shared successfully")
+      void queryClient.invalidateQueries({
+        queryKey: fileSharesQueryKey(fileId),
+      })
       form.reset()
       onOpenChange(false)
     },
     onError: (error: Error) => showErrorToast(shareErrorMessage(error)),
+  })
+
+  const sharesQuery = useQuery({
+    queryKey: fileSharesQueryKey(fileId),
+    queryFn: () => FilesService.readFileShares({ fileId }),
+    enabled: open,
   })
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -146,6 +212,47 @@ export default function ShareFileDialog({
                   </FormItem>
                 )}
               />
+              <div className="grid gap-2">
+                <h3 className="text-sm font-medium">People with access</h3>
+                {sharesQuery.isPending ? (
+                  <div
+                    role="status"
+                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                  >
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading recipients…
+                  </div>
+                ) : sharesQuery.isError ? (
+                  <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/50 p-3">
+                    <span className="text-sm text-destructive">
+                      Recipients could not be loaded.
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={sharesQuery.isFetching}
+                      onClick={() => sharesQuery.refetch()}
+                    >
+                      {sharesQuery.isFetching ? "Retrying…" : "Retry"}
+                    </Button>
+                  </div>
+                ) : sharesQuery.data.data.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    This file is not shared with anyone yet.
+                  </p>
+                ) : (
+                  <div className="grid max-h-48 gap-2 overflow-y-auto">
+                    {sharesQuery.data.data.map((share) => (
+                      <ShareRecipient
+                        key={share.id}
+                        fileId={fileId}
+                        share={share}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
             <DialogFooter>
               <DialogClose asChild>
