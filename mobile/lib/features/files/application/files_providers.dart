@@ -149,7 +149,8 @@ class FilesController extends StateNotifier<FilesState> {
       throw Exception('Storage permission required to select files');
     }
 
-    final result = await FilePicker.instance.pickFiles();
+    final filePicker = FilePicker();
+    final result = await filePicker.pickFiles();
     if (result == null || result.files.isEmpty) {
       return;
     }
