@@ -42,6 +42,7 @@ class FilesController extends StateNotifier<FilesState> {
   final List<String> _navigationStack = ['root'];
 
   static const String _folderNamePattern = r'^[a-zA-Z0-9\s\-_]+$';
+  static const String _fileNamePattern = r'^[a-zA-Z0-9\s\-_.]+$';
   static const int _maxFolderNameLength = 255;
 
   FilesController(this._repository, this._ref) : super(const FilesState());
@@ -309,8 +310,8 @@ class FilesController extends StateNotifier<FilesState> {
     if (name.length > 255) {
       return 'File name cannot exceed 255 characters';
     }
-    if (!RegExp(_folderNamePattern).hasMatch(name)) {
-      return 'File name can only contain letters, numbers, spaces, dashes, and underscores';
+    if (!RegExp(_fileNamePattern).hasMatch(name)) {
+      return 'File name can only contain letters, numbers, spaces, dashes, underscores, and dots';
     }
     return null;
   }
