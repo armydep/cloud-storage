@@ -62,8 +62,8 @@ class FilesRepository {
 
   Future<DownloadUrlResponse> getDownloadUrl({required String fileId}) async {
     try {
-      final json = await apiClient.getJson(
-        '/api/v1/files/$fileId/download',
+      final json = await apiClient.postJson(
+        '/api/v1/files/$fileId/presign-download',
         authenticated: true,
       );
 
@@ -149,8 +149,8 @@ class DownloadUrlResponse {
 
   factory DownloadUrlResponse.fromJson(Map<String, dynamic> json) {
     return DownloadUrlResponse(
-      url: json['url'] as String,
-      expiresInSeconds: json['expires_in_seconds'] as int? ?? 3600,
+      url: json['download_url'] as String,
+      expiresInSeconds: json['expires_in'] as int? ?? 3600,
     );
   }
 }

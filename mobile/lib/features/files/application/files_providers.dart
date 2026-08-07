@@ -2,7 +2,11 @@ import 'package:cloudestorage/features/auth/application/auth_providers.dart';
 import 'package:cloudestorage/features/files/application/files_state.dart';
 import 'package:cloudestorage/features/files/data/files_repository.dart';
 import 'package:cloudestorage/features/files/domain/file_models.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 final filesRepositoryProvider = Provider<FilesRepository>((ref) {
   return FilesRepository(ref.watch(apiClientProvider));
@@ -96,10 +100,14 @@ class FilesController extends StateNotifier<FilesState> {
   }
 
   Future<void> _downloadAndSaveFile(String fileId, String fileName, String url) async {
-    // This would use dio and path_provider to download and save the file
-    // Implementation deferred to avoid complex I/O in this mock
-    // In real implementation: use dio.download() with progress callback
-    await Future.delayed(const Duration(milliseconds: 500));
+    final dio = Dio();
+    final downloadsDir = await getDownloadsDirectory();
+    if (downloadsDir == null) {
+      throw Exception('Downloads directory not available');
+    }
+
+    final filePath = '${downloadsDir.path}/$fileName';
+    await dio.download(url, filePath);
   }
 
   Future<void> cancelDownload(String fileId) async {
@@ -107,8 +115,10 @@ class FilesController extends StateNotifier<FilesState> {
   }
 
   Future<void> openFile(String filePath) async {
-    // This would use open_file or android_intent to open the file
-    // Implementation deferred: use LaunchUrl with file:// scheme
+    final result = await OpenFile.open(filePath);
+    if (result.type != ResultType.done) {
+      throw Exception('Failed to open file: ${result.message}');
+    }
   }
 
   String? validateFolderName(String name) {

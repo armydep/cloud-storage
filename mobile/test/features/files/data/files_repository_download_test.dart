@@ -4,11 +4,27 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('FilesRepository.getDownloadUrl', () {
+    test('calls correct presign-download endpoint', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextResponse = {
+        'download_url': 'https://minio:9000/bucket/sha256/abc123',
+        'expires_in': 3600,
+      };
+
+      final repository = FilesRepository(mockApiClient);
+      await repository.getDownloadUrl(fileId: 'file-123');
+
+      expect(
+        mockApiClient.lastPostPath,
+        '/api/v1/files/file-123/presign-download',
+      );
+    });
+
     test('returns DownloadUrlResponse on success (200)', () async {
       final mockApiClient = _MockApiClient();
       mockApiClient.nextResponse = {
-        'url': 'https://minio:9000/bucket/sha256/abc123',
-        'expires_in_seconds': 3600,
+        'download_url': 'https://minio:9000/bucket/sha256/abc123',
+        'expires_in': 3600,
       };
 
       final repository = FilesRepository(mockApiClient);
@@ -65,6 +81,7 @@ void main() {
 class _MockApiClient implements ApiClient {
   Map<String, dynamic>? nextResponse;
   ApiException? nextException;
+  String? lastPostPath;
 
   @override
   Future<Map<String, dynamic>> getJson(
@@ -85,7 +102,11 @@ class _MockApiClient implements ApiClient {
     String? authenticationToken,
     Map<String, dynamic>? body,
   }) async {
-    throw UnimplementedError();
+    lastPostPath = path;
+    if (nextException != null) {
+      throw nextException!;
+    }
+    return nextResponse ?? {};
   }
 
   @override
