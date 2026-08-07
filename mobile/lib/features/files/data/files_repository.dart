@@ -16,7 +16,6 @@ class FilesRepository {
 
       return FolderWithContents.fromJson(json);
     } on ApiException catch (e) {
-      print('FilesRepository.getFolder() ApiException: ${e.message} (${e.statusCode})');
       if (e.statusCode == 404) {
         throw FolderNotFoundError('Folder not found');
       } else if (e.statusCode != null && e.statusCode! >= 500) {
@@ -26,9 +25,6 @@ class FilesRepository {
       } else {
         throw ApiError(e.message);
       }
-    } catch (e) {
-      print('FilesRepository.getFolder() Error: $e');
-      throw ApiError('An unexpected error occurred: $e');
     }
   }
 }

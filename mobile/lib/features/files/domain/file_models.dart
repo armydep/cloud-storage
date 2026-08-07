@@ -85,26 +85,19 @@ class FolderWithContents {
   bool get isEmpty => contents.isEmpty;
 
   factory FolderWithContents.fromJson(Map<String, dynamic> json) {
-    print('FolderWithContents.fromJson received: $json');
     final contents = (json['contents'] as List<dynamic>?)
             ?.map((item) => FileContent.fromJson(item as Map<String, dynamic>))
             .toList() ??
         [];
 
-    try {
-      return FolderWithContents(
-        id: json['id'] as String? ?? '',
-        name: json['name'] as String? ?? '',
-        path: json['path'] as String? ?? '',
-        createdAt: json['created_at'] != null
-            ? DateTime.parse(json['created_at'] as String)
-            : DateTime.now(),
-        contents: contents,
-      );
-    } catch (e) {
-      print('Error parsing FolderWithContents: $e');
-      print('JSON keys: ${json.keys}');
-      rethrow;
-    }
+    return FolderWithContents(
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      path: json['path'] as String? ?? '',
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : DateTime.now(),
+      contents: contents,
+    );
   }
 }
