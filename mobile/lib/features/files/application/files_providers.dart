@@ -96,7 +96,7 @@ class FilesController extends StateNotifier<FilesState> {
       return;
     }
 
-    state = state.copyWith(isCreatingFolder: true, createError: null);
+    state = state.copyWith(isCreatingFolder: true, clearCreateError: true);
 
     try {
       final currentPath = _ref.read(currentFolderPathProvider);
