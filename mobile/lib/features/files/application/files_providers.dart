@@ -3,9 +3,11 @@ import 'package:cloudestorage/features/files/application/files_state.dart';
 import 'package:cloudestorage/features/files/data/files_repository.dart';
 import 'package:cloudestorage/features/files/domain/file_models.dart';
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 
 final filesRepositoryProvider = Provider<FilesRepository>((ref) {
@@ -138,6 +140,104 @@ class FilesController extends StateNotifier<FilesState> {
     if (result.type != ResultType.done) {
       throw Exception('Failed to open file: ${result.message}');
     }
+  }
+
+  Future<void> selectAndUploadFile() async {
+    final status = await Permission.storage.request();
+    if (!status.isGranted) {
+      throw Exception('Storage permission required to select files');
+    }
+
+    final result = await FilePicker.platform.pickFiles();
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
+
+    final file = result.files.first;
+    final fileName = file.name;
+    final filePath = file.path!;
+    final fileSize = file.size;
+    final mimeType = file.extension != null ? 'application/${file.extension}' : 'application/octet-stream';
+
+    final validationError = validateFileName(fileName);
+    if (validationError != null) {
+      throw Exception(validationError);
+    }
+
+    await uploadFile(filePath, fileName, mimeType, fileSize);
+  }
+
+  Future<void> uploadFile(
+    String filePath,
+    String fileName,
+    String mimeType,
+    int fileSize,
+  ) async {
+    state = state.clearUploadState(fileName);
+    state = state.updateUploadProgress(fileName, 0.0);
+
+    try {
+      final currentPath = _ref.read(currentFolderPathProvider);
+      final urlResponse = await _repository.presignUpload(
+        parentPath: currentPath,
+        fileName: fileName,
+        mimeType: mimeType,
+        sizeBytes: fileSize,
+      );
+
+      final file = File(filePath);
+      await _uploadToPresignedUrl(fileName, file, urlResponse.url);
+
+      await refresh();
+      state = state.updateUploadProgress(fileName, 1.0);
+    } on DuplicateFolderNameError catch (e) {
+      state = state.setUploadError(fileName, 'File already exists');
+    } on InvalidFolderNameError catch (e) {
+      state = state.setUploadError(fileName, 'Invalid file name or size');
+    } on FolderNotFoundError catch (e) {
+      state = state.setUploadError(fileName, 'Folder not found');
+    } on ServerError catch (e) {
+      state = state.setUploadError(fileName, 'Upload failed. Please try again later.');
+    } on NetworkError catch (e) {
+      state = state.setUploadError(fileName, 'Connection lost. Please check your network and try again.');
+    } catch (e) {
+      print('Upload error for $fileName: $e');
+      state = state.setUploadError(fileName, 'Upload failed. Please try again.');
+    }
+  }
+
+  Future<void> _uploadToPresignedUrl(
+    String fileName,
+    File file,
+    String url,
+  ) async {
+    final dio = Dio();
+    await dio.put(
+      url,
+      data: file.openRead(),
+      options: Options(
+        contentType: 'application/octet-stream',
+      ),
+      onSendProgress: (count, total) {
+        if (total > 0) {
+          state = state.updateUploadProgress(fileName, count / total);
+        }
+      },
+    );
+  }
+
+  Future<void> cancelUpload(String fileName) async {
+    state = state.clearUploadState(fileName);
+  }
+
+  String? validateFileName(String name) {
+    if (name.isEmpty) {
+      return 'File name cannot be empty';
+    }
+    if (name.length > 255) {
+      return 'File name cannot exceed 255 characters';
+    }
+    return null;
   }
 
   String? validateFolderName(String name) {

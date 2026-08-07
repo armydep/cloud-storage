@@ -61,6 +61,12 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
           title: Text(filesState.folder?.name ?? 'Files'),
           actions: [
             IconButton(
+              key: const Key('upload-file-button'),
+              tooltip: 'Upload file',
+              onPressed: () => _handleUploadFile(context, controller),
+              icon: const Icon(Icons.upload_file),
+            ),
+            IconButton(
               key: const Key('create-folder-button'),
               tooltip: 'Create folder',
               onPressed: () => _showCreateFolderDialog(context, controller),
@@ -76,6 +82,40 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
           ],
         ),
         body: _buildBody(filesState, controller),
+      ),
+    );
+  }
+
+  void _handleUploadFile(
+    BuildContext context,
+    FilesController controller,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Upload File'),
+        content: const Text('Select a file from your device to upload'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await controller.selectAndUploadFile();
+                if (context.mounted) Navigator.pop(context);
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Upload error: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Select File'),
+          ),
+        ],
       ),
     );
   }
