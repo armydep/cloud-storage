@@ -127,8 +127,9 @@ class ApiClient {
       if (decoded is Map<String, dynamic>) {
         return decoded;
       }
-    } on FormatException {
-      // Converted to a safe response error below.
+    } on FormatException catch (e) {
+      print('JSON decode error: $e');
+      print('Response body: ${response.body}');
     }
     throw const ApiException(
       message: 'The service returned an invalid response.',
