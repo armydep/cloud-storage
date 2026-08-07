@@ -38,15 +38,27 @@ void main() {
     expect(find.text('Enter your password.'), findsOneWidget);
   });
 
-  testWidgets('logs in, shows identity, and logs out', (tester) async {
+  testWidgets('logs in, shows file browser, and logs out', (tester) async {
     final storage = FakeTokenStorage();
     var call = 0;
     final client = MockClient((request) async {
       call++;
       if (call == 1) {
+        // Login call
         return http.Response('{"access_token":"new-token"}', 200);
+      } else if (call == 2) {
+        // Session restore call
+        return http.Response(jsonEncode(userJson), 200);
+      } else {
+        // File browser - load root folder
+        return http.Response(jsonEncode({
+          'id': '123',
+          'name': 'root',
+          'path': 'root',
+          'created_at': '2026-08-07T00:00:00Z',
+          'contents': [],
+        }), 200);
       }
-      return http.Response(jsonEncode(userJson), 200);
     });
     await tester.pumpWidget(
       ProviderScope(
@@ -70,7 +82,9 @@ void main() {
     await tester.tap(find.byKey(const Key('login-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Mobile User'), findsOneWidget);
+    // File browser should display with root folder
+    expect(find.text('root'), findsOneWidget);
+    expect(find.text('This folder is empty'), findsOneWidget);
     expect(storage.token, 'new-token');
 
     await tester.tap(find.byKey(const Key('logout-button')));
