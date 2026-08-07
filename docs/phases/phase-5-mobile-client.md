@@ -47,15 +47,15 @@ A signed-in user can create a child folder in the folder they are currently view
 
 **Status:** Completed in #52 (merged PR #57)
 
----
-
-## Next slices
-
-### Slice 5: Download and open a file on Android (issue #53)
+### Slice 5: Download and open a file on Android
 
 A signed-in user can tap a file in the folder list and download it to the device's Downloads folder. The download progress is shown with a dismiss button to cancel. On completion, the file can be opened with the system default application.
 
-See detailed spec: [Phase 5, Slice 5: Download and open a file](phase-5-slice-5-download-open-files.md)
+**Status:** Completed (merged PR #58)
+
+---
+
+## Next slices
 
 ### Slice 6: Upload one file from the Android client (issue #54)
 
