@@ -2,7 +2,11 @@ import 'package:cloudestorage/features/auth/application/auth_providers.dart';
 import 'package:cloudestorage/features/files/application/files_state.dart';
 import 'package:cloudestorage/features/files/data/files_repository.dart';
 import 'package:cloudestorage/features/files/domain/file_models.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 final filesRepositoryProvider = Provider<FilesRepository>((ref) {
   return FilesRepository(ref.watch(apiClientProvider));
@@ -75,6 +79,66 @@ class FilesController extends StateNotifier<FilesState> {
   }
 
   bool canNavigateBack() => _navigationStack.length > 1;
+
+  Future<void> downloadFile(String fileId, String fileName) async {
+    state = state.clearDownloadState(fileId);
+    state = state.updateDownloadProgress(fileId, 0.0);
+
+    try {
+      final urlResponse = await _repository.getDownloadUrl(fileId: fileId);
+      final filePath = await _downloadAndSaveFile(fileId, fileName, urlResponse.url);
+      state = state.setDownloadedFilePath(fileId, filePath);
+      state = state.updateDownloadProgress(fileId, 1.0);
+    } on FileNotFoundError catch (e) {
+      state = state.setDownloadError(fileId, 'File not found or you do not have permission');
+    } on ServerError catch (e) {
+      state = state.setDownloadError(fileId, 'File download failed. Please try again later.');
+    } on NetworkError catch (e) {
+      state = state.setDownloadError(fileId, 'Connection lost. Please check your network and try again.');
+    } catch (e) {
+      // Log the actual error for debugging
+      print('Download error for $fileId: $e');
+      state = state.setDownloadError(fileId, 'Download failed. Please try again.');
+    }
+  }
+
+  Future<String> _downloadAndSaveFile(String fileId, String fileName, String url) async {
+    try {
+      final dio = Dio();
+      final downloadsDir = await getDownloadsDirectory();
+      if (downloadsDir == null) {
+        throw Exception('Downloads directory not available');
+      }
+
+      print('Downloading $fileName to ${downloadsDir.path}');
+      final filePath = '${downloadsDir.path}/$fileName';
+      await dio.download(
+        url,
+        filePath,
+        onReceiveProgress: (count, total) {
+          if (total > 0) {
+            state = state.updateDownloadProgress(fileId, count / total);
+          }
+        },
+      );
+      print('Download completed: $filePath');
+      return filePath;
+    } catch (e) {
+      print('_downloadAndSaveFile error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> cancelDownload(String fileId) async {
+    state = state.clearDownloadState(fileId);
+  }
+
+  Future<void> openFile(String filePath) async {
+    final result = await OpenFile.open(filePath);
+    if (result.type != ResultType.done) {
+      throw Exception('Failed to open file: ${result.message}');
+    }
+  }
 
   String? validateFolderName(String name) {
     if (name.isEmpty) {

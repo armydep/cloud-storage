@@ -114,12 +114,14 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return RefreshIndicator(
-      onRefresh: () => controller.refresh(),
-      child: folder.isEmpty
-          ? _buildEmptyState()
-          : _buildFolderContents(folder, controller),
-    );
+    if (folder.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: () => controller.refresh(),
+        child: _buildEmptyState(),
+      );
+    } else {
+      return _buildFolderContents(folder, controller, state);
+    }
   }
 
   Widget _buildEmptyState() {
@@ -181,22 +183,38 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
   Widget _buildFolderContents(
     FolderWithContents folder,
     FilesController controller,
+    FilesState state,
   ) {
     final items = [...folder.folders, ...folder.files];
 
-    return ListView.builder(
-      controller: _scrollController,
-      physics: const AlwaysScrollableScrollPhysics(),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return FileListItem(
-          item: item,
-          onTap: item.isFolder && item.path != null
-              ? () => controller.navigateToFolder(item.path!)
-              : null,
-        );
-      },
+    return RefreshIndicator(
+      onRefresh: () => controller.refresh(),
+      child: ListView.builder(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          final filePath = state.getDownloadedFilePath(item.id);
+          return FileListItem(
+            item: item,
+            onTap: item.isFolder && item.path != null
+                ? () => controller.navigateToFolder(item.path!)
+                : null,
+            onDownload: item.isFile
+                ? () => controller.downloadFile(item.id, item.name)
+                : null,
+            onCancel: item.isFile
+                ? () => controller.cancelDownload(item.id)
+                : null,
+            onOpen: (item.isFile && filePath != null)
+                ? () => controller.openFile(filePath)
+                : null,
+            downloadProgress: item.isFile ? state.getDownloadProgress(item.id) : null,
+            downloadError: item.isFile ? state.getDownloadError(item.id) : null,
+          );
+        },
+      ),
     );
   }
 }
