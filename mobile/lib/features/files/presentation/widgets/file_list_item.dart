@@ -6,6 +6,7 @@ class FileListItem extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onDownload;
   final VoidCallback? onCancel;
+  final VoidCallback? onOpen;
   final double? downloadProgress;
   final String? downloadError;
 
@@ -14,6 +15,7 @@ class FileListItem extends StatelessWidget {
     this.onTap,
     this.onDownload,
     this.onCancel,
+    this.onOpen,
     this.downloadProgress,
     this.downloadError,
     super.key,
@@ -65,6 +67,13 @@ class FileListItem extends StatelessWidget {
   Widget? _buildTrailing(BuildContext context) {
     if (item.isFolder) {
       return const Icon(Icons.chevron_right);
+    }
+    if (downloadProgress != null && downloadProgress! >= 1.0) {
+      return IconButton(
+        icon: const Icon(Icons.open_in_new),
+        onPressed: onOpen,
+        tooltip: 'Open file',
+      );
     }
     if (downloadProgress != null && downloadProgress! > 0 && downloadProgress! < 1.0) {
       return IconButton(

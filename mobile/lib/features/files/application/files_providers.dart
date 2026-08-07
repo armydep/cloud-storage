@@ -107,7 +107,15 @@ class FilesController extends StateNotifier<FilesState> {
     }
 
     final filePath = '${downloadsDir.path}/$fileName';
-    await dio.download(url, filePath);
+    await dio.download(
+      url,
+      filePath,
+      onReceiveProgress: (count, total) {
+        if (total > 0) {
+          state = state.updateDownloadProgress(fileId, count / total);
+        }
+      },
+    );
   }
 
   Future<void> cancelDownload(String fileId) async {

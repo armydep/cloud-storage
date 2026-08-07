@@ -195,6 +195,8 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
         itemCount: items.length,
         itemBuilder: (context, index) {
           final item = items[index];
+          final downloadsDir = '/storage/emulated/0/Download';
+          final filePath = '$downloadsDir/${item.name}';
           return FileListItem(
             item: item,
             onTap: item.isFolder && item.path != null
@@ -205,6 +207,9 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
                 : null,
             onCancel: item.isFile
                 ? () => controller.cancelDownload(item.id)
+                : null,
+            onOpen: item.isFile
+                ? () => controller.openFile(filePath)
                 : null,
             downloadProgress: item.isFile ? state.getDownloadProgress(item.id) : null,
             downloadError: item.isFile ? state.getDownloadError(item.id) : null,
