@@ -96,28 +96,37 @@ class FilesController extends StateNotifier<FilesState> {
     } on NetworkError catch (e) {
       state = state.setDownloadError(fileId, 'Connection lost. Please check your network and try again.');
     } catch (e) {
+      // Log the actual error for debugging
+      print('Download error for $fileId: $e');
       state = state.setDownloadError(fileId, 'Download failed. Please try again.');
     }
   }
 
   Future<String> _downloadAndSaveFile(String fileId, String fileName, String url) async {
-    final dio = Dio();
-    final downloadsDir = await getDownloadsDirectory();
-    if (downloadsDir == null) {
-      throw Exception('Downloads directory not available');
-    }
+    try {
+      final dio = Dio();
+      final downloadsDir = await getDownloadsDirectory();
+      if (downloadsDir == null) {
+        throw Exception('Downloads directory not available');
+      }
 
-    final filePath = '${downloadsDir.path}/$fileName';
-    await dio.download(
-      url,
-      filePath,
-      onReceiveProgress: (count, total) {
-        if (total > 0) {
-          state = state.updateDownloadProgress(fileId, count / total);
-        }
-      },
-    );
-    return filePath;
+      print('Downloading $fileName to ${downloadsDir.path}');
+      final filePath = '${downloadsDir.path}/$fileName';
+      await dio.download(
+        url,
+        filePath,
+        onReceiveProgress: (count, total) {
+          if (total > 0) {
+            state = state.updateDownloadProgress(fileId, count / total);
+          }
+        },
+      );
+      print('Download completed: $filePath');
+      return filePath;
+    } catch (e) {
+      print('_downloadAndSaveFile error: $e');
+      rethrow;
+    }
   }
 
   Future<void> cancelDownload(String fileId) async {
