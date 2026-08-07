@@ -46,7 +46,7 @@ class FileListItem extends StatelessWidget {
     );
   }
 
-  Widget _buildSubtitle() {
+  Widget? _buildSubtitle() {
     if (downloadError != null) {
       return Text(
         downloadError!,
