@@ -1,8 +1,8 @@
 import 'package:cloudestorage/features/auth/application/auth_providers.dart';
 import 'package:cloudestorage/features/auth/application/auth_state.dart';
-import 'package:cloudestorage/features/auth/presentation/authenticated_screen.dart';
 import 'package:cloudestorage/features/auth/presentation/login_screen.dart';
 import 'package:cloudestorage/features/auth/presentation/session_error_screen.dart';
+import 'package:cloudestorage/features/files/presentation/files_browser_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,7 +26,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return state.matchedLocation == target ? null : target;
     },
     routes: [
-      GoRoute(path: '/', builder: (_, _) => const AuthenticatedScreen()),
+      GoRoute(path: '/', builder: (_, _) => const FilesBrowserScreen()),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
       GoRoute(
         path: '/splash',
