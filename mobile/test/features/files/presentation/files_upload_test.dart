@@ -22,6 +22,7 @@ void main() {
             body: FileListItem(
               item: testFile,
               uploadProgress: 0.5,
+              onUpload: () {},
             ),
           ),
         ),
@@ -38,6 +39,7 @@ void main() {
             body: FileListItem(
               item: testFile,
               uploadError: 'File already exists',
+              onUpload: () {},
             ),
           ),
         ),
@@ -78,6 +80,9 @@ void main() {
             body: FileListItem(
               item: testFile,
               uploadError: 'Upload failed',
+              onUpload: () {
+                retryCalled = true;
+              },
             ),
           ),
         ),

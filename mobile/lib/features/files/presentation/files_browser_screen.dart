@@ -250,8 +250,13 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
             onOpen: (item.isFile && filePath != null)
                 ? () => controller.openFile(filePath)
                 : null,
+            onUpload: item.isFile
+                ? () => _handleUploadFile(context, controller)
+                : null,
             downloadProgress: item.isFile ? state.getDownloadProgress(item.id) : null,
             downloadError: item.isFile ? state.getDownloadError(item.id) : null,
+            uploadProgress: item.isFile ? state.getUploadProgress(item.name) : null,
+            uploadError: item.isFile ? state.getUploadError(item.name) : null,
           );
         },
       ),

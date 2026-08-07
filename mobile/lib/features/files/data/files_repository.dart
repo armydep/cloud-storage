@@ -82,9 +82,11 @@ class FilesRepository {
   }
 
   Future<UploadUrlResponse> presignUpload({
-    required String parentPath,
-    required String fileName,
+    required String folderPath,
+    required String name,
+    required String blobHash,
     required String mimeType,
+    required String category,
     required int sizeBytes,
   }) async {
     try {
@@ -92,9 +94,11 @@ class FilesRepository {
         '/api/v1/files/presign-upload',
         authenticated: true,
         body: {
-          'parent_path': parentPath,
-          'file_name': fileName,
+          'folder_path': folderPath,
+          'name': name,
+          'blob_hash': blobHash,
           'mime_type': mimeType,
+          'category': category,
           'size_bytes': sizeBytes,
         },
       );
@@ -103,6 +107,8 @@ class FilesRepository {
     } on ApiException catch (e) {
       if (e.statusCode == 404) {
         throw FolderNotFoundError('Parent folder not found');
+      } else if (e.statusCode == 409) {
+        throw DuplicateFolderNameError('File already exists');
       } else if (e.statusCode == 422) {
         throw InvalidFolderNameError('Invalid file name or size');
       } else if (e.statusCode != null && e.statusCode! >= 500) {
@@ -116,18 +122,31 @@ class FilesRepository {
   }
 
   Future<FileContent> completeUpload({
-    required String fileId,
+    required String folderPath,
+    required String name,
+    required String blobHash,
+    required String mimeType,
+    required String category,
+    required int sizeBytes,
   }) async {
     try {
       final json = await apiClient.postJson(
-        '/api/v1/files/$fileId/complete-upload',
+        '/api/v1/files/complete-upload',
         authenticated: true,
+        body: {
+          'folder_path': folderPath,
+          'name': name,
+          'blob_hash': blobHash,
+          'mime_type': mimeType,
+          'category': category,
+          'size_bytes': sizeBytes,
+        },
       );
 
       return FileContent.fromJson({...json, 'type': 'file'});
     } on ApiException catch (e) {
       if (e.statusCode == 404) {
-        throw FileNotFoundError('File not found or you do not have permission');
+        throw FolderNotFoundError('Parent folder not found');
       } else if (e.statusCode == 409) {
         throw DuplicateFolderNameError('File already exists');
       } else if (e.statusCode == 422) {

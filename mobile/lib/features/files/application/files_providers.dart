@@ -2,6 +2,7 @@ import 'package:cloudestorage/features/auth/application/auth_providers.dart';
 import 'package:cloudestorage/features/files/application/files_state.dart';
 import 'package:cloudestorage/features/files/data/files_repository.dart';
 import 'package:cloudestorage/features/files/domain/file_models.dart';
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -157,36 +158,49 @@ class FilesController extends StateNotifier<FilesState> {
     final fileName = file.name;
     final filePath = file.path!;
     final fileSize = file.size;
-    final mimeType = file.extension != null ? 'application/${file.extension}' : 'application/octet-stream';
 
     final validationError = validateFileName(fileName);
     if (validationError != null) {
       throw Exception(validationError);
     }
 
-    await uploadFile(filePath, fileName, mimeType, fileSize);
+    await uploadFile(filePath, fileName, fileSize);
   }
 
   Future<void> uploadFile(
     String filePath,
     String fileName,
-    String mimeType,
     int fileSize,
   ) async {
     state = state.clearUploadState(fileName);
     state = state.updateUploadProgress(fileName, 0.0);
 
     try {
+      final file = File(filePath);
+      final blobHash = await _computeSha256(file);
+      final mimeType = _getMimeType(fileName);
+      final category = _getCategory(mimeType);
+
       final currentPath = _ref.read(currentFolderPathProvider);
       final urlResponse = await _repository.presignUpload(
-        parentPath: currentPath,
-        fileName: fileName,
+        folderPath: currentPath,
+        name: fileName,
+        blobHash: blobHash,
         mimeType: mimeType,
+        category: category,
         sizeBytes: fileSize,
       );
 
-      final file = File(filePath);
       await _uploadToPresignedUrl(fileName, file, urlResponse.url);
+
+      await _repository.completeUpload(
+        folderPath: currentPath,
+        name: fileName,
+        blobHash: blobHash,
+        mimeType: mimeType,
+        category: category,
+        sizeBytes: fileSize,
+      );
 
       await refresh();
       state = state.updateUploadProgress(fileName, 1.0);
@@ -206,24 +220,76 @@ class FilesController extends StateNotifier<FilesState> {
     }
   }
 
+  Future<String> _computeSha256(File file) async {
+    final bytes = await file.readAsBytes();
+    return sha256.convert(bytes).toString();
+  }
+
   Future<void> _uploadToPresignedUrl(
     String fileName,
     File file,
     String url,
   ) async {
-    final dio = Dio();
-    await dio.put(
-      url,
-      data: file.openRead(),
-      options: Options(
-        contentType: 'application/octet-stream',
-      ),
-      onSendProgress: (count, total) {
-        if (total > 0) {
-          state = state.updateUploadProgress(fileName, count / total);
-        }
-      },
-    );
+    try {
+      final dio = Dio();
+      await dio.put(
+        url,
+        data: file.openRead(),
+        options: Options(
+          contentType: 'application/octet-stream',
+        ),
+        onSendProgress: (count, total) {
+          if (total > 0) {
+            state = state.updateUploadProgress(fileName, count / total);
+          }
+        },
+      );
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.unknown) {
+        throw NetworkError('Connection lost. Please check your network and try again.');
+      }
+      rethrow;
+    }
+  }
+
+  String _getMimeType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    const mimeTypes = {
+      'pdf': 'application/pdf',
+      'txt': 'text/plain',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls': 'application/vnd.ms-excel',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'ppt': 'application/vnd.ms-powerpoint',
+      'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'png': 'image/png',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'mp3': 'audio/mpeg',
+      'wav': 'audio/wav',
+      'mp4': 'video/mp4',
+      'webm': 'video/webm',
+      'zip': 'application/zip',
+      'rar': 'application/x-rar-compressed',
+      '7z': 'application/x-7z-compressed',
+    };
+    return mimeTypes[ext] ?? 'application/octet-stream';
+  }
+
+  String _getCategory(String mimeType) {
+    if (mimeType.startsWith('image/')) return 'image';
+    if (mimeType.startsWith('video/')) return 'video';
+    if (mimeType.startsWith('audio/')) return 'audio';
+    if (mimeType.contains('spreadsheet') || mimeType.contains('excel')) return 'spreadsheet';
+    if (mimeType.contains('zip') || mimeType.contains('rar') || mimeType.contains('7z')) {
+      return 'archive';
+    }
+    return 'document';
   }
 
   Future<void> cancelUpload(String fileName) async {

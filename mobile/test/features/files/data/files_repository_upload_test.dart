@@ -14,9 +14,11 @@ void main() {
 
       final repository = FilesRepository(mockApiClient);
       await repository.presignUpload(
-        parentPath: 'root',
-        fileName: 'document.pdf',
+        folderPath: 'root',
+        name: 'document.pdf',
+        blobHash: 'abc123def456',
         mimeType: 'application/pdf',
+        category: 'document',
         sizeBytes: 102400,
       );
 
@@ -33,9 +35,11 @@ void main() {
 
       final repository = FilesRepository(mockApiClient);
       final result = await repository.presignUpload(
-        parentPath: 'root',
-        fileName: 'document.pdf',
+        folderPath: 'root',
+        name: 'document.pdf',
+        blobHash: 'abc123def456',
         mimeType: 'application/pdf',
+        category: 'document',
         sizeBytes: 102400,
       );
 
@@ -54,9 +58,11 @@ void main() {
       final repository = FilesRepository(mockApiClient);
       expect(
         () => repository.presignUpload(
-          parentPath: 'nonexistent',
-          fileName: 'document.pdf',
+          folderPath: 'nonexistent',
+          name: 'document.pdf',
+          blobHash: 'abc123def456',
           mimeType: 'application/pdf',
+          category: 'document',
           sizeBytes: 102400,
         ),
         throwsA(isA<FolderNotFoundError>()),
@@ -73,9 +79,11 @@ void main() {
       final repository = FilesRepository(mockApiClient);
       expect(
         () => repository.presignUpload(
-          parentPath: 'root',
-          fileName: 'invalid/name',
+          folderPath: 'root',
+          name: 'invalid/name',
+          blobHash: 'abc123def456',
           mimeType: 'application/pdf',
+          category: 'document',
           sizeBytes: 102400,
         ),
         throwsA(isA<InvalidFolderNameError>()),
@@ -92,9 +100,11 @@ void main() {
       final repository = FilesRepository(mockApiClient);
       expect(
         () => repository.presignUpload(
-          parentPath: 'root',
-          fileName: 'document.pdf',
+          folderPath: 'root',
+          name: 'document.pdf',
+          blobHash: 'abc123def456',
           mimeType: 'application/pdf',
+          category: 'document',
           sizeBytes: 102400,
         ),
         throwsA(isA<ServerError>()),
@@ -111,9 +121,11 @@ void main() {
       final repository = FilesRepository(mockApiClient);
       expect(
         () => repository.presignUpload(
-          parentPath: 'root',
-          fileName: 'document.pdf',
+          folderPath: 'root',
+          name: 'document.pdf',
+          blobHash: 'abc123def456',
           mimeType: 'application/pdf',
+          category: 'document',
           sizeBytes: 102400,
         ),
         throwsA(isA<NetworkError>()),
@@ -134,11 +146,18 @@ void main() {
       };
 
       final repository = FilesRepository(mockApiClient);
-      final result = await repository.completeUpload(fileId: 'file-123');
+      final result = await repository.completeUpload(
+        folderPath: 'root',
+        name: 'document.pdf',
+        blobHash: 'abc123def456',
+        mimeType: 'application/pdf',
+        category: 'document',
+        sizeBytes: 102400,
+      );
 
       expect(result.name, 'document.pdf');
       expect(result.sizeBytes, 102400);
-      expect(result.isFile, true);
+      expect(result.type, 'file');
     });
 
     test('throws FileNotFoundError on 404', () async {
@@ -150,8 +169,15 @@ void main() {
 
       final repository = FilesRepository(mockApiClient);
       expect(
-        () => repository.completeUpload(fileId: 'nonexistent'),
-        throwsA(isA<FileNotFoundError>()),
+        () => repository.completeUpload(
+          folderPath: 'root',
+          name: 'document.pdf',
+          blobHash: 'abc123def456',
+          mimeType: 'application/pdf',
+          category: 'document',
+          sizeBytes: 102400,
+        ),
+        throwsA(isA<FolderNotFoundError>()),
       );
     });
 
@@ -164,7 +190,14 @@ void main() {
 
       final repository = FilesRepository(mockApiClient);
       expect(
-        () => repository.completeUpload(fileId: 'file-123'),
+        () => repository.completeUpload(
+          folderPath: 'root',
+          name: 'document.pdf',
+          blobHash: 'abc123def456',
+          mimeType: 'application/pdf',
+          category: 'document',
+          sizeBytes: 102400,
+        ),
         throwsA(isA<DuplicateFolderNameError>()),
       );
     });
