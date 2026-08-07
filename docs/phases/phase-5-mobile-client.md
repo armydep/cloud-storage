@@ -33,113 +33,49 @@ Authenticated routing and session management:
 
 **Status:** Completed in #50 (PRs #55, #56 with auth fixes)
 
-## Next slice
-
 ### Slice 3: Browse owned files and folders on Android
-
-**Blocked by:** None (depends only on completed Slice 2)
 
 A signed-in user can navigate their folder hierarchy and view folder contents (files and
 child folders). The current folder's files and child folders appear in a list. Folders are
 selectable to navigate into them; back navigation returns to the parent folder.
 
-#### API contract
+**Status:** Completed in #51
 
-```
-GET /api/v1/files?path=<ltree_path>
-  Returns: FolderWithContentsPublic
-  Fields: id, name, path, created_at, contents[]
-  Contents item: id, name, type(string), path(string|null), size_bytes(int|null), category(string|null), mime_type(string|null)
-    - type="folder" when path is set (path is child folder path)
-    - type="file" when mime_type is set
-```
+### Slice 4: Create folders from the Android client
 
-#### Acceptance criteria
+A signed-in user can create a child folder in the folder they are currently viewing via a "Create folder" dialog. Folder name validation is performed locally and by the backend. On success, the current folder is refreshed and the new folder appears in the list. On failure, an inline error message is shown without closing the dialog.
 
-- [ ] The authenticated home screen displays the root folder's direct files and child folders.
-- [ ] Tapping a child folder loads that folder and displays its contents; navigation history is maintained.
-- [ ] Tapping the back button or platform back gesture returns to the parent folder.
-- [ ] File rows display: name, category icon, size (formatted as KB/MB/GB).
-- [ ] Folder rows display: name, folder icon.
-- [ ] Loading state shows a progress indicator while the API request is in flight.
-- [ ] Empty-folder state shows an appropriate message with an icon when the folder contains no items.
-- [ ] Network and server errors (404, 500, timeout, etc.) are shown with a dismissible message and a retry action.
-- [ ] Pull-to-refresh (swipe down) reloads the current folder without changing the navigation path.
-- [ ] Repository and widget tests cover root loading, folder navigation, empty contents, refresh, and error states.
-
-#### Architecture decisions
-
-**State management:** Use `FutureProvider.family` for folder contents at each path. Current
-path is stored in a simple `StateProvider<String>`. No `FolderController` needed for initial
-version; folder loading is request-driven, not state-driven.
-
-**Navigation:** Single `/files` route with current path managed by provider state. Deep
-linking to specific paths deferred; back navigation uses provider state, not route stack.
-
-**API client:** Generate typed Dart models and API client from backend OpenAPI schema using
-`openapi-generator`. (Implementation detail for Slice 3.)
-
-**File categories and icons:** Backend provides a `category` field (based on MIME type);
-mobile displays category-specific icons using `flutter_svg` or Material icons.
-
-**Error handling:** Show user-friendly error messages without exposing raw API responses.
-Differentiate between "Folder not found" (404), "Permission denied" (403 implied as 404),
-network timeout, and generic server errors (5xx). All errors include a retry button.
-
-**Empty state:** Show a single "This folder is empty" message for zero-item folders, with
-an icon (e.g., folder outline with a "no items" badge). Do not differentiate between
-truly empty and permission-denied at this stage (permission denied is a 404 to the client).
-
-#### Out of scope
-
-- Deep linking to specific folders via URL or notification tap.
-- Folder creation, rename, or deletion.
-- File upload, download, rename, or deletion.
-- Search or sorting.
-- File previews or inline media playback.
-- Offline caching or synchronization.
-- Shared-with-me files.
-- Shared-with-me tab or sidebar (ROADMAP 6.2 on mobile).
-
-#### Next slice: Slice 4
-
-Once folder browsing is stable, the next slice is **Create folders from the Android
-client** (#52), which adds a "Create folder" button to each folder screen and calls
-`POST /api/v1/files/folders`.
+**Status:** Completed in #52 (merged PR #57)
 
 ---
 
-## Remaining slices (planned order)
-
-### Slice 4: Create folders from the Android client (issue #52)
-
-**Blocked by:** Slice 3 (requires folder browsing UI and navigation)
-
-Users can create a child folder in the current folder via a "Create folder" dialog. Validation,
-duplicate-name errors, and network failures are handled.
+## Next slices
 
 ### Slice 5: Download and open a file on Android (issue #53)
 
-**Blocked by:** Slice 3 (requires file listing and file row actions)
+A signed-in user can tap a file in the folder list and download it to the device's Downloads folder. The download progress is shown with a dismiss button to cancel. On completion, the file can be opened with the system default application.
 
-Users can download files they own and hand them to Android's file open/share chooser.
+See detailed spec: [Phase 5, Slice 5: Download and open a file](phase-5-slice-5-download-open-files.md)
 
 ### Slice 6: Upload one file from the Android client (issue #54)
 
-**Blocked by:** Slice 3 (requires folder UI and file actions)
-
 Users can select one file from their device and upload it to the current folder using
-the presigned URL flow (no bearer token on object storage).
+the presigned URL flow. Progress is shown during upload.
+
+### Slice 7: File details and metadata (issue #55)
+
+Users can view file metadata: size, download date, MIME type, owner.
 
 ---
 
 ## Acceptance flow
 
-A signed-in user sees their root folder. They tap a child folder to navigate into it.
-The child folder's files and nested folders appear. They tap back (or the platform back
-gesture) to return to the root. A network error briefly shows a message with a retry
-button. Pulling down the folder refreshes its contents. An empty folder shows
-"This folder is empty" with no error.
+A signed-in user sees their root folder and can:
+1. Navigate into child folders and back to parent (Slice 3)
+2. Create new folders using a "Create folder" action (Slice 4)
+3. Download files to their device and open them (Slice 5)
+4. Upload files from their device (Slice 6)
+5. View detailed file metadata in a detail screen (Slice 7)
 
-Folder creation, file upload, and file download remain separate, dependent slices.
+Folder navigation, creation, downloads, and uploads remain independent, vertical slices.
 Shared-with-me files are future work under ROADMAP 6 (sharing phase).
