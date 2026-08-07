@@ -136,7 +136,7 @@ class FilesController extends StateNotifier<FilesState> {
     state = state.clearDownloadState(fileId);
   }
 
-  Future<void> openFile(String filePath) async {
+  Future<void> openDownloadedFile(String filePath) async {
     final result = await OpenFile.open(filePath);
     if (result.type != ResultType.done) {
       throw Exception('Failed to open file: ${result.message}');
