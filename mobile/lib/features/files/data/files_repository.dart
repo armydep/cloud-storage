@@ -42,7 +42,7 @@ class FilesRepository {
         },
       );
 
-      return FileContent.fromJson(json);
+      return FileContent.fromJson({...json, 'type': 'folder'});
     } on ApiException catch (e) {
       if (e.statusCode == 404) {
         throw FolderNotFoundError('Parent folder not found');

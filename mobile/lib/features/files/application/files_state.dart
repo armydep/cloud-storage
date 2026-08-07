@@ -33,13 +33,14 @@ class FilesState {
     String? error,
     bool? isCreatingFolder,
     String? createError,
+    bool clearCreateError = false,
   }) {
     return FilesState(
       isLoading: isLoading ?? this.isLoading,
       folder: folder ?? this.folder,
       error: error ?? this.error,
       isCreatingFolder: isCreatingFolder ?? this.isCreatingFolder,
-      createError: createError ?? this.createError,
+      createError: clearCreateError ? null : (createError ?? this.createError),
     );
   }
 }

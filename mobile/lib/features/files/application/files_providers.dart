@@ -105,7 +105,7 @@ class FilesController extends StateNotifier<FilesState> {
         name: name,
       );
       await refresh();
-      state = state.copyWith(isCreatingFolder: false, createError: null);
+      state = state.copyWith(isCreatingFolder: false, clearCreateError: true);
     } on DuplicateFolderNameError catch (e) {
       state = state.copyWith(
         isCreatingFolder: false,
