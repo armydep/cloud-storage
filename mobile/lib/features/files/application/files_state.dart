@@ -8,6 +8,9 @@ class FilesState {
   final String? error;
   final bool isCreatingFolder;
   final String? createError;
+  final Map<String, double> downloadProgress;
+  final Map<String, String?> downloadError;
+  final Set<String> completedDownloads;
 
   const FilesState({
     this.isLoading = false,
@@ -15,6 +18,9 @@ class FilesState {
     this.error,
     this.isCreatingFolder = false,
     this.createError,
+    this.downloadProgress = const {},
+    this.downloadError = const {},
+    this.completedDownloads = const {},
   });
 
   const FilesState.loading() : this(isLoading: true);
@@ -27,6 +33,11 @@ class FilesState {
   bool get hasError => error != null;
   bool get isEmpty => !isLoading && folder != null && folder!.isEmpty;
 
+  double? getDownloadProgress(String fileId) => downloadProgress[fileId];
+  String? getDownloadError(String fileId) => downloadError[fileId];
+  bool isDownloading(String fileId) => downloadProgress.containsKey(fileId);
+  bool isDownloadComplete(String fileId) => completedDownloads.contains(fileId);
+
   FilesState copyWith({
     bool? isLoading,
     FolderWithContents? folder,
@@ -34,6 +45,9 @@ class FilesState {
     bool? isCreatingFolder,
     String? createError,
     bool clearCreateError = false,
+    Map<String, double>? downloadProgress,
+    Map<String, String?>? downloadError,
+    Set<String>? completedDownloads,
   }) {
     return FilesState(
       isLoading: isLoading ?? this.isLoading,
@@ -41,6 +55,45 @@ class FilesState {
       error: error ?? this.error,
       isCreatingFolder: isCreatingFolder ?? this.isCreatingFolder,
       createError: clearCreateError ? null : (createError ?? this.createError),
+      downloadProgress: downloadProgress ?? this.downloadProgress,
+      downloadError: downloadError ?? this.downloadError,
+      completedDownloads: completedDownloads ?? this.completedDownloads,
     );
+  }
+
+  FilesState updateDownloadProgress(String fileId, double progress) {
+    final newProgress = Map<String, double>.from(downloadProgress);
+    if (progress >= 1.0) {
+      newProgress.remove(fileId);
+      final newCompleted = Set<String>.from(completedDownloads);
+      newCompleted.add(fileId);
+      return copyWith(
+        downloadProgress: newProgress,
+        completedDownloads: newCompleted,
+      );
+    } else {
+      newProgress[fileId] = progress;
+      return copyWith(downloadProgress: newProgress);
+    }
+  }
+
+  FilesState setDownloadError(String fileId, String? error) {
+    final newError = Map<String, String?>.from(downloadError);
+    if (error == null) {
+      newError.remove(fileId);
+    } else {
+      newError[fileId] = error;
+    }
+    final newProgress = Map<String, double>.from(downloadProgress);
+    newProgress.remove(fileId);
+    return copyWith(downloadProgress: newProgress, downloadError: newError);
+  }
+
+  FilesState clearDownloadState(String fileId) {
+    final newProgress = Map<String, double>.from(downloadProgress);
+    newProgress.remove(fileId);
+    final newError = Map<String, String?>.from(downloadError);
+    newError.remove(fileId);
+    return copyWith(downloadProgress: newProgress, downloadError: newError);
   }
 }

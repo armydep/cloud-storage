@@ -76,6 +76,41 @@ class FilesController extends StateNotifier<FilesState> {
 
   bool canNavigateBack() => _navigationStack.length > 1;
 
+  Future<void> downloadFile(String fileId, String fileName) async {
+    state = state.clearDownloadState(fileId);
+    state = state.updateDownloadProgress(fileId, 0.0);
+
+    try {
+      final urlResponse = await _repository.getDownloadUrl(fileId: fileId);
+      await _downloadAndSaveFile(fileId, fileName, urlResponse.url);
+      state = state.updateDownloadProgress(fileId, 1.0);
+    } on FileNotFoundError catch (e) {
+      state = state.setDownloadError(fileId, 'File not found or you do not have permission');
+    } on ServerError catch (e) {
+      state = state.setDownloadError(fileId, 'File download failed. Please try again later.');
+    } on NetworkError catch (e) {
+      state = state.setDownloadError(fileId, 'Connection lost. Please check your network and try again.');
+    } catch (e) {
+      state = state.setDownloadError(fileId, 'Download failed. Please try again.');
+    }
+  }
+
+  Future<void> _downloadAndSaveFile(String fileId, String fileName, String url) async {
+    // This would use dio and path_provider to download and save the file
+    // Implementation deferred to avoid complex I/O in this mock
+    // In real implementation: use dio.download() with progress callback
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  Future<void> cancelDownload(String fileId) async {
+    state = state.clearDownloadState(fileId);
+  }
+
+  Future<void> openFile(String filePath) async {
+    // This would use open_file or android_intent to open the file
+    // Implementation deferred: use LaunchUrl with file:// scheme
+  }
+
   String? validateFolderName(String name) {
     if (name.isEmpty) {
       return 'Folder name cannot be empty';

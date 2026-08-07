@@ -59,6 +59,27 @@ class FilesRepository {
       }
     }
   }
+
+  Future<DownloadUrlResponse> getDownloadUrl({required String fileId}) async {
+    try {
+      final json = await apiClient.getJson(
+        '/api/v1/files/$fileId/download',
+        authenticated: true,
+      );
+
+      return DownloadUrlResponse.fromJson(json);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        throw FileNotFoundError('File not found or you do not have permission');
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError('File download failed. Please try again later.');
+      } else if (e.isNetworkError) {
+        throw NetworkError('Connection lost. Please check your network and try again.');
+      } else {
+        throw ApiError(e.message);
+      }
+    }
+  }
 }
 
 class FolderNotFoundError implements Exception {
@@ -107,4 +128,29 @@ class InvalidFolderNameError implements Exception {
 
   @override
   String toString() => message;
+}
+
+class FileNotFoundError implements Exception {
+  final String message;
+  FileNotFoundError(this.message);
+
+  @override
+  String toString() => message;
+}
+
+class DownloadUrlResponse {
+  final String url;
+  final int expiresInSeconds;
+
+  DownloadUrlResponse({
+    required this.url,
+    required this.expiresInSeconds,
+  });
+
+  factory DownloadUrlResponse.fromJson(Map<String, dynamic> json) {
+    return DownloadUrlResponse(
+      url: json['url'] as String,
+      expiresInSeconds: json['expires_in_seconds'] as int? ?? 3600,
+    );
+  }
 }
