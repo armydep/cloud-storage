@@ -53,11 +53,18 @@ class ApiClient {
     String path, {
     bool authenticated = false,
     String? authenticationToken,
+    Map<String, dynamic>? body,
   }) async {
     final token =
         authenticationToken ?? (authenticated ? await _requiredToken() : null);
+    final headers = _headers(token: token);
+    headers['Content-Type'] = 'application/json';
     final response = await _send(
-      () => _httpClient.post(resolve(path), headers: _headers(token: token)),
+      () => _httpClient.post(
+        resolve(path),
+        headers: headers,
+        body: body != null ? jsonEncode(body) : null,
+      ),
       authenticatedToken: token,
     );
     return _decodeObject(response);

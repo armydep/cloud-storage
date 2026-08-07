@@ -34,6 +34,9 @@ class FilesController extends StateNotifier<FilesState> {
   final Ref _ref;
   final List<String> _navigationStack = ['root'];
 
+  static const String _folderNamePattern = r'^[a-zA-Z0-9\s\-_]+$';
+  static const int _maxFolderNameLength = 255;
+
   FilesController(this._repository, this._ref) : super(const FilesState());
 
   Future<void> loadFolder(String path) async {
@@ -72,4 +75,67 @@ class FilesController extends StateNotifier<FilesState> {
   }
 
   bool canNavigateBack() => _navigationStack.length > 1;
+
+  String? validateFolderName(String name) {
+    if (name.isEmpty) {
+      return 'Folder name cannot be empty';
+    }
+    if (name.length > _maxFolderNameLength) {
+      return 'Folder name cannot exceed $_maxFolderNameLength characters';
+    }
+    if (!RegExp(_folderNamePattern).hasMatch(name)) {
+      return 'Folder name can only contain letters, numbers, spaces, dashes, and underscores';
+    }
+    return null;
+  }
+
+  Future<void> createFolder(String name) async {
+    final validationError = validateFolderName(name);
+    if (validationError != null) {
+      state = state.copyWith(createError: validationError);
+      return;
+    }
+
+    state = state.copyWith(isCreatingFolder: true, createError: null);
+
+    try {
+      final currentPath = _ref.read(currentFolderPathProvider);
+      await _repository.createFolder(
+        parentPath: currentPath,
+        name: name,
+      );
+      await refresh();
+      state = state.copyWith(isCreatingFolder: false, createError: null);
+    } on DuplicateFolderNameError catch (e) {
+      state = state.copyWith(
+        isCreatingFolder: false,
+        createError: 'Folder already exists',
+      );
+    } on InvalidFolderNameError catch (e) {
+      state = state.copyWith(
+        isCreatingFolder: false,
+        createError: 'Invalid folder name',
+      );
+    } on FolderNotFoundError catch (e) {
+      state = state.copyWith(
+        isCreatingFolder: false,
+        createError: 'Parent folder not found',
+      );
+    } on ServerError catch (e) {
+      state = state.copyWith(
+        isCreatingFolder: false,
+        createError: 'Server error. Please try again.',
+      );
+    } on NetworkError catch (e) {
+      state = state.copyWith(
+        isCreatingFolder: false,
+        createError: 'Connection lost. Please check your network and try again.',
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isCreatingFolder: false,
+        createError: 'An error occurred. Please try again.',
+      );
+    }
+  }
 }
