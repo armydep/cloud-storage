@@ -86,7 +86,8 @@ class FilesController extends StateNotifier<FilesState> {
 
     try {
       final urlResponse = await _repository.getDownloadUrl(fileId: fileId);
-      await _downloadAndSaveFile(fileId, fileName, urlResponse.url);
+      final filePath = await _downloadAndSaveFile(fileId, fileName, urlResponse.url);
+      state = state.setDownloadedFilePath(fileId, filePath);
       state = state.updateDownloadProgress(fileId, 1.0);
     } on FileNotFoundError catch (e) {
       state = state.setDownloadError(fileId, 'File not found or you do not have permission');
@@ -99,7 +100,7 @@ class FilesController extends StateNotifier<FilesState> {
     }
   }
 
-  Future<void> _downloadAndSaveFile(String fileId, String fileName, String url) async {
+  Future<String> _downloadAndSaveFile(String fileId, String fileName, String url) async {
     final dio = Dio();
     final downloadsDir = await getDownloadsDirectory();
     if (downloadsDir == null) {
@@ -116,6 +117,7 @@ class FilesController extends StateNotifier<FilesState> {
         }
       },
     );
+    return filePath;
   }
 
   Future<void> cancelDownload(String fileId) async {

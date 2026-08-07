@@ -11,6 +11,7 @@ class FilesState {
   final Map<String, double> downloadProgress;
   final Map<String, String?> downloadError;
   final Set<String> completedDownloads;
+  final Map<String, String> downloadedFilePaths;
 
   const FilesState({
     this.isLoading = false,
@@ -21,6 +22,7 @@ class FilesState {
     this.downloadProgress = const {},
     this.downloadError = const {},
     this.completedDownloads = const {},
+    this.downloadedFilePaths = const {},
   });
 
   const FilesState.loading() : this(isLoading: true);
@@ -35,6 +37,7 @@ class FilesState {
 
   double? getDownloadProgress(String fileId) => downloadProgress[fileId];
   String? getDownloadError(String fileId) => downloadError[fileId];
+  String? getDownloadedFilePath(String fileId) => downloadedFilePaths[fileId];
   bool isDownloading(String fileId) => downloadProgress.containsKey(fileId);
   bool isDownloadComplete(String fileId) => completedDownloads.contains(fileId);
 
@@ -48,6 +51,7 @@ class FilesState {
     Map<String, double>? downloadProgress,
     Map<String, String?>? downloadError,
     Set<String>? completedDownloads,
+    Map<String, String>? downloadedFilePaths,
   }) {
     return FilesState(
       isLoading: isLoading ?? this.isLoading,
@@ -58,6 +62,7 @@ class FilesState {
       downloadProgress: downloadProgress ?? this.downloadProgress,
       downloadError: downloadError ?? this.downloadError,
       completedDownloads: completedDownloads ?? this.completedDownloads,
+      downloadedFilePaths: downloadedFilePaths ?? this.downloadedFilePaths,
     );
   }
 
@@ -94,6 +99,18 @@ class FilesState {
     newProgress.remove(fileId);
     final newError = Map<String, String?>.from(downloadError);
     newError.remove(fileId);
-    return copyWith(downloadProgress: newProgress, downloadError: newError);
+    final newPaths = Map<String, String>.from(downloadedFilePaths);
+    newPaths.remove(fileId);
+    return copyWith(
+      downloadProgress: newProgress,
+      downloadError: newError,
+      downloadedFilePaths: newPaths,
+    );
+  }
+
+  FilesState setDownloadedFilePath(String fileId, String filePath) {
+    final newPaths = Map<String, String>.from(downloadedFilePaths);
+    newPaths[fileId] = filePath;
+    return copyWith(downloadedFilePaths: newPaths);
   }
 }
