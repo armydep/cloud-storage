@@ -4,7 +4,7 @@ import 'package:cloudestorage/features/files/data/files_repository.dart';
 import 'package:cloudestorage/features/files/domain/file_models.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
@@ -149,22 +149,21 @@ class FilesController extends StateNotifier<FilesState> {
       throw Exception('Storage permission required to select files');
     }
 
-    final result = await FilePicker.platform.pickFiles();
-    if (result == null || result.files.isEmpty) {
+    final filePath = await openFile();
+    if (filePath == null) {
       return;
     }
 
-    final file = result.files.first;
-    final fileName = file.name;
-    final filePath = file.path!;
-    final fileSize = file.size;
+    final file = File(filePath);
+    final fileName = file.path.split('/').last;
+    final fileSize = await file.length();
 
     final validationError = validateFileName(fileName);
     if (validationError != null) {
       throw Exception(validationError);
     }
 
-    await uploadFile(filePath, fileName, fileSize);
+    await uploadFile(filePath, fileName, fileSize.toInt());
   }
 
   Future<void> uploadFile(
