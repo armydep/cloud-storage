@@ -6,11 +6,15 @@ class FilesState {
   final bool isLoading;
   final FolderWithContents? folder;
   final String? error;
+  final bool isCreatingFolder;
+  final String? createError;
 
   const FilesState({
     this.isLoading = false,
     this.folder,
     this.error,
+    this.isCreatingFolder = false,
+    this.createError,
   });
 
   const FilesState.loading() : this(isLoading: true);
@@ -22,4 +26,21 @@ class FilesState {
 
   bool get hasError => error != null;
   bool get isEmpty => !isLoading && folder != null && folder!.isEmpty;
+
+  FilesState copyWith({
+    bool? isLoading,
+    FolderWithContents? folder,
+    String? error,
+    bool? isCreatingFolder,
+    String? createError,
+    bool clearCreateError = false,
+  }) {
+    return FilesState(
+      isLoading: isLoading ?? this.isLoading,
+      folder: folder ?? this.folder,
+      error: error ?? this.error,
+      isCreatingFolder: isCreatingFolder ?? this.isCreatingFolder,
+      createError: clearCreateError ? null : (createError ?? this.createError),
+    );
+  }
 }

@@ -27,6 +27,38 @@ class FilesRepository {
       }
     }
   }
+
+  Future<FileContent> createFolder({
+    required String parentPath,
+    required String name,
+  }) async {
+    try {
+      final json = await apiClient.postJson(
+        '/api/v1/files/folders',
+        authenticated: true,
+        body: {
+          'parent_path': parentPath,
+          'name': name,
+        },
+      );
+
+      return FileContent.fromJson({...json, 'type': 'folder'});
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        throw FolderNotFoundError('Parent folder not found');
+      } else if (e.statusCode == 409) {
+        throw DuplicateFolderNameError('Folder already exists');
+      } else if (e.statusCode == 422) {
+        throw InvalidFolderNameError('Invalid folder name');
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError('Server error. Please try again.');
+      } else if (e.isNetworkError) {
+        throw NetworkError('Connection lost. Please check your network and try again.');
+      } else {
+        throw ApiError(e.message);
+      }
+    }
+  }
 }
 
 class FolderNotFoundError implements Exception {
@@ -56,6 +88,22 @@ class ServerError implements Exception {
 class NetworkError implements Exception {
   final String message;
   NetworkError(this.message);
+
+  @override
+  String toString() => message;
+}
+
+class DuplicateFolderNameError implements Exception {
+  final String message;
+  DuplicateFolderNameError(this.message);
+
+  @override
+  String toString() => message;
+}
+
+class InvalidFolderNameError implements Exception {
+  final String message;
+  InvalidFolderNameError(this.message);
 
   @override
   String toString() => message;
