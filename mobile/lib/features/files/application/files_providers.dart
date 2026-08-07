@@ -149,14 +149,21 @@ class FilesController extends StateNotifier<FilesState> {
       throw Exception('Storage permission required to select files');
     }
 
-    final filePath = await openFile();
-    if (filePath == null) {
+    final result = await openFile(
+      acceptedTypeGroups: <XTypeGroup>[
+        XTypeGroup(
+          label: 'All files',
+          extensions: <String>['*'],
+        ),
+      ],
+    );
+    if (result == null) {
       return;
     }
 
-    final file = File(filePath);
-    final fileName = file.path.split('/').last;
-    final fileSize = await file.length();
+    final filePath = result.path;
+    final fileName = result.name;
+    final fileSize = await result.length();
 
     final validationError = validateFileName(fileName);
     if (validationError != null) {
