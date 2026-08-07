@@ -1,9 +1,23 @@
+import 'package:cloudestorage/core/network/api_client.dart';
 import 'package:cloudestorage/features/files/data/files_repository.dart';
 import 'package:cloudestorage/features/files/domain/file_models.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
+import 'package:mockito/mockito.dart';
 
+import 'files_repository_test.mocks.dart';
+
+@GenerateMocks([ApiClient])
 void main() {
   group('FilesRepository', () {
+    late MockApiClient mockApiClient;
+    late FilesRepository repository;
+
+    setUp(() {
+      mockApiClient = MockApiClient();
+      repository = FilesRepository(mockApiClient);
+    });
+
     group('FileContent', () {
       test('correctly parses JSON', () {
         final json = {
@@ -96,6 +110,110 @@ void main() {
 
         expect(folder.isEmpty, true);
         expect(folder.contents.length, 0);
+      });
+    });
+
+    group('getFolder', () {
+      test('calls API with correct endpoint and authentication', () async {
+        const path = 'root';
+        final mockResponse = {
+          'id': '123',
+          'name': 'root',
+          'path': 'root',
+          'created_at': '2026-08-07T00:00:00Z',
+          'contents': [],
+        };
+
+        when(mockApiClient.getJson(
+          '/api/v1/files',
+          authenticated: true,
+          queryParameters: {'path': path},
+        )).thenAnswer((_) async => mockResponse);
+
+        await repository.getFolder(path: path);
+
+        verify(mockApiClient.getJson(
+          '/api/v1/files',
+          authenticated: true,
+          queryParameters: {'path': path},
+        )).called(1);
+      });
+
+      test('returns FolderWithContents on success', () async {
+        const path = 'root';
+        final mockResponse = {
+          'id': '123',
+          'name': 'root',
+          'path': 'root',
+          'created_at': '2026-08-07T00:00:00Z',
+          'contents': [
+            {
+              'id': '1',
+              'name': 'Documents',
+              'type': 'folder',
+              'path': 'root.Documents',
+            },
+          ],
+        };
+
+        when(mockApiClient.getJson(
+          any,
+          authenticated: anyNamed('authenticated'),
+          queryParameters: anyNamed('queryParameters'),
+        )).thenAnswer((_) async => mockResponse);
+
+        final result = await repository.getFolder(path: path);
+
+        expect(result, isA<FolderWithContents>());
+        expect(result.name, 'root');
+      });
+
+      test('throws FolderNotFoundError on 404', () async {
+        when(mockApiClient.getJson(
+          any,
+          authenticated: anyNamed('authenticated'),
+          queryParameters: anyNamed('queryParameters'),
+        )).thenThrow(
+          const ApiException(message: 'Not found', statusCode: 404),
+        );
+
+        expect(
+          () => repository.getFolder(path: 'root'),
+          throwsA(isA<FolderNotFoundError>()),
+        );
+      });
+
+      test('throws ServerError on 500', () async {
+        when(mockApiClient.getJson(
+          any,
+          authenticated: anyNamed('authenticated'),
+          queryParameters: anyNamed('queryParameters'),
+        )).thenThrow(
+          const ApiException(message: 'Server error', statusCode: 500),
+        );
+
+        expect(
+          () => repository.getFolder(path: 'root'),
+          throwsA(isA<ServerError>()),
+        );
+      });
+
+      test('throws NetworkError on network exception', () async {
+        when(mockApiClient.getJson(
+          any,
+          authenticated: anyNamed('authenticated'),
+          queryParameters: anyNamed('queryParameters'),
+        )).thenThrow(
+          const ApiException(
+            message: 'Network error',
+            isNetworkError: true,
+          ),
+        );
+
+        expect(
+          () => repository.getFolder(path: 'root'),
+          throwsA(isA<NetworkError>()),
+        );
       });
     });
   });

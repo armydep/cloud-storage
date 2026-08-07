@@ -8,27 +8,23 @@ class FilesRepository {
 
   Future<FolderWithContents> getFolder({required String path}) async {
     try {
-      final response = await apiClient.get(
-        '/files',
+      final json = await apiClient.getJson(
+        '/api/v1/files',
+        authenticated: true,
         queryParameters: {'path': path},
       );
 
-      if (response.statusCode == 200) {
-        return FolderWithContents.fromJson(
-          response.body as Map<String, dynamic>,
-        );
-      } else if (response.statusCode == 404) {
+      return FolderWithContents.fromJson(json);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
         throw FolderNotFoundError('Folder not found');
-      } else if (response.statusCode >= 500) {
-        throw ServerError('Server error: ${response.statusCode}');
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError('Server error. Please try again.');
+      } else if (e.isNetworkError) {
+        throw NetworkError('Network error. Please check your connection.');
       } else {
-        throw ApiError('Failed to fetch folder: ${response.statusCode}');
+        throw ApiError(e.message);
       }
-    } catch (e) {
-      if (e is FolderNotFoundError || e is ServerError || e is ApiError) {
-        rethrow;
-      }
-      throw NetworkError('Network error: $e');
     }
   }
 }

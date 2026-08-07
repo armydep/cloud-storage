@@ -38,10 +38,12 @@ class ApiClient {
   Future<Map<String, dynamic>> getJson(
     String path, {
     bool authenticated = false,
+    Map<String, String>? queryParameters,
   }) async {
     final token = authenticated ? await _requiredToken() : null;
+    final uri = resolve(path, queryParameters: queryParameters);
     final response = await _send(
-      () => _httpClient.get(resolve(path), headers: _headers(token: token)),
+      () => _httpClient.get(uri, headers: _headers(token: token)),
       authenticatedToken: token,
     );
     return _decodeObject(response);
@@ -144,9 +146,13 @@ class ApiClient {
     return 'The request could not be completed.';
   }
 
-  Uri resolve(String path) {
+  Uri resolve(String path, {Map<String, String>? queryParameters}) {
     final relativePath = path.startsWith('/') ? path.substring(1) : path;
-    return _baseUri.resolve(relativePath);
+    final uri = _baseUri.resolve(relativePath);
+    if (queryParameters == null || queryParameters.isEmpty) {
+      return uri;
+    }
+    return uri.replace(queryParameters: queryParameters);
   }
 
   void close() => _httpClient.close();

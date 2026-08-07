@@ -156,7 +156,7 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
         final item = items[index];
         return FileListItem(
           item: item,
-          onTap: item.isFolder
+          onTap: item.isFolder && item.path != null
               ? () => controller.navigateToFolder(item.path!)
               : null,
         );
