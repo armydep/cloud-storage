@@ -1,0 +1,64 @@
+name: Test Mobile
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.filter.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            changed:
+              - mobile/**
+              - .github/workflows/test-mobile.yml
+
+  test-mobile:
+    needs: changes
+    if: ${{ needs.changes.outputs.changed == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: mobile
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed .
+        working-directory: mobile
+      - name: Analyze
+        run: flutter analyze
+        working-directory: mobile
+      - name: Test
+        run: flutter test
+        working-directory: mobile
+      - name: Build Android debug APK
+        run: flutter build apk --debug
+        working-directory: mobile
+
+  alls-green-mobile:
+    if: always()
+    needs:
+      - changes
+      - test-mobile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide whether the needed jobs succeeded or failed
+        uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}
+          allowed-skips: test-mobile

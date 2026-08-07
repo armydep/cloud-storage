@@ -55,6 +55,7 @@ Improve the main file-management workflow after the core operations are stable.
 ## 5. Later phase: Mobile and synchronization
 
 - [ ] **5.1** Build an Android client
+      ([#47](https://github.com/armydep/cloude-file-storage/issues/47))
 - [ ] **5.2** Synchronize files between the Android client and cloud storage
 
 ## 6. Later phase: Sharing and collaboration

@@ -24,6 +24,7 @@ different things in each). Always prefix: `ROADMAP 1.4`, `SCALE 8.2`, `#40` for 
 ## Layout
 - `backend/` — FastAPI app (package root `app`, feature-first under `app/files/`).
 - `frontend/` — React 19 + Vite + TypeScript SPA.
+- `mobile/` — Android-only Flutter application.
 - `compose.yml` + `compose.override.yml` — Postgres 18, MinIO, mailcatcher, Traefik, adminer.
 
 ## Build / test / run
@@ -44,6 +45,11 @@ Backend, from `backend/`:
 Frontend, from `frontend/`:
 - Dev server: `bun run dev`. Lint: `bun run lint`. Build: `bun run build` (tsc **then** vite).
 - E2E: `bunx playwright test` (needs the stack running).
+
+Mobile, from `mobile/`:
+- Dependencies: `flutter pub get`. Format check: `dart format --output=none --set-exit-if-changed .`.
+- Analyze: `flutter analyze`. Test: `flutter test`.
+- Run against the emulator host: `flutter run` (defaults to `http://10.0.2.2:8000`).
 
 Client generation, from the repo root: `bash scripts/generate-client.sh`.
 
