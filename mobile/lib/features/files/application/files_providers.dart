@@ -303,6 +303,9 @@ class FilesController extends StateNotifier<FilesState> {
     if (name.length > 255) {
       return 'File name cannot exceed 255 characters';
     }
+    if (!RegExp(_folderNamePattern).hasMatch(name)) {
+      return 'File name can only contain letters, numbers, spaces, dashes, and underscores';
+    }
     return null;
   }
 
