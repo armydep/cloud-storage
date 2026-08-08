@@ -24,10 +24,13 @@ ROADMAP 5.1
 - Sharing files from detail screen (separate phase - ROADMAP 6)
 - Download history or access timestamps
 
-## Open questions
-1. Should the backend enhance `FolderContentPublic` schema to include `created_at` and `owner_email`, or create a separate GET `/api/v1/files/{id}` detail endpoint?
-2. Should the detail screen include file category icon/badge?
-3. Should date display include timestamp (e.g., "Feb 8, 2026 at 2:34 PM") or just date?
+## Decisions (from open questions)
+
+1. **Backend returns metadata fields in existing response** — Enhanced `FolderContentPublic` schema to include `created_at` and `owner_email` rather than creating a separate detail endpoint. This keeps folder listing backward-compatible and avoids an extra round trip.
+
+2. **No category icon in detail screen** — Kept MVP simple with metadata text only. Category is available in code if future designs want visual indicators.
+
+3. **Date display includes time (e.g., "Aug 8, 2026 at 2:34 PM")** — Full datetime is more useful than date alone for understanding when files were created, especially for multiple uploads on the same day.
 
 ## Implementation notes
 - File detail screen should be a separate Widget, navigated to from FileListItem

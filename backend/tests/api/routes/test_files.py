@@ -216,6 +216,12 @@ def test_read_root_returns_root_contents(
     assert created_entry["category"] == "document"
     assert created_entry["blob_hash"] == "abc123"
     assert created_entry["size_bytes"] == 12345
+    assert "created_at" in created_entry
+    assert created_entry["created_at"] is not None
+    assert isinstance(created_entry["created_at"], str)
+    assert "T" in created_entry["created_at"]
+    assert "owner_email" in created_entry
+    assert created_entry["owner_email"] == settings.EMAIL_TEST_USER
 
 
 def test_read_files_requires_authentication(client: TestClient) -> None:
