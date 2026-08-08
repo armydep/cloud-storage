@@ -208,7 +208,7 @@ class FilesController extends StateNotifier<FilesState> {
         sizeBytes: fileSize,
       );
 
-      await _uploadToPresignedUrl(fileName, file, urlResponse.url);
+      await _uploadToPresignedUrl(fileName, file, mimeType, urlResponse.url);
 
       await _repository.completeUpload(
         folderPath: currentPath,
@@ -245,6 +245,7 @@ class FilesController extends StateNotifier<FilesState> {
   Future<void> _uploadToPresignedUrl(
     String fileName,
     File file,
+    String mimeType,
     String url,
   ) async {
     try {
@@ -254,7 +255,7 @@ class FilesController extends StateNotifier<FilesState> {
         url,
         data: fileBytes,
         options: Options(
-          contentType: 'application/octet-stream',
+          contentType: mimeType,
         ),
         onSendProgress: (count, total) {
           if (total > 0) {
