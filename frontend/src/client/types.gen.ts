@@ -45,6 +45,8 @@ export type FolderContentPublic = {
     category?: (string | null);
     blob_hash?: (string | null);
     size_bytes?: (number | null);
+    created_at?: (string | null);
+    owner_email?: (string | null);
 };
 
 export type FolderCreate = {

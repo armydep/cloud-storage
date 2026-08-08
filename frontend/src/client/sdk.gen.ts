@@ -17,7 +17,7 @@ export class FilesService {
             url: '/api/v1/files/shared-with-me'
         });
     }
-
+    
     /**
      * Create Child Folder
      * @param data The data for the request.
@@ -36,7 +36,7 @@ export class FilesService {
             }
         });
     }
-
+    
     /**
      * Read Files
      * Return a folder and its direct contents by ltree path.
@@ -123,7 +123,7 @@ export class FilesService {
             }
         });
     }
-
+    
     /**
      * Delete File Share
      * @param data The data for the request.
@@ -145,7 +145,7 @@ export class FilesService {
             }
         });
     }
-
+    
     /**
      * Complete File Upload
      * @param data The data for the request.
