@@ -145,11 +145,15 @@ class FilesController extends StateNotifier<FilesState> {
   }
 
   Future<void> selectAndUploadFile() async {
+    print('selectAndUploadFile: Starting file selection');
+
     final status = await Permission.storage.request();
+    print('selectAndUploadFile: Storage permission status = $status');
     if (!status.isGranted) {
       throw Exception('Storage permission required to select files');
     }
 
+    print('selectAndUploadFile: Opening file picker');
     final result = await openFile(
       acceptedTypeGroups: <XTypeGroup>[
         XTypeGroup(
@@ -158,20 +162,26 @@ class FilesController extends StateNotifier<FilesState> {
         ),
       ],
     );
+    print('selectAndUploadFile: File picker result = $result');
     if (result == null) {
+      print('selectAndUploadFile: User cancelled file selection');
       return;
     }
 
     final filePath = result.path;
     final fileName = result.name;
     final fileSize = await result.length();
+    print('selectAndUploadFile: Selected file - name=$fileName, path=$filePath, size=$fileSize');
 
     final validationError = validateFileName(fileName);
     if (validationError != null) {
+      print('selectAndUploadFile: Validation error = $validationError');
       throw Exception(validationError);
     }
 
+    print('selectAndUploadFile: Starting upload');
     await uploadFile(filePath, fileName, fileSize.toInt());
+    print('selectAndUploadFile: Upload completed');
   }
 
   Future<void> uploadFile(
