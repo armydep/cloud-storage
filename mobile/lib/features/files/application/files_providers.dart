@@ -249,9 +249,10 @@ class FilesController extends StateNotifier<FilesState> {
   ) async {
     try {
       final dio = Dio();
+      final fileBytes = await file.readAsBytes();
       await dio.put(
         url,
-        data: file.openRead(),
+        data: fileBytes,
         options: Options(
           contentType: 'application/octet-stream',
         ),
