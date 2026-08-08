@@ -135,7 +135,7 @@ def get_folder_contents(
         owner_id=owner_id,
         parent_id=folder.id,
     )
-    files = repository.list_folder_files(
+    files_with_owner = repository.list_folder_files_with_owner(
         session=session,
         owner_id=owner_id,
         folder_id=folder.id,
@@ -157,8 +157,10 @@ def get_folder_contents(
             category=file.category,
             blob_hash=file.blob_hash,
             size_bytes=file.size_bytes,
+            created_at=file.created_at,
+            owner_email=owner_email,
         )
-        for file in files
+        for file, owner_email in files_with_owner
     ]
 
     return FolderWithContentsPublic.model_validate(

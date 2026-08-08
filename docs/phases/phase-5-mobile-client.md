@@ -53,18 +53,25 @@ A signed-in user can tap a file in the folder list and download it to the device
 
 **Status:** Completed (merged PR #58)
 
+### Slice 6: Upload one file from the Android client (issue #54)
+
+Users can select one file from their device and upload it to the current folder using
+the presigned URL flow. Progress is shown during upload. File name validation ensures only alphanumeric, spaces, dashes, underscores, and dots are allowed.
+
+**Status:** Completed (merged PR #59)
+
 ---
 
 ## Next slices
 
-### Slice 6: Upload one file from the Android client (issue #54)
-
-Users can select one file from their device and upload it to the current folder using
-the presigned URL flow. Progress is shown during upload.
-
 ### Slice 7: File details and metadata (issue #55)
 
-Users can view file metadata: size, download date, MIME type, owner.
+A signed-in user can tap a file to view its metadata in a detail screen. The screen displays
+file size, creation date, MIME type, and owner email. The detail screen is navigated to from
+the file list by tapping a file (not available for folders). A back or close button returns
+to the folder list.
+
+**Detailed spec:** [docs/phases/phase-5-mobile-slices/07-file-details-metadata.md](phase-5-mobile-slices/07-file-details-metadata.md)
 
 ---
 
