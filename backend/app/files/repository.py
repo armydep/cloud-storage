@@ -80,6 +80,18 @@ def list_folder_files(
     return list(session.exec(statement).all())
 
 
+def list_folder_files_with_owner(
+    *, session: Session, owner_id: uuid.UUID, folder_id: uuid.UUID
+) -> list[tuple[StoredFile, str]]:
+    statement = (
+        select(StoredFile, User.email)
+        .join(User, col(User.id) == col(StoredFile.owner_id))
+        .where(StoredFile.owner_id == owner_id, StoredFile.folder_id == folder_id)
+        .order_by(StoredFile.name)
+    )
+    return list(session.exec(statement).all())
+
+
 def create_folder(
     *,
     session: Session,

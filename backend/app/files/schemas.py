@@ -117,6 +117,8 @@ class FolderContentPublic(SQLModel):
     category: str | None = None
     blob_hash: str | None = None
     size_bytes: int | None = None
+    created_at: datetime | None = None
+    owner_email: str | None = None
 
 
 class FolderWithContentsPublic(FolderPublic):

@@ -8,6 +8,8 @@ class FileContent {
   final String? category;
   final String? mimeType;
   final String? path;
+  final DateTime? createdAt;
+  final String? ownerEmail;
 
   FileContent({
     required this.id,
@@ -17,6 +19,8 @@ class FileContent {
     this.category,
     this.mimeType,
     this.path,
+    this.createdAt,
+    this.ownerEmail,
   });
 
   bool get isFolder => type == 'folder';
@@ -37,6 +41,10 @@ class FileContent {
   }
 
   factory FileContent.fromJson(Map<String, dynamic> json) {
+    DateTime? createdAt;
+    if (json['created_at'] != null) {
+      createdAt = DateTime.parse(json['created_at'] as String);
+    }
     return FileContent(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -45,6 +53,8 @@ class FileContent {
       category: json['category'] as String?,
       mimeType: json['mime_type'] as String?,
       path: json['path'] as String?,
+      createdAt: createdAt,
+      ownerEmail: json['owner_email'] as String?,
     );
   }
 

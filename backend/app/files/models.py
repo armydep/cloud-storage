@@ -53,6 +53,10 @@ class StoredFileBase(SQLModel):
     size_bytes: int = Field(ge=0, sa_type=BigInteger)  # type: ignore
 
 
+def get_datetime_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class StoredFile(StoredFileBase, table=True):
     __tablename__ = "files"
     __table_args__ = (
@@ -61,6 +65,7 @@ class StoredFile(StoredFileBase, table=True):
         Index("ix_files_folder_id", "folder_id"),
         Index("ix_files_blob_hash", "blob_hash"),
         Index("ix_files_owner_folder", "owner_id", "folder_id"),
+        Index("ix_files_created_at", "created_at"),
     )
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     owner_id: uuid.UUID = Field(
@@ -69,10 +74,11 @@ class StoredFile(StoredFileBase, table=True):
     folder_id: uuid.UUID = Field(
         foreign_key="folders.id", nullable=False, ondelete="CASCADE"
     )
-
-
-def get_datetime_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        nullable=False,
+    )
 
 
 class FileShare(SQLModel, table=True):

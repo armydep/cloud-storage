@@ -2,6 +2,7 @@ import 'package:cloudestorage/features/auth/application/auth_providers.dart';
 import 'package:cloudestorage/features/files/application/files_providers.dart';
 import 'package:cloudestorage/features/files/application/files_state.dart';
 import 'package:cloudestorage/features/files/domain/file_models.dart';
+import 'package:cloudestorage/features/files/presentation/file_detail_screen.dart';
 import 'package:cloudestorage/features/files/presentation/widgets/file_list_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -236,26 +237,40 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
         itemBuilder: (context, index) {
           final item = items[index];
           final filePath = state.getDownloadedFilePath(item.id);
-          return FileListItem(
-            item: item,
-            onTap: item.isFolder && item.path != null
-                ? () => controller.navigateToFolder(item.path!)
+          return GestureDetector(
+            onLongPress: item.isFile
+                ? () => _showFileDetail(context, item)
                 : null,
-            onDownload: item.isFile
-                ? () => controller.downloadFile(item.id, item.name)
-                : null,
-            onCancel: item.isFile
-                ? () => controller.cancelDownload(item.id)
-                : null,
-            onOpen: (item.isFile && filePath != null)
-                ? () => controller.openDownloadedFile(filePath)
-                : null,
-            downloadProgress: item.isFile ? state.getDownloadProgress(item.id) : null,
-            downloadError: item.isFile ? state.getDownloadError(item.id) : null,
-            uploadProgress: item.isFile ? state.getUploadProgress(item.name) : null,
-            uploadError: item.isFile ? state.getUploadError(item.name) : null,
+            child: FileListItem(
+              item: item,
+              onTap: item.isFolder && item.path != null
+                  ? () => controller.navigateToFolder(item.path!)
+                  : null,
+              onDownload: item.isFile
+                  ? () => controller.downloadFile(item.id, item.name)
+                  : null,
+              onCancel: item.isFile
+                  ? () => controller.cancelDownload(item.id)
+                  : null,
+              onOpen: (item.isFile && filePath != null)
+                  ? () => controller.openDownloadedFile(filePath)
+                  : null,
+              downloadProgress: item.isFile ? state.getDownloadProgress(item.id) : null,
+              downloadError: item.isFile ? state.getDownloadError(item.id) : null,
+              uploadProgress: item.isFile ? state.getUploadProgress(item.name) : null,
+              uploadError: item.isFile ? state.getUploadError(item.name) : null,
+            ),
           );
         },
+      ),
+    );
+  }
+
+  void _showFileDetail(BuildContext context, FileContent file) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FileDetailScreen(file: file),
       ),
     );
   }
