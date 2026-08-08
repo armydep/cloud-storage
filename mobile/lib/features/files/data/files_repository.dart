@@ -80,6 +80,86 @@ class FilesRepository {
       }
     }
   }
+
+  Future<UploadUrlResponse> presignUpload({
+    required String folderPath,
+    required String name,
+    required String blobHash,
+    required String mimeType,
+    required String category,
+    required int sizeBytes,
+  }) async {
+    try {
+      final json = await apiClient.postJson(
+        '/api/v1/files/presign-upload',
+        authenticated: true,
+        body: {
+          'folder_path': folderPath,
+          'name': name,
+          'blob_hash': blobHash,
+          'mime_type': mimeType,
+          'category': category,
+          'size_bytes': sizeBytes,
+        },
+      );
+
+      return UploadUrlResponse.fromJson(json);
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        throw FolderNotFoundError('Parent folder not found');
+      } else if (e.statusCode == 409) {
+        throw DuplicateFolderNameError('File already exists');
+      } else if (e.statusCode == 422) {
+        throw InvalidFolderNameError('Invalid file name or size');
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError('Upload failed. Please try again later.');
+      } else if (e.isNetworkError) {
+        throw NetworkError('Connection lost. Please check your network and try again.');
+      } else {
+        throw ApiError(e.message);
+      }
+    }
+  }
+
+  Future<FileContent> completeUpload({
+    required String folderPath,
+    required String name,
+    required String blobHash,
+    required String mimeType,
+    required String category,
+    required int sizeBytes,
+  }) async {
+    try {
+      final json = await apiClient.postJson(
+        '/api/v1/files/complete-upload',
+        authenticated: true,
+        body: {
+          'folder_path': folderPath,
+          'name': name,
+          'blob_hash': blobHash,
+          'mime_type': mimeType,
+          'category': category,
+          'size_bytes': sizeBytes,
+        },
+      );
+
+      return FileContent.fromJson({...json, 'type': 'file'});
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        throw FolderNotFoundError('Parent folder not found');
+      } else if (e.statusCode == 409) {
+        throw DuplicateFolderNameError('File already exists');
+      } else if (e.statusCode == 422) {
+        throw InvalidFolderNameError('Invalid file');
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError('Upload completion failed. Please try again later.');
+      } else if (e.isNetworkError) {
+        throw NetworkError('Connection lost. Please check your network and try again.');
+      } else {
+        throw ApiError(e.message);
+      }
+    }
+  }
 }
 
 class FolderNotFoundError implements Exception {
@@ -150,6 +230,26 @@ class DownloadUrlResponse {
   factory DownloadUrlResponse.fromJson(Map<String, dynamic> json) {
     return DownloadUrlResponse(
       url: json['download_url'] as String,
+      expiresInSeconds: json['expires_in'] as int? ?? 3600,
+    );
+  }
+}
+
+class UploadUrlResponse {
+  final String url;
+  final String method;
+  final int expiresInSeconds;
+
+  UploadUrlResponse({
+    required this.url,
+    required this.method,
+    required this.expiresInSeconds,
+  });
+
+  factory UploadUrlResponse.fromJson(Map<String, dynamic> json) {
+    return UploadUrlResponse(
+      url: json['upload_url'] as String,
+      method: json['method'] as String? ?? 'PUT',
       expiresInSeconds: json['expires_in'] as int? ?? 3600,
     );
   }

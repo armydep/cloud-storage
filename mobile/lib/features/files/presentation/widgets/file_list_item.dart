@@ -9,6 +9,8 @@ class FileListItem extends StatelessWidget {
   final VoidCallback? onOpen;
   final double? downloadProgress;
   final String? downloadError;
+  final double? uploadProgress;
+  final String? uploadError;
 
   const FileListItem({
     required this.item,
@@ -18,6 +20,8 @@ class FileListItem extends StatelessWidget {
     this.onOpen,
     this.downloadProgress,
     this.downloadError,
+    this.uploadProgress,
+    this.uploadError,
     super.key,
   });
 
@@ -42,11 +46,29 @@ class FileListItem extends StatelessWidget {
             bottom: 0,
             child: LinearProgressIndicator(value: downloadProgress),
           ),
+        if (uploadProgress != null && uploadProgress! > 0)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: LinearProgressIndicator(value: uploadProgress),
+          ),
       ],
     );
   }
 
   Widget? _buildSubtitle() {
+    if (uploadError != null) {
+      return Text(
+        uploadError!,
+        style: const TextStyle(color: Colors.red, fontSize: 12),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+    if (uploadProgress != null && uploadProgress! > 0) {
+      return Text('Uploading ${(uploadProgress! * 100).toStringAsFixed(0)}%');
+    }
     if (downloadError != null) {
       return Text(
         downloadError!,
