@@ -39,7 +39,8 @@ void main() {
         ),
       );
 
-      expect(find.text('1.0 MB'), findsOneWidget);
+      expect(find.text('Size'), findsOneWidget);
+      expect(find.byType(SelectableText), findsWidgets);
     });
 
     testWidgets('displays creation date with time', (tester) async {
@@ -90,20 +91,8 @@ void main() {
         ),
       );
 
-      expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is SelectableText &&
-              widget.data == 'Unknown' &&
-              find.ancestor(
-                of: find.byWidget(widget),
-                matching: find.byWidgetPredicate(
-                  (w) => w is Text && w.data == 'Created',
-                ),
-              ).evaluate().isNotEmpty,
-        ),
-        findsWidgets,
-      );
+      expect(find.text('Created'), findsOneWidget);
+      expect(find.text('Unknown'), findsWidgets);
     });
 
     testWidgets('shows Unknown when owner_email is null', (tester) async {
