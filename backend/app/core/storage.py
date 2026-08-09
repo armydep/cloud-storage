@@ -1,9 +1,11 @@
 import base64
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 from urllib.parse import quote
 
 import boto3  # type: ignore[import-untyped]
+from botocore.config import Config  # type: ignore[import-untyped]
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
 from app.core.config import settings
@@ -33,6 +35,7 @@ def sha256_hex_to_base64(blob_hash: str) -> str:
     return base64.b64encode(bytes.fromhex(blob_hash)).decode("ascii")
 
 
+@lru_cache(maxsize=1)
 def get_s3_client() -> Any:
     return boto3.client(
         "s3",
@@ -40,7 +43,19 @@ def get_s3_client() -> Any:
         aws_access_key_id=settings.S3_ACCESS_KEY,
         aws_secret_access_key=settings.S3_SECRET_KEY,
         region_name=settings.S3_REGION,
+        config=Config(
+            connect_timeout=settings.S3_CONNECT_TIMEOUT_SECONDS,
+            read_timeout=settings.S3_READ_TIMEOUT_SECONDS,
+            retries={
+                "max_attempts": settings.S3_MAX_ATTEMPTS,
+                "mode": "standard",
+            },
+        ),
     )
+
+
+def clear_s3_client_cache() -> None:
+    get_s3_client.cache_clear()
 
 
 def _get_expires_in(expires_in: int | None) -> int:

@@ -38,6 +38,8 @@ Keep development and delivery reliable while product capabilities expand.
       ([#92](https://github.com/armydep/cloude-file-storage/issues/92))
 - [ ] **2.8** Add backend metrics for scaling decisions
       ([#93](https://github.com/armydep/cloude-file-storage/issues/93))
+- [ ] **2.9** Configure database pool limits and cached storage client
+      ([#94](https://github.com/armydep/cloude-file-storage/issues/94))
 
 ## 3. Next phase: File experience
 

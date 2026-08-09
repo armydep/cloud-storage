@@ -9,6 +9,10 @@ from app.models import User, UserCreate
 engine = create_engine(
     str(settings.SQLALCHEMY_DATABASE_URI),
     poolclass=InstrumentedQueuePool,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_pre_ping=settings.DB_POOL_PRE_PING,
+    pool_recycle=settings.DB_POOL_RECYCLE_SECONDS,
 )
 instrument_sqlalchemy_pool(engine)
 
