@@ -117,7 +117,7 @@ connection math, not by compute.
 | # | Finding | Evidence | Roadmap |
 | --- | --- | --- | --- |
 | 3.1 | A new boto3 client is constructed on every storage call; client construction parses service models from disk and builds signers | `app/core/storage.py:25` | Gap |
-| 3.2 | `stat_object` performs a network round trip to object storage on every upload completion, serialized with the database work | `app/files/service.py:140` | Gap |
+| 3.2 | `stat_object` performs a network round trip to object storage on every upload completion, serialized with the database work | `app/files/service.py:140` | Resolved by #92 |
 | 3.3 | No explicit botocore timeout or retry configuration | `app/core/storage.py:25-32` | Gap |
 
 `get_s3_client()` is called from every presign and every stat, so 3.1 sits on the
@@ -130,6 +130,11 @@ Update 2026-08-09: #91 removes the larger upload-completion asymmetry that was
 found after this review. `complete_upload` no longer streams the object back
 through the API to recompute SHA-256; object storage enforces the checksum on
 PUT and completion reads checksum metadata with a constant-time HEAD request.
+
+Update 2026-08-10: #92 narrows the remaining upload-completion lock scope.
+`complete_upload` now performs S3 metadata verification and canonical object
+copy before taking the `file_blobs` row lock, then re-reads the blob under
+`FOR UPDATE` only for the claim/ref-count/file mutation block.
 
 ---
 

@@ -1,5 +1,7 @@
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Barrier, Event, Lock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,6 +11,7 @@ from app import crud
 from app.core.config import settings
 from app.core.db import engine
 from app.core.storage import ObjectNotFoundError, ObjectStat, sha256_hex_to_base64
+from app.files import service as files_service
 from app.files.models import (
     FileBlob,
     FileBlobClaim,
@@ -17,6 +20,7 @@ from app.files.models import (
     PendingUpload,
     StoredFile,
 )
+from app.files.schemas import CompleteUploadRequest
 from app.files.service import BlobIntegrityError
 from app.models import UserCreate
 from tests.utils.user import authentication_token_from_email
@@ -415,6 +419,34 @@ def _create_pending_upload(
     db.commit()
     db.refresh(pending_upload)
     return pending_upload
+
+
+def _synchronize_first_blob_locks(
+    *, monkeypatch: pytest.MonkeyPatch, blob_hash: str
+) -> None:
+    original_get_blob_for_update = files_service.repository.get_blob_for_update
+    barrier = Barrier(2)
+    lock = Lock()
+    synchronized_call_count = 0
+
+    def synchronized_get_blob_for_update(
+        *, session: Session, blob_hash: str
+    ) -> FileBlob | None:
+        nonlocal synchronized_call_count
+        should_wait = False
+        with lock:
+            if blob_hash == target_blob_hash and synchronized_call_count < 2:
+                synchronized_call_count += 1
+                should_wait = True
+        if should_wait:
+            barrier.wait(timeout=10)
+        return original_get_blob_for_update(session=session, blob_hash=blob_hash)
+
+    target_blob_hash = blob_hash
+    monkeypatch.setattr(
+        "app.files.service.repository.get_blob_for_update",
+        synchronized_get_blob_for_update,
+    )
 
 
 def test_presign_upload_succeeds_for_owned_folder(
@@ -1040,7 +1072,7 @@ def test_complete_upload_recovers_when_concurrent_request_creates_blob(
         size_bytes: int,
         ref_count: int = 0,
     ) -> FileBlob:
-        del session, ref_count
+        del ref_count
         with Session(engine) as concurrent_session:
             concurrent_session.add(
                 FileBlob(
@@ -1054,6 +1086,7 @@ def test_complete_upload_recovers_when_concurrent_request_creates_blob(
 
         from app.files.repository import DuplicateFileBlobRepositoryError
 
+        session.rollback()
         raise DuplicateFileBlobRepositoryError
 
     monkeypatch.setattr(
@@ -1082,6 +1115,287 @@ def test_complete_upload_recovers_when_concurrent_request_creates_blob(
         select(StoredFile).where(StoredFile.id == uuid.UUID(response.json()["id"]))
     ).first()
     assert stored_file is not None
+
+
+def test_complete_upload_verifies_and_copies_before_blob_row_lock(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteLockOrder",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    pending_upload = _create_pending_upload(
+        db=db,
+        owner_id=folder.owner_id,
+        blob_hash=blob_hash,
+    )
+    events: list[str] = []
+
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key, include_checksum=False: (
+            events.append("stat_object")
+            or ObjectStat(
+                size_bytes=123,
+                content_type="application/pdf",
+                checksum_sha256=sha256_hex_to_base64(blob_hash),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.copy_object",
+        lambda *, source_object_key, destination_object_key: events.append(
+            "copy_object"
+        ),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    original_get_blob_for_update = files_service.repository.get_blob_for_update
+
+    def recording_get_blob_for_update(
+        *, session: Session, blob_hash: str
+    ) -> FileBlob | None:
+        events.append("get_blob_for_update")
+        return original_get_blob_for_update(session=session, blob_hash=blob_hash)
+
+    monkeypatch.setattr(
+        "app.files.service.repository.get_blob_for_update",
+        recording_get_blob_for_update,
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "lock-order.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    assert events[:3] == ["stat_object", "copy_object", "get_blob_for_update"]
+    assert pending_upload.object_key.startswith(f"uploads/{folder.owner_id}/")
+
+
+def test_complete_upload_concurrent_same_hash_keeps_ref_count_correct(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    first_folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteConcurrentA",
+    )
+    second_folder = _create_unique_folder(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="CompleteConcurrentB",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=123,
+            ref_count=0,
+        )
+    )
+    db.commit()
+    _create_pending_upload(
+        db=db,
+        owner_id=first_folder.owner_id,
+        blob_hash=blob_hash,
+    )
+    _create_pending_upload(
+        db=db,
+        owner_id=second_folder.owner_id,
+        blob_hash=blob_hash,
+    )
+
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=123,
+            content_type="application/pdf",
+            checksum_sha256=sha256_hex_to_base64(blob_hash),
+        ),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    _synchronize_first_blob_locks(monkeypatch=monkeypatch, blob_hash=blob_hash)
+
+    def complete_for(folder: Folder, name: str) -> None:
+        with Session(engine) as session:
+            files_service.complete_upload(
+                session=session,
+                owner_id=folder.owner_id,
+                request=CompleteUploadRequest(
+                    folder_path=folder.path,
+                    name=name,
+                    mime_type="application/pdf",
+                    category="document",
+                    blob_hash=blob_hash,
+                    size_bytes=123,
+                ),
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(complete_for, first_folder, "first.pdf")
+        second = executor.submit(complete_for, second_folder, "second.pdf")
+        first.result(timeout=10)
+        second.result(timeout=10)
+
+    db.expire_all()
+    stored_blob = db.get(FileBlob, blob_hash)
+    assert stored_blob is not None
+    assert stored_blob.ref_count == 2
+    files = db.exec(select(StoredFile).where(StoredFile.blob_hash == blob_hash)).all()
+    assert len(files) == 2
+    claims = db.exec(
+        select(FileBlobClaim).where(FileBlobClaim.blob_hash == blob_hash)
+    ).all()
+    assert len(claims) == 2
+    assert stored_blob.ref_count >= 0
+
+
+def test_complete_upload_racing_delete_file_keeps_ref_count_correct(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    existing_file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteUploadRace",
+    )
+    upload_folder = _create_unique_folder(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="DeleteUploadRaceTarget",
+    )
+    blob_hash = existing_file.blob_hash
+    existing_file_id = existing_file.id
+    existing_file_owner_id = existing_file.owner_id
+    _create_pending_upload(
+        db=db,
+        owner_id=upload_folder.owner_id,
+        blob_hash=blob_hash,
+    )
+
+    delete_lock_started = Event()
+    object_events: list[str] = []
+    original_get_blob_for_update = files_service.repository.get_blob_for_update
+
+    def record_delete_lock_started(
+        *, session: Session, blob_hash: str
+    ) -> FileBlob | None:
+        if blob_hash == target_blob_hash:
+            delete_lock_started.set()
+        return original_get_blob_for_update(session=session, blob_hash=blob_hash)
+
+    def wait_for_delete_lock_before_stat(
+        *, object_key: str, include_checksum: bool = False
+    ) -> ObjectStat:
+        del object_key, include_checksum
+        assert delete_lock_started.wait(timeout=10)
+        return ObjectStat(
+            size_bytes=123,
+            content_type="application/pdf",
+            checksum_sha256=sha256_hex_to_base64(blob_hash),
+        )
+
+    target_blob_hash = blob_hash
+    monkeypatch.setattr(
+        "app.files.service.repository.get_blob_for_update",
+        record_delete_lock_started,
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        wait_for_delete_lock_before_stat,
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.copy_object",
+        lambda *, source_object_key, destination_object_key: object_events.append(
+            "copy_object"
+        ),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: object_events.append(
+            "delete_canonical_object"
+            if object_key.startswith("sha256/")
+            else "delete_pending_object"
+        ),
+    )
+
+    def complete_upload() -> None:
+        with Session(engine) as session:
+            files_service.complete_upload(
+                session=session,
+                owner_id=upload_folder.owner_id,
+                request=CompleteUploadRequest(
+                    folder_path=upload_folder.path,
+                    name="replacement.pdf",
+                    mime_type="application/pdf",
+                    category="document",
+                    blob_hash=blob_hash,
+                    size_bytes=123,
+                ),
+            )
+
+    def delete_existing_file() -> None:
+        with Session(engine) as session:
+            files_service.delete_file(
+                session=session,
+                owner_id=existing_file_owner_id,
+                file_id=existing_file_id,
+            )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        complete = executor.submit(complete_upload)
+        delete = executor.submit(delete_existing_file)
+        complete.result(timeout=10)
+        delete.result(timeout=10)
+
+    db.expire_all()
+    assert db.get(StoredFile, existing_file_id) is None
+    stored_blob = db.get(FileBlob, blob_hash)
+    assert stored_blob is not None
+    assert stored_blob.ref_count == 1
+    files = db.exec(select(StoredFile).where(StoredFile.blob_hash == blob_hash)).all()
+    assert len(files) == 1
+    assert files[0].owner_id == upload_folder.owner_id
+    assert stored_blob.ref_count >= 0
+    assert object_events == [
+        "delete_canonical_object",
+        "copy_object",
+        "delete_pending_object",
+    ]
 
 
 def test_complete_upload_existing_blob_size_mismatch_returns_400(
