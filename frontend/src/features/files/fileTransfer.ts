@@ -31,14 +31,20 @@ export async function uploadFileToCurrentFolder({
     requestBody: metadata,
   })
 
-  const uploadResponse = await fetch(presignResponse.upload_url, {
-    method: presignResponse.method || "PUT",
-    headers: presignResponse.headers,
-    body: file,
-  })
+  if (presignResponse.upload_required !== false) {
+    if (!presignResponse.upload_url) {
+      throw new Error("Upload URL was not provided")
+    }
 
-  if (!uploadResponse.ok) {
-    throw new Error("MinIO upload failed")
+    const uploadResponse = await fetch(presignResponse.upload_url, {
+      method: presignResponse.method || "PUT",
+      headers: presignResponse.headers,
+      body: file,
+    })
+
+    if (!uploadResponse.ok) {
+      throw new Error("MinIO upload failed")
+    }
   }
 
   await FilesService.completeFileUpload({

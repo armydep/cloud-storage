@@ -75,7 +75,7 @@ function FilesTableContent({
   onOpenFolder: (path: string) => void
 }) {
   const { data: folder } = useSuspenseQuery(getFilesQueryOptions(currentPath))
-  const columns = getColumns({ onOpenFolder })
+  const columns = getColumns({ currentPath, onOpenFolder })
 
   if (folder.contents.length === 0) {
     return (

@@ -123,8 +123,9 @@ export type PresignUploadRequest = {
 };
 
 export type PresignUploadResponse = {
-    upload_url: string;
-    method?: string;
+    upload_required?: boolean;
+    upload_url?: (string | null);
+    method?: (string | null);
     headers: {
         [key: string]: (string);
     };
@@ -241,6 +242,12 @@ export type FilesPresignDownloadData = {
 };
 
 export type FilesPresignDownloadResponse = (PresignDownloadResponse);
+
+export type FilesDeleteOwnedFileData = {
+    fileId: string;
+};
+
+export type FilesDeleteOwnedFileResponse = (void);
 
 export type FilesCreateFileShareData = {
     fileId: string;

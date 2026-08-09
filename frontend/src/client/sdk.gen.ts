@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { FilesReadFilesSharedWithMeResponse, FilesCreateChildFolderData, FilesCreateChildFolderResponse, FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesCreateFileShareData, FilesCreateFileShareResponse, FilesReadFileSharesData, FilesReadFileSharesResponse, FilesDeleteFileShareData, FilesDeleteFileShareResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { FilesReadFilesSharedWithMeResponse, FilesCreateChildFolderData, FilesCreateChildFolderResponse, FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesDeleteOwnedFileData, FilesDeleteOwnedFileResponse, FilesCreateFileShareData, FilesCreateFileShareResponse, FilesReadFileSharesData, FilesReadFileSharesResponse, FilesDeleteFileShareData, FilesDeleteFileShareResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class FilesService {
     /**
@@ -17,7 +17,7 @@ export class FilesService {
             url: '/api/v1/files/shared-with-me'
         });
     }
-    
+
     /**
      * Create Child Folder
      * @param data The data for the request.
@@ -36,7 +36,7 @@ export class FilesService {
             }
         });
     }
-    
+
     /**
      * Read Files
      * Return a folder and its direct contents by ltree path.
@@ -60,7 +60,7 @@ export class FilesService {
             }
         });
     }
-    
+
     /**
      * Presign Download
      * @param data The data for the request.
@@ -80,7 +80,27 @@ export class FilesService {
             }
         });
     }
-    
+
+    /**
+     * Delete Owned File
+     * @param data The data for the request.
+     * @param data.fileId
+     * @returns void Successful Response
+     * @throws ApiError
+     */
+    public static deleteOwnedFile(data: FilesDeleteOwnedFileData): CancelablePromise<FilesDeleteOwnedFileResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/files/{file_id}',
+            path: {
+                file_id: data.fileId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
     /**
      * Create File Share
      * @param data The data for the request.
@@ -103,7 +123,7 @@ export class FilesService {
             }
         });
     }
-    
+
     /**
      * Read File Shares
      * @param data The data for the request.
@@ -123,7 +143,7 @@ export class FilesService {
             }
         });
     }
-    
+
     /**
      * Delete File Share
      * @param data The data for the request.
@@ -145,7 +165,7 @@ export class FilesService {
             }
         });
     }
-    
+
     /**
      * Complete File Upload
      * @param data The data for the request.
@@ -164,7 +184,7 @@ export class FilesService {
             }
         });
     }
-    
+
     /**
      * Presign Upload
      * @param data The data for the request.
@@ -208,7 +228,7 @@ export class ItemsService {
             }
         });
     }
-    
+
     /**
      * Create Item
      * Create new item.
@@ -228,7 +248,7 @@ export class ItemsService {
             }
         });
     }
-    
+
     /**
      * Read Item
      * Get item by ID.
@@ -249,7 +269,7 @@ export class ItemsService {
             }
         });
     }
-    
+
     /**
      * Update Item
      * Update an item.
@@ -273,7 +293,7 @@ export class ItemsService {
             }
         });
     }
-    
+
     /**
      * Delete Item
      * Delete an item.
@@ -316,7 +336,7 @@ export class LoginService {
             }
         });
     }
-    
+
     /**
      * Test Token
      * Test access token
@@ -329,7 +349,7 @@ export class LoginService {
             url: '/api/v1/login/test-token'
         });
     }
-    
+
     /**
      * Recover Password
      * Password Recovery
@@ -350,7 +370,7 @@ export class LoginService {
             }
         });
     }
-    
+
     /**
      * Reset Password
      * Reset password
@@ -370,7 +390,7 @@ export class LoginService {
             }
         });
     }
-    
+
     /**
      * Recover Password Html Content
      * HTML Content for Password Recovery
@@ -438,7 +458,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Create User
      * Create new user.
@@ -458,7 +478,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Read User Me
      * Get current user.
@@ -471,7 +491,7 @@ export class UsersService {
             url: '/api/v1/users/me'
         });
     }
-    
+
     /**
      * Delete User Me
      * Delete own user.
@@ -484,7 +504,7 @@ export class UsersService {
             url: '/api/v1/users/me'
         });
     }
-    
+
     /**
      * Update User Me
      * Update own user.
@@ -504,7 +524,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Update Password Me
      * Update own password.
@@ -524,7 +544,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Register User
      * Create new user without the need to be logged in.
@@ -544,7 +564,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Read User By Id
      * Get a specific user by id.
@@ -565,7 +585,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Update User
      * Update a user.
@@ -589,7 +609,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Delete User
      * Delete a user.
@@ -633,7 +653,7 @@ export class UtilsService {
             }
         });
     }
-    
+
     /**
      * Health Check
      * @returns boolean Successful Response

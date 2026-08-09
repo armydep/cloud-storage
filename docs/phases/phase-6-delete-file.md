@@ -98,7 +98,7 @@ GitHub issue: [#62](https://github.com/armydep/cloude-file-storage/issues/62)
 
 Depends on Slice 1.
 
-Status: Next slice.
+Status: Completed in PR [#67](https://github.com/armydep/cloude-file-storage/pull/67).
 
 - Add `DELETE /api/v1/files/{file_id}`.
 - Add per-user blob claims and pending upload proof for SCALE 8.1.
@@ -116,6 +116,8 @@ Detailed spec:
 GitHub issue: [#63](https://github.com/armydep/cloude-file-storage/issues/63)
 
 Depends on Slice 2.
+
+Status: In progress on branch `feature/phase-6-web-delete-file`.
 
 - Regenerate the generated OpenAPI frontend client.
 - Update upload handling so it skips direct S3 upload when the backend says the
