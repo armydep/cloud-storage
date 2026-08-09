@@ -208,6 +208,9 @@ test("File rows show download action and folder rows do not", async ({
   await expect(
     folderRow.getByRole("button", { name: "Open file actions" }),
   ).toHaveCount(0)
+
+  await fileRow.getByRole("button", { name: "Open file actions" }).click()
+  await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible()
 })
 
 test("Download action calls presign-download", async ({ page }) => {
@@ -237,6 +240,199 @@ test("Download action calls presign-download", async ({ page }) => {
   await page.getByRole("menuitem", { name: "Download" }).click()
 
   await expect.poll(() => presignDownloadCalled).toBe(true)
+})
+
+test("Upload skips direct object upload when presign says upload is not required", async ({
+  page,
+}) => {
+  let putCount = 0
+  let completeUploadCalled = false
+
+  await page.route("**/api/v1/files/presign-upload", async (route) => {
+    await route.fulfill({
+      json: {
+        upload_required: false,
+        upload_url: null,
+        method: null,
+        headers: {},
+        object_key:
+          "sha256/2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        expires_in: 0,
+      },
+    })
+  })
+  await page.route("**/object-upload-target", async (route) => {
+    putCount += 1
+    await route.fulfill({ status: 500 })
+  })
+  await page.route("**/api/v1/files/complete-upload", async (route) => {
+    completeUploadCalled = true
+    await route.fulfill({
+      json: {
+        id: "00000000-0000-0000-0000-000000000040",
+        owner_id: rootFolder.owner_id,
+        folder_id: rootFolder.id,
+        name: "hello.txt",
+        mime_type: "text/plain",
+        category: "document",
+        blob_hash:
+          "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        size_bytes: 5,
+      },
+    })
+  })
+
+  await page.goto("/files")
+  await page.setInputFiles("input[type='file']", {
+    name: "hello.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("hello"),
+  })
+
+  await expect(page.getByText("File uploaded successfully")).toBeVisible()
+  await expect.poll(() => completeUploadCalled).toBe(true)
+  expect(putCount).toBe(0)
+})
+
+test("Upload performs direct object upload when presign requires it", async ({
+  page,
+}) => {
+  let putCount = 0
+  let completeUploadCalled = false
+
+  await page.route("**/api/v1/files/presign-upload", async (route) => {
+    await route.fulfill({
+      json: {
+        upload_required: true,
+        upload_url: "http://localhost:5173/object-upload-target",
+        method: "PUT",
+        headers: { "Content-Type": "text/plain" },
+        object_key:
+          "uploads/00000000-0000-0000-0000-000000000010/00000000-0000-0000-0000-000000000041",
+        expires_in: 900,
+      },
+    })
+  })
+  await page.route("**/object-upload-target", async (route) => {
+    putCount += 1
+    expect(route.request().method()).toBe("PUT")
+    await route.fulfill({ status: 200 })
+  })
+  await page.route("**/api/v1/files/complete-upload", async (route) => {
+    completeUploadCalled = true
+    await route.fulfill({
+      json: {
+        id: "00000000-0000-0000-0000-000000000041",
+        owner_id: rootFolder.owner_id,
+        folder_id: rootFolder.id,
+        name: "hello.txt",
+        mime_type: "text/plain",
+        category: "document",
+        blob_hash:
+          "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        size_bytes: 5,
+      },
+    })
+  })
+
+  await page.goto("/files")
+  await page.setInputFiles("input[type='file']", {
+    name: "hello.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("hello"),
+  })
+
+  await expect(page.getByText("File uploaded successfully")).toBeVisible()
+  await expect.poll(() => completeUploadCalled).toBe(true)
+  expect(putCount).toBe(1)
+})
+
+test("Canceling file delete does not call the delete endpoint", async ({
+  page,
+}) => {
+  let deleteCount = 0
+  await page.route("**/api/v1/files/*", async (route) => {
+    if (route.request().method() === "DELETE") {
+      deleteCount += 1
+      await route.fulfill({ status: 204 })
+      return
+    }
+    await route.fallback()
+  })
+
+  await page.goto("/files")
+  const fileRow = page.getByRole("row").filter({ hasText: "welcome.txt" })
+  await fileRow.getByRole("button", { name: "Open file actions" }).click()
+  await page.getByRole("menuitem", { name: "Delete" }).click()
+  await expect(page.getByRole("dialog")).toBeVisible()
+  await page.getByRole("button", { name: "Cancel" }).click()
+
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.locator("table").getByText("welcome.txt")).toBeVisible()
+  expect(deleteCount).toBe(0)
+})
+
+test("Confirming file delete calls the endpoint and refreshes the listing", async ({
+  page,
+}) => {
+  let deleted = false
+  let deleteRequestUrl: string | undefined
+
+  await page.route("**/api/v1/files?**", async (route) => {
+    await route.fulfill({
+      json: deleted
+        ? {
+            ...rootFolder,
+            contents: rootFolder.contents.filter(
+              (item) => item.id !== "00000000-0000-0000-0000-000000000003",
+            ),
+          }
+        : rootFolder,
+    })
+  })
+  await page.route("**/api/v1/files/*", async (route) => {
+    if (route.request().method() === "DELETE") {
+      deleteRequestUrl = route.request().url()
+      deleted = true
+      await route.fulfill({ status: 204 })
+      return
+    }
+    await route.fallback()
+  })
+
+  await page.goto("/files")
+  const fileRow = page.getByRole("row").filter({ hasText: "welcome.txt" })
+  await fileRow.getByRole("button", { name: "Open file actions" }).click()
+  await page.getByRole("menuitem", { name: "Delete" }).click()
+  await page.getByRole("button", { name: "Delete", exact: true }).click()
+
+  await expect(page.getByText("File deleted successfully")).toBeVisible()
+  await expect(page.getByText("welcome.txt")).toHaveCount(0)
+  expect(deleteRequestUrl).toContain(
+    "/api/v1/files/00000000-0000-0000-0000-000000000003",
+  )
+})
+
+test("Failed file delete keeps the file visible", async ({ page }) => {
+  await page.route("**/api/v1/files/*", async (route) => {
+    if (route.request().method() === "DELETE") {
+      await route.fulfill({ status: 500, json: { detail: "Delete failed" } })
+      return
+    }
+    await route.fallback()
+  })
+
+  await page.goto("/files")
+  const fileRow = page.getByRole("row").filter({ hasText: "welcome.txt" })
+  await fileRow.getByRole("button", { name: "Open file actions" }).click()
+  await page.getByRole("menuitem", { name: "Delete" }).click()
+  await page.getByRole("button", { name: "Delete", exact: true }).click()
+
+  await expect(page.getByText("Delete failed")).toBeVisible()
+  await expect(page.getByRole("dialog")).toBeVisible()
+  await page.getByRole("button", { name: "Cancel" }).click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.locator("table").getByText("welcome.txt")).toBeVisible()
 })
 
 test("Share action submits recipient email and closes the dialog", async ({

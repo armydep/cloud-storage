@@ -605,12 +605,31 @@ export const PresignUploadRequestSchema = {
 
 export const PresignUploadResponseSchema = {
     properties: {
+        upload_required: {
+            type: 'boolean',
+            title: 'Upload Required',
+            default: true
+        },
         upload_url: {
-            type: 'string',
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
             title: 'Upload Url'
         },
         method: {
-            type: 'string',
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
             title: 'Method',
             default: 'PUT'
         },
@@ -631,7 +650,7 @@ export const PresignUploadResponseSchema = {
         }
     },
     type: 'object',
-    required: ['upload_url', 'headers', 'object_key', 'expires_in'],
+    required: ['headers', 'object_key', 'expires_in'],
     title: 'PresignUploadResponse'
 } as const;
 

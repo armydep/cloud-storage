@@ -3,6 +3,7 @@ import { Download, EllipsisVertical, Loader2, Share2 } from "lucide-react"
 import { useState } from "react"
 
 import type { FolderContentPublic } from "@/client"
+import DeleteFileDialog from "@/components/Files/DeleteFileDialog"
 import ShareFileDialog from "@/components/Files/ShareFileDialog"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,12 +16,17 @@ import { downloadFile } from "@/features/files"
 import useCustomToast from "@/hooks/useCustomToast"
 
 type FileActionsMenuProps = {
+  currentPath: string
   file: FolderContentPublic
 }
 
-export default function FileActionsMenu({ file }: FileActionsMenuProps) {
+export default function FileActionsMenu({
+  currentPath,
+  file,
+}: FileActionsMenuProps) {
   const [open, setOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const { showErrorToast } = useCustomToast()
 
   const downloadMutation = useMutation({
@@ -68,6 +74,14 @@ export default function FileActionsMenu({ file }: FileActionsMenuProps) {
             <Download />
             Download
           </DropdownMenuItem>
+          <DeleteFileDialog
+            currentPath={currentPath}
+            fileId={file.id}
+            fileName={file.name}
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            onMenuClose={() => setOpen(false)}
+          />
         </DropdownMenuContent>
       </DropdownMenu>
       <ShareFileDialog

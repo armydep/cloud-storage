@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 
 type FilesColumnsOptions = {
+  currentPath: string
   onOpenFolder: (path: string) => void
 }
 
@@ -45,6 +46,7 @@ function formatSize(value?: number | null) {
 }
 
 export function getColumns({
+  currentPath,
   onOpenFolder,
 }: FilesColumnsOptions): ColumnDef<FolderContentPublic>[] {
   return [
@@ -126,7 +128,7 @@ export function getColumns({
 
         return (
           <div className="flex justify-end">
-            <FileActionsMenu file={row.original} />
+            <FileActionsMenu currentPath={currentPath} file={row.original} />
           </div>
         )
       },
