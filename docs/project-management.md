@@ -242,11 +242,11 @@ or move the item back to Backlog with a comment naming what it is waiting on.
 
 Dependencies held only in your head are the ones that cause damage.
 
-There is a live example. `ROADMAP 1.4` (Delete files) and `ROADMAP 1.5`
-(Delete folders) are both in Current focus. Neither can safely ship until blob
-reference counting exists (`SCALE 8.2`, `SCALE 8.3`) — object keys are derived
-purely from content hash with no reference count, so deleting one user's file
-removes bytes that another user's metadata still points to.
+Historical example: `ROADMAP 1.4` (Delete files) and `ROADMAP 1.5` (Delete
+folders) were both blocked until blob reference counting and blob ownership
+claims existed (`SCALE 8.2`, `SCALE 8.3`). Without those prerequisites, deleting
+one user's file could remove bytes that another user's metadata still pointed
+to.
 
 Make that visible:
 
@@ -263,7 +263,6 @@ Currently blocked, per the scalability review:
 
 | Roadmap item | Blocked by | Reason |
 | --- | --- | --- |
-| ROADMAP 1.4, 1.5 — Delete files and folders | SCALE 8.2, 8.3 | Shared blobs have no reference count |
 | ROADMAP 1.2 — Rename folders | SCALE 6.1 | Subtree path rewrite is unbounded |
 
 ---

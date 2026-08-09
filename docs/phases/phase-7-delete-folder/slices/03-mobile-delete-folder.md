@@ -12,7 +12,7 @@ an explicit confirmation step.
 ## Tracking
 
 - GitHub issue: [#72](https://github.com/armydep/cloude-file-storage/issues/72)
-- Status: In progress on branch `feature/phase-7-mobile-delete-folder`.
+- Status: Completed in PR [#75](https://github.com/armydep/cloude-file-storage/pull/75).
 
 ## Implementation notes
 

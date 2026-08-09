@@ -15,7 +15,7 @@ by any remaining logical file.
 ## Tracking
 
 - GitHub issue: [#70](https://github.com/armydep/cloude-file-storage/issues/70)
-- Status: In progress on branch `feature/phase-7-backend-delete-folder`.
+- Status: Completed in PR [#73](https://github.com/armydep/cloude-file-storage/pull/73).
 
 ## API contract
 

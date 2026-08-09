@@ -12,7 +12,7 @@ explicit confirmation step.
 ## Tracking
 
 - GitHub issue: [#71](https://github.com/armydep/cloude-file-storage/issues/71)
-- Status: In progress on branch `feature/phase-7-frontend-delete-folder`.
+- Status: Completed in PR [#74](https://github.com/armydep/cloude-file-storage/pull/74).
 
 ## Implementation notes
 

@@ -55,7 +55,7 @@ Detailed spec:
 
 GitHub issue: [#70](https://github.com/armydep/cloude-file-storage/issues/70)
 
-Status: In progress on branch `feature/phase-7-backend-delete-folder`.
+Status: Completed in PR [#73](https://github.com/armydep/cloude-file-storage/pull/73).
 
 - Add `DELETE /api/v1/files/folders/{folder_id}`.
 - Reject root folder deletion.
@@ -77,7 +77,7 @@ GitHub issue: [#71](https://github.com/armydep/cloude-file-storage/issues/71)
 
 Depends on Slice 1.
 
-Status: In progress on branch `feature/phase-7-frontend-delete-folder`.
+Status: Completed in PR [#74](https://github.com/armydep/cloude-file-storage/pull/74).
 
 - Regenerate the generated OpenAPI frontend client.
 - Add a Delete action for folder rows.
@@ -96,7 +96,7 @@ GitHub issue: [#72](https://github.com/armydep/cloude-file-storage/issues/72)
 
 Depends on Slice 1.
 
-Status: In progress on branch `feature/phase-7-mobile-delete-folder`.
+Status: Completed in PR [#75](https://github.com/armydep/cloude-file-storage/pull/75).
 
 - Add repository/controller delete support.
 - Expose Delete for folder rows.

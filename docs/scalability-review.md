@@ -57,8 +57,13 @@ The findings below concern the layers built on top of that foundation.
 
 ## Sequencing conflicts with current focus
 
-Two roadmap items in **Current focus** depend on groundwork that does not exist
-yet:
+Update 2026-08-09: the delete-file and delete-folder blockers identified here
+were resolved by Phase 6 and Phase 7 through blob ref counts, per-user blob
+claims, and safe recursive folder deletion. The rename-folder warning remains
+open.
+
+At the time of this review, two roadmap items in **Current focus** depended on
+groundwork that did not exist yet:
 
 | Roadmap item | Depends on | Consequence if shipped first |
 | --- | --- | --- |
@@ -194,10 +199,15 @@ user's file hash can skip the `PUT` entirely, submit a matching hash, size and
 MIME type, receive a metadata row, and then request a presigned download of
 content they never possessed.
 
-On 8.2: nothing breaks today because no delete endpoint exists. Once
-[#40](https://github.com/armydep/cloude-file-storage/issues/40) and
-[#41](https://github.com/armydep/cloude-file-storage/issues/41) ship, deleting
-one user's file removes bytes that other users' metadata still points to.
+Update 2026-08-09: Phase 6 and Phase 7 added `file_blobs.ref_count` and
+per-user blob claims before file and folder delete shipped. The historical risk
+described below is retained as context for why those pieces exist.
+
+On 8.2 at the time of this review: nothing broke because no delete endpoint
+existed. Once [#40](https://github.com/armydep/cloude-file-storage/issues/40)
+and [#41](https://github.com/armydep/cloude-file-storage/issues/41) shipped,
+deleting one user's file would have removed bytes that other users' metadata
+still pointed to.
 
 All three share one remedy: a `blobs` table keyed by hash, holding size and a
 reference count or explicit per-user claims, with `complete_upload` linking a
@@ -247,9 +257,14 @@ these limits is diagnosed only after it has already caused an outage.
 
 | ROADMAP.md item | Blocked by | Reason |
 | --- | --- | --- |
-| [#40 Delete files](https://github.com/armydep/cloude-file-storage/issues/40) | 8.2, 8.3 | Shared blobs have no reference count |
-| [#41 Delete folders](https://github.com/armydep/cloude-file-storage/issues/41) | 8.2, 8.3 | Same, amplified across a subtree |
 | [#38 Rename folders](https://github.com/armydep/cloude-file-storage/issues/38) | 6.1 | Subtree path rewrite is unbounded |
+
+Resolved 2026-08-09:
+
+- [#40 Delete files](https://github.com/armydep/cloude-file-storage/issues/40)
+  was unblocked by Phase 6.
+- [#41 Delete folders](https://github.com/armydep/cloude-file-storage/issues/41)
+  was unblocked by Phase 7.
 
 ## Findings with no roadmap representation
 
@@ -265,10 +280,9 @@ one group that should be scheduled ahead of work already in Current focus.
 
 # Suggested sequencing
 
-1. **Section 8** (8.1, 8.2, 8.3) — before `#40` and `#41` ship, or delete becomes data loss.
-2. **Section 1 plus 4.1** — pagination and timestamps belong in the same change.
-3. **Section 2 and item 3.1** — small, high leverage, removes the horizontal scaling cap.
-4. **Item 6.1** — before `#38 Rename folders`.
-5. **Item 5.1** — cheap, and reduces the orphan volume 5.2 must handle.
-6. **Item 9.4** — early enough that the remaining items can be measured rather than guessed at.
-7. Everything else as the existing roadmap phases reach it.
+1. **Section 1 plus 4.1** — pagination and timestamps belong in the same change.
+2. **Section 2 and item 3.1** — small, high leverage, removes the horizontal scaling cap.
+3. **Item 6.1** — before `#38 Rename folders`.
+4. **Item 5.1** — cheap, and reduces the orphan volume 5.2 must handle.
+5. **Item 9.4** — early enough that the remaining items can be measured rather than guessed at.
+6. Everything else as the existing roadmap phases reach it.

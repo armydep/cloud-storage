@@ -136,7 +136,7 @@ GitHub issue: [#64](https://github.com/armydep/cloude-file-storage/issues/64)
 
 Depends on Slice 2.
 
-Status: In progress on branch `feature/phase-6-mobile-delete-file`.
+Status: Completed in PR [#69](https://github.com/armydep/cloude-file-storage/pull/69).
 
 - Add repository/controller delete support.
 - Update upload handling so it skips direct S3 upload when the backend says the

@@ -6,6 +6,8 @@ and folders in a private cloud-style workspace.
 Feature designs:
 
 - [File sharing with specific users](docs/phases/phase-4-file-sharing.md)
+- [Delete files with deduplicated blob storage](docs/phases/phase-6-delete-file.md)
+- [Delete folders recursively](docs/phases/phase-7-delete-folder.md)
 
 ## Phase 1 scope
 
@@ -88,9 +90,8 @@ MinIO console:  http://localhost:9001
 ### Android application
 
 The Android-only Flutter client lives in `mobile/`, independently from the
-React application in `frontend/`. Its current scope is application
-infrastructure; mobile authentication, file management, and synchronization are
-not implemented yet.
+React application in `frontend/`. It supports the core authenticated file
+management workflow. Full device synchronization is not implemented yet.
 
 See [`mobile/README.md`](mobile/README.md) for Flutter prerequisites, API URL
 configuration, and run, build, analysis, and test commands.

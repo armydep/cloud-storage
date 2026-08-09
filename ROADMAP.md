@@ -14,8 +14,10 @@ Complete the core operations needed to manage a cloud-style file hierarchy.
 - [ ] **1.1** Create folders ([#37](https://github.com/armydep/cloude-file-storage/issues/37))
 - [ ] **1.2** Rename folders ([#38](https://github.com/armydep/cloude-file-storage/issues/38))
 - [ ] **1.3** Rename files ([#39](https://github.com/armydep/cloude-file-storage/issues/39))
-- [ ] **1.4** Delete files ([#40](https://github.com/armydep/cloude-file-storage/issues/40))
-- [ ] **1.5** Delete folders ([#41](https://github.com/armydep/cloude-file-storage/issues/41))
+- [x] **1.4** Delete files ([#40](https://github.com/armydep/cloude-file-storage/issues/40),
+      [design](docs/phases/phase-6-delete-file.md))
+- [x] **1.5** Delete folders ([#41](https://github.com/armydep/cloude-file-storage/issues/41),
+      [design](docs/phases/phase-7-delete-folder.md))
 - [ ] **1.6** Define and enforce file and folder name validation, including
       allowed characters and maximum name length
 
