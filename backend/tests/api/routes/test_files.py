@@ -9,7 +9,14 @@ from app import crud
 from app.core.config import settings
 from app.core.db import engine
 from app.core.storage import ObjectNotFoundError, ObjectStat
-from app.files.models import FileBlob, FileBlobClaim, Folder, PendingUpload, StoredFile
+from app.files.models import (
+    FileBlob,
+    FileBlobClaim,
+    FileShare,
+    Folder,
+    PendingUpload,
+    StoredFile,
+)
 from app.models import UserCreate
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import random_email
@@ -926,7 +933,9 @@ def test_complete_upload_existing_blob_without_claim_accepts_verified_pending_up
     pending_upload_id = pending_upload.id
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(size_bytes=123, content_type="application/pdf"),
+        lambda *, object_key: ObjectStat(
+            size_bytes=123, content_type="application/pdf"
+        ),
     )
     monkeypatch.setattr(
         "app.files.service.storage.calculate_object_sha256",
@@ -1032,7 +1041,9 @@ def test_complete_upload_recovers_when_concurrent_request_creates_blob(
 
         raise DuplicateFileBlobRepositoryError
 
-    monkeypatch.setattr("app.files.service.repository.create_blob", concurrent_create_blob)
+    monkeypatch.setattr(
+        "app.files.service.repository.create_blob", concurrent_create_blob
+    )
 
     response = client.post(
         f"{settings.API_V1_STR}/files/complete-upload",
@@ -1317,7 +1328,9 @@ def test_complete_upload_hash_mismatch_returns_400(
     )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(size_bytes=123, content_type="application/pdf"),
+        lambda *, object_key: ObjectStat(
+            size_bytes=123, content_type="application/pdf"
+        ),
     )
     monkeypatch.setattr(
         "app.files.service.storage.calculate_object_sha256",
@@ -1613,6 +1626,379 @@ def _create_unique_file(
     return file
 
 
+def _create_child_folder(
+    *,
+    db: Session,
+    owner_id: uuid.UUID,
+    parent_id: uuid.UUID,
+    parent_path: str,
+    name_prefix: str,
+) -> Folder:
+    suffix = uuid.uuid4().hex
+    folder = Folder(
+        name=f"{name_prefix} {suffix}",
+        path=f"{parent_path}.{name_prefix.lower()}_{suffix}",
+        owner_id=owner_id,
+        parent_id=parent_id,
+    )
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return folder
+
+
+def _create_file_in_folder(
+    *,
+    db: Session,
+    owner_id: uuid.UUID,
+    folder_id: uuid.UUID,
+    name_prefix: str,
+    blob_hash: str | None = None,
+    ref_count: int = 1,
+) -> StoredFile:
+    if blob_hash is None:
+        blob_hash = uuid.uuid4().hex * 2
+    if db.get(FileBlob, blob_hash) is None:
+        db.add(
+            FileBlob(
+                blob_hash=blob_hash,
+                object_key=f"sha256/{blob_hash}",
+                size_bytes=123,
+                ref_count=ref_count,
+            )
+        )
+        db.commit()
+    file = StoredFile(
+        owner_id=owner_id,
+        folder_id=folder_id,
+        name=f"{name_prefix.lower()}-{uuid.uuid4().hex}.pdf",
+        mime_type="application/pdf",
+        category="document",
+        blob_hash=blob_hash,
+        size_bytes=123,
+    )
+    db.add(file)
+    db.commit()
+    db.refresh(file)
+    return file
+
+
+def test_delete_folder_succeeds_for_owner(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteFolder",
+    )
+    folder_id = folder.id
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{folder_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    db.expire_all()
+    assert db.get(Folder, folder_id) is None
+    listing_response = client.get(
+        f"{settings.API_V1_STR}/files",
+        headers=normal_user_token_headers,
+    )
+    assert listing_response.status_code == 200
+    assert str(folder_id) not in {
+        item["id"] for item in listing_response.json()["contents"]
+    }
+
+
+def test_delete_folder_deletes_nested_subtree_files_and_shares(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteTree",
+    )
+    child_folder = _create_child_folder(
+        db=db,
+        owner_id=folder.owner_id,
+        parent_id=folder.id,
+        parent_path=folder.path,
+        name_prefix="Nested",
+    )
+    direct_file = _create_file_in_folder(
+        db=db,
+        owner_id=folder.owner_id,
+        folder_id=folder.id,
+        name_prefix="Direct",
+    )
+    nested_file = _create_file_in_folder(
+        db=db,
+        owner_id=folder.owner_id,
+        folder_id=child_folder.id,
+        name_prefix="Nested",
+    )
+    folder_id = folder.id
+    child_folder_id = child_folder.id
+    direct_file_id = direct_file.id
+    direct_file_blob_hash = direct_file.blob_hash
+    nested_file_id = nested_file.id
+    nested_file_blob_hash = nested_file.blob_hash
+    share_response = client.post(
+        f"{settings.API_V1_STR}/files/{nested_file.id}/shares",
+        headers=normal_user_token_headers,
+        json={"recipient_email": settings.FIRST_SUPERUSER},
+    )
+    assert share_response.status_code == 201
+    deleted_object_keys: list[str] = []
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: deleted_object_keys.append(object_key),
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{folder_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    db.expire_all()
+    assert db.get(Folder, folder_id) is None
+    assert db.get(Folder, child_folder_id) is None
+    assert db.get(StoredFile, direct_file_id) is None
+    assert db.get(StoredFile, nested_file_id) is None
+    assert (
+        db.exec(select(FileShare).where(FileShare.file_id == nested_file_id)).first()
+        is None
+    )
+    assert db.get(FileBlob, direct_file_blob_hash) is None
+    assert db.get(FileBlob, nested_file_blob_hash) is None
+    assert sorted(deleted_object_keys) == sorted(
+        [
+            f"sha256/{direct_file_blob_hash}",
+            f"sha256/{nested_file_blob_hash}",
+        ]
+    )
+
+    shared_response = client.get(
+        f"{settings.API_V1_STR}/files/shared-with-me",
+        headers=superuser_token_headers,
+    )
+    assert shared_response.status_code == 200
+    assert str(nested_file_id) not in {
+        item["id"] for item in shared_response.json()["data"]
+    }
+    download_response = client.post(
+        f"{settings.API_V1_STR}/files/{nested_file_id}/presign-download",
+        headers=normal_user_token_headers,
+    )
+    assert download_response.status_code == 404
+
+
+def test_delete_folder_rejects_another_users_folder(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="OtherDeleteFolder",
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{folder.id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Folder not found"
+    assert db.get(Folder, folder.id) is not None
+
+
+def test_delete_folder_rejects_root(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    root_response = client.get(
+        f"{settings.API_V1_STR}/files",
+        headers=normal_user_token_headers,
+    )
+    assert root_response.status_code == 200
+    root_id = root_response.json()["id"]
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{root_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Folder not found"
+    assert db.get(Folder, uuid.UUID(root_id)) is not None
+
+
+def test_delete_folder_repeated_delete_returns_404(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="RepeatedDeleteFolder",
+    )
+
+    first_response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{folder.id}",
+        headers=normal_user_token_headers,
+    )
+    second_response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{folder.id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert first_response.status_code == 204
+    assert second_response.status_code == 404
+    assert second_response.json()["detail"] == "Folder not found"
+
+
+def test_delete_folder_requires_authentication(client: TestClient) -> None:
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{uuid.uuid4()}",
+    )
+
+    assert response.status_code == 401
+
+
+def test_delete_folder_invalid_uuid_returns_422(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+) -> None:
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/not-a-uuid",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 422
+
+
+def test_delete_folder_shared_blob_decrements_ref_count_without_s3_delete(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="SharedBlobFolder",
+    )
+    outside_folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="OutsideSharedBlobFolder",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    inside_file = _create_file_in_folder(
+        db=db,
+        owner_id=folder.owner_id,
+        folder_id=folder.id,
+        name_prefix="InsideSharedBlob",
+        blob_hash=blob_hash,
+        ref_count=2,
+    )
+    outside_file = _create_file_in_folder(
+        db=db,
+        owner_id=folder.owner_id,
+        folder_id=outside_folder.id,
+        name_prefix="OutsideSharedBlob",
+        blob_hash=blob_hash,
+    )
+    folder_id = folder.id
+    inside_file_id = inside_file.id
+    outside_file_id = outside_file.id
+    blob = db.get(FileBlob, blob_hash)
+    assert blob is not None
+    blob.ref_count = 2
+    db.add(blob)
+    db.commit()
+
+    def fail_delete_object(*, object_key: str) -> None:
+        del object_key
+        raise AssertionError("shared blob object must not be deleted")
+
+    monkeypatch.setattr("app.files.service.storage.delete_object", fail_delete_object)
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{folder_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    db.expire_all()
+    assert db.get(StoredFile, inside_file_id) is None
+    assert db.get(StoredFile, outside_file_id) is not None
+    stored_blob = db.get(FileBlob, blob_hash)
+    assert stored_blob is not None
+    assert stored_blob.ref_count == 1
+
+
+def test_delete_folder_s3_delete_failure_does_not_restore_db_rows(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+    caplog,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteFolderS3Failure",
+    )
+    file = _create_file_in_folder(
+        db=db,
+        owner_id=folder.owner_id,
+        folder_id=folder.id,
+        name_prefix="DeleteFolderS3Failure",
+    )
+    folder_id = folder.id
+    file_id = file.id
+    blob_hash = file.blob_hash
+
+    def fail_delete_object(*, object_key: str) -> None:
+        del object_key
+        raise RuntimeError("storage unavailable")
+
+    monkeypatch.setattr("app.files.service.storage.delete_object", fail_delete_object)
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{folder_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    db.expire_all()
+    assert db.get(Folder, folder_id) is None
+    assert db.get(StoredFile, file_id) is None
+    assert db.get(FileBlob, blob_hash) is None
+    assert "Failed to delete unreferenced folder blob object" in caplog.text
+
+
 def test_presign_download_succeeds_for_owned_file(
     client: TestClient,
     normal_user_token_headers: dict[str, str],
@@ -1770,8 +2156,7 @@ def test_delete_file_removes_file_from_folder_listing(
     )
     assert listing_response.status_code == 200
     assert all(
-        item["id"] != str(file.id)
-        for item in listing_response.json()["contents"]
+        item["id"] != str(file.id) for item in listing_response.json()["contents"]
     )
 
 

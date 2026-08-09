@@ -54,6 +54,16 @@ def get_folder_by_path(
     return session.exec(statement).first()
 
 
+def get_folder_by_id(
+    *, session: Session, owner_id: uuid.UUID, folder_id: uuid.UUID
+) -> Folder | None:
+    statement = select(Folder).where(
+        Folder.owner_id == owner_id,
+        Folder.id == folder_id,
+    )
+    return session.exec(statement).first()
+
+
 def create_root_folder(*, session: Session, owner_id: uuid.UUID) -> Folder:
     """
     Create the owner's root folder, tolerating a lost creation race.
@@ -89,12 +99,43 @@ def list_child_folders(
     return list(session.exec(statement).all())
 
 
+def list_folder_subtree(
+    *, session: Session, owner_id: uuid.UUID, path: str
+) -> list[Folder]:
+    statement = select(Folder).where(
+        Folder.owner_id == owner_id,
+        Folder.path.op("<@")(path),
+    )
+    folders = list(session.exec(statement).all())
+    return sorted(
+        folders,
+        key=lambda folder: len(str(folder.path).split(".")),
+        reverse=True,
+    )
+
+
 def list_folder_files(
     *, session: Session, owner_id: uuid.UUID, folder_id: uuid.UUID
 ) -> list[StoredFile]:
     statement = (
         select(StoredFile)
         .where(StoredFile.owner_id == owner_id, StoredFile.folder_id == folder_id)
+        .order_by(StoredFile.name)
+    )
+    return list(session.exec(statement).all())
+
+
+def list_files_in_folders(
+    *, session: Session, owner_id: uuid.UUID, folder_ids: list[uuid.UUID]
+) -> list[StoredFile]:
+    if not folder_ids:
+        return []
+    statement = (
+        select(StoredFile)
+        .where(
+            StoredFile.owner_id == owner_id,
+            col(StoredFile.folder_id).in_(folder_ids),
+        )
         .order_by(StoredFile.name)
     )
     return list(session.exec(statement).all())
@@ -227,11 +268,22 @@ def get_blob_by_hash(*, session: Session, blob_hash: str) -> FileBlob | None:
 
 def get_blob_for_update(*, session: Session, blob_hash: str) -> FileBlob | None:
     statement = (
-        select(FileBlob)
-        .where(FileBlob.blob_hash == blob_hash)
-        .with_for_update()
+        select(FileBlob).where(FileBlob.blob_hash == blob_hash).with_for_update()
     )
     return session.exec(statement).first()
+
+
+def list_blobs_for_update(
+    *, session: Session, blob_hashes: list[str]
+) -> list[FileBlob]:
+    if not blob_hashes:
+        return []
+    statement = (
+        select(FileBlob)
+        .where(col(FileBlob.blob_hash).in_(blob_hashes))
+        .with_for_update()
+    )
+    return list(session.exec(statement).all())
 
 
 def get_blob_claim(
@@ -329,9 +381,7 @@ def get_latest_pending_upload(
     return session.exec(statement).first()
 
 
-def delete_pending_upload(
-    *, session: Session, pending_upload: PendingUpload
-) -> None:
+def delete_pending_upload(*, session: Session, pending_upload: PendingUpload) -> None:
     session.delete(pending_upload)
 
 
@@ -415,3 +465,17 @@ def delete_file(*, session: Session, file: StoredFile) -> None:
     session.execute(sql_delete(StoredFile).where(StoredFile.id == file.id))
     if file in session:
         session.expunge(file)
+
+
+def delete_files(*, session: Session, files: list[StoredFile]) -> None:
+    for file in files:
+        delete_file(session=session, file=file)
+
+
+def delete_folder(*, session: Session, folder: Folder) -> None:
+    session.delete(folder)
+
+
+def delete_folders(*, session: Session, folders: list[Folder]) -> None:
+    for folder in folders:
+        delete_folder(session=session, folder=folder)

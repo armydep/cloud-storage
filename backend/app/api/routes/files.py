@@ -40,6 +40,7 @@ from app.files.service import (
     create_presigned_download,
     create_presigned_upload,
     delete_file,
+    delete_folder,
     get_file_shares,
     get_files_shared_with_user,
     get_folder_contents,
@@ -79,6 +80,22 @@ def create_child_folder(
         raise HTTPException(status_code=409, detail="Folder name already exists")
     except InvalidFolderNameError:
         raise HTTPException(status_code=422, detail="Folder name is invalid")
+
+
+@router.delete("/folders/{folder_id}", status_code=204)
+def delete_owned_folder(
+    session: SessionDep,
+    current_user: CurrentUser,
+    folder_id: uuid.UUID,
+) -> None:
+    try:
+        delete_folder(
+            session=session,
+            owner_id=current_user.id,
+            folder_id=folder_id,
+        )
+    except FolderNotFoundError:
+        raise HTTPException(status_code=404, detail="Folder not found")
 
 
 @router.get("", response_model=FolderWithContentsPublic)
