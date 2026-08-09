@@ -77,7 +77,7 @@ GitHub issue: [#71](https://github.com/armydep/cloude-file-storage/issues/71)
 
 Depends on Slice 1.
 
-Status: Planned.
+Status: In progress on branch `feature/phase-7-frontend-delete-folder`.
 
 - Regenerate the generated OpenAPI frontend client.
 - Add a Delete action for folder rows.
