@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 
 from app import crud
 from app.core.config import settings
+from app.core.db import engine
 from app.core.storage import ObjectNotFoundError, ObjectStat
 from app.files.models import FileBlob, Folder, StoredFile
 from app.models import UserCreate
@@ -701,6 +702,74 @@ def test_complete_upload_existing_blob_increments_ref_count(
     stored_blob = db.get(FileBlob, blob_hash)
     assert stored_blob is not None
     assert stored_blob.ref_count == 2
+
+
+def test_complete_upload_recovers_when_concurrent_request_creates_blob(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteConcurrentBlob",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key: ObjectStat(size_bytes=123),
+    )
+
+    def concurrent_create_blob(
+        *,
+        session: Session,
+        blob_hash: str,
+        object_key: str,
+        size_bytes: int,
+        ref_count: int = 0,
+    ) -> FileBlob:
+        del session, ref_count
+        with Session(engine) as concurrent_session:
+            concurrent_session.add(
+                FileBlob(
+                    blob_hash=blob_hash,
+                    object_key=object_key,
+                    size_bytes=size_bytes,
+                    ref_count=1,
+                )
+            )
+            concurrent_session.commit()
+
+        from app.files.repository import DuplicateFileBlobRepositoryError
+
+        raise DuplicateFileBlobRepositoryError
+
+    monkeypatch.setattr("app.files.service.repository.create_blob", concurrent_create_blob)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "concurrent-blob.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    db.expire_all()
+    stored_blob = db.get(FileBlob, blob_hash)
+    assert stored_blob is not None
+    assert stored_blob.ref_count == 2
+    stored_file = db.exec(
+        select(StoredFile).where(StoredFile.id == uuid.UUID(response.json()["id"]))
+    ).first()
+    assert stored_file is not None
 
 
 def test_complete_upload_existing_blob_size_mismatch_returns_400(

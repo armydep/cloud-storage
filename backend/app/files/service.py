@@ -247,12 +247,22 @@ def complete_upload(
         if object_stat.content_type and object_stat.content_type != request.mime_type:
             raise ObjectContentTypeMismatchError
 
-        blob = repository.create_blob(
-            session=session,
-            blob_hash=request.blob_hash,
-            object_key=object_key,
-            size_bytes=request.size_bytes,
-        )
+        try:
+            blob = repository.create_blob(
+                session=session,
+                blob_hash=request.blob_hash,
+                object_key=object_key,
+                size_bytes=request.size_bytes,
+            )
+        except repository.DuplicateFileBlobRepositoryError:
+            blob = repository.get_blob_for_update(
+                session=session,
+                blob_hash=request.blob_hash,
+            )
+            if blob is None:
+                raise
+            if blob.size_bytes != request.size_bytes:
+                raise ObjectSizeMismatchError
 
     try:
         repository.increment_blob_ref_count(blob=blob)
