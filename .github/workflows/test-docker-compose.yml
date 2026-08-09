@@ -8,6 +8,10 @@ on:
     types:
       - opened
       - synchronize
+      - reopened
+
+permissions:
+  contents: read
 
 jobs:
 
@@ -22,7 +26,9 @@ jobs:
       - run: docker compose down -v --remove-orphans
       - run: docker compose up -d --wait backend frontend adminer
       - name: Test backend is up
-        run: curl http://localhost:8000/api/v1/utils/health-check
+        run: curl -fsS http://localhost:8000/api/v1/utils/health-check
       - name: Test frontend is up
-        run: curl http://localhost:5173
-      - run: docker compose down -v --remove-orphans
+        run: curl -fsS http://localhost:5173
+      - name: Stop Docker Compose services
+        if: always()
+        run: docker compose down -v --remove-orphans

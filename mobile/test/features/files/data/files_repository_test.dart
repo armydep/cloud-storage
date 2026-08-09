@@ -40,10 +40,42 @@ void main() {
       });
 
       test('formats bytes correctly', () {
-        expect(FileContent(id: '1', name: 'a', type: 'file', sizeBytes: 512).displaySize, '512 B');
-        expect(FileContent(id: '2', name: 'b', type: 'file', sizeBytes: 1024).displaySize, '1.0 KB');
-        expect(FileContent(id: '3', name: 'c', type: 'file', sizeBytes: 1024 * 1024).displaySize, '1.0 MB');
-        expect(FileContent(id: '4', name: 'd', type: 'file', sizeBytes: 1024 * 1024 * 1024).displaySize, '1.0 GB');
+        expect(
+          FileContent(
+            id: '1',
+            name: 'a',
+            type: 'file',
+            sizeBytes: 512,
+          ).displaySize,
+          '512 B',
+        );
+        expect(
+          FileContent(
+            id: '2',
+            name: 'b',
+            type: 'file',
+            sizeBytes: 1024,
+          ).displaySize,
+          '1.0 KB',
+        );
+        expect(
+          FileContent(
+            id: '3',
+            name: 'c',
+            type: 'file',
+            sizeBytes: 1024 * 1024,
+          ).displaySize,
+          '1.0 MB',
+        );
+        expect(
+          FileContent(
+            id: '4',
+            name: 'd',
+            type: 'file',
+            sizeBytes: 1024 * 1024 * 1024,
+          ).displaySize,
+          '1.0 GB',
+        );
       });
 
       test('equality compares id, name, and type', () {
@@ -122,24 +154,14 @@ void main() {
               'type': 'folder',
               'path': 'root.Folder1',
             },
-            {
-              'id': '2',
-              'name': 'file1.txt',
-              'type': 'file',
-              'size_bytes': 100,
-            },
+            {'id': '2', 'name': 'file1.txt', 'type': 'file', 'size_bytes': 100},
             {
               'id': '3',
               'name': 'Folder2',
               'type': 'folder',
               'path': 'root.Folder2',
             },
-            {
-              'id': '4',
-              'name': 'file2.txt',
-              'type': 'file',
-              'size_bytes': 200,
-            },
+            {'id': '4', 'name': 'file2.txt', 'type': 'file', 'size_bytes': 200},
           ],
         };
 

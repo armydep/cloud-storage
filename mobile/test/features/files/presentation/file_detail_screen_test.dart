@@ -23,9 +23,7 @@ void main() {
 
     testWidgets('displays file name as title', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: testFile),
-        ),
+        MaterialApp(home: FileDetailScreen(file: testFile)),
       );
 
       expect(find.text('File Details'), findsOneWidget);
@@ -34,9 +32,7 @@ void main() {
 
     testWidgets('displays file size in human-readable format', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: testFile),
-        ),
+        MaterialApp(home: FileDetailScreen(file: testFile)),
       );
 
       expect(find.text('Size'), findsOneWidget);
@@ -45,9 +41,7 @@ void main() {
 
     testWidgets('displays creation date with time', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: testFile),
-        ),
+        MaterialApp(home: FileDetailScreen(file: testFile)),
       );
 
       expect(find.text('Aug 8, 2026 at 2:30 PM'), findsOneWidget);
@@ -55,9 +49,7 @@ void main() {
 
     testWidgets('displays MIME type', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: testFile),
-        ),
+        MaterialApp(home: FileDetailScreen(file: testFile)),
       );
 
       expect(find.text('application/pdf'), findsOneWidget);
@@ -65,9 +57,7 @@ void main() {
 
     testWidgets('displays owner email', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: testFile),
-        ),
+        MaterialApp(home: FileDetailScreen(file: testFile)),
       );
 
       expect(find.text('user@example.com'), findsOneWidget);
@@ -86,9 +76,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: fileWithoutCreatedAt),
-        ),
+        MaterialApp(home: FileDetailScreen(file: fileWithoutCreatedAt)),
       );
 
       expect(find.text('Created'), findsOneWidget);
@@ -108,9 +96,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: fileWithoutOwner),
-        ),
+        MaterialApp(home: FileDetailScreen(file: fileWithoutOwner)),
       );
 
       final unknownTexts = find.text('Unknown');
@@ -129,16 +115,16 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: fileWithoutMimeType),
-        ),
+        MaterialApp(home: FileDetailScreen(file: fileWithoutMimeType)),
       );
 
       final unknownTexts = find.text('Unknown');
       expect(unknownTexts, findsWidgets);
     });
 
-    testWidgets('shows Unknown for size when size_bytes is null', (tester) async {
+    testWidgets('shows Unknown for size when size_bytes is null', (
+      tester,
+    ) async {
       final fileWithoutSize = FileContent(
         id: 'file-000',
         name: 'empty.txt',
@@ -150,9 +136,7 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: fileWithoutSize),
-        ),
+        MaterialApp(home: FileDetailScreen(file: fileWithoutSize)),
       );
 
       final unknownTexts = find.text('Unknown');
@@ -161,9 +145,7 @@ void main() {
 
     testWidgets('close button dismisses screen', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: testFile),
-        ),
+        MaterialApp(home: FileDetailScreen(file: testFile)),
       );
 
       expect(find.byIcon(Icons.close), findsOneWidget);
@@ -174,14 +156,11 @@ void main() {
     });
 
     testWidgets('scrolls when content exceeds screen', (tester) async {
-      tester.binding.window.physicalSizeTestValue =
-          const Size(800, 400);
-      addTearDown(tester.binding.window.clearPhysicalSizeTestValue);
+      tester.view.physicalSize = const Size(800, 400);
+      addTearDown(tester.view.resetPhysicalSize);
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: testFile),
-        ),
+        MaterialApp(home: FileDetailScreen(file: testFile)),
       );
 
       expect(find.byType(SingleChildScrollView), findsOneWidget);
@@ -189,9 +168,7 @@ void main() {
 
     testWidgets('detail sections are selectable', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: FileDetailScreen(file: testFile),
-        ),
+        MaterialApp(home: FileDetailScreen(file: testFile)),
       );
 
       expect(find.byType(SelectableText), findsWidgets);

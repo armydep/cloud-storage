@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 class FileContent {
   final String id;
   final String name;
@@ -86,16 +84,15 @@ class FolderWithContents {
     required this.contents,
   });
 
-  List<FileContent> get folders =>
-      contents.where((c) => c.isFolder).toList();
+  List<FileContent> get folders => contents.where((c) => c.isFolder).toList();
 
-  List<FileContent> get files =>
-      contents.where((c) => c.isFile).toList();
+  List<FileContent> get files => contents.where((c) => c.isFile).toList();
 
   bool get isEmpty => contents.isEmpty;
 
   factory FolderWithContents.fromJson(Map<String, dynamic> json) {
-    final contents = (json['contents'] as List<dynamic>?)
+    final contents =
+        (json['contents'] as List<dynamic>?)
             ?.map((item) => FileContent.fromJson(item as Map<String, dynamic>))
             .toList() ??
         [];

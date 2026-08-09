@@ -8,6 +8,10 @@ on:
     types:
       - opened
       - synchronize
+      - reopened
+
+permissions:
+  contents: read
 
 jobs:
   changes:

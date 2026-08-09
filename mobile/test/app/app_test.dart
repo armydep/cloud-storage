@@ -51,13 +51,16 @@ void main() {
         return http.Response(jsonEncode(userJson), 200);
       } else {
         // File browser - load root folder
-        return http.Response(jsonEncode({
-          'id': '123',
-          'name': 'root',
-          'path': 'root',
-          'created_at': '2026-08-07T00:00:00Z',
-          'contents': [],
-        }), 200);
+        return http.Response(
+          jsonEncode({
+            'id': '123',
+            'name': 'root',
+            'path': 'root',
+            'created_at': '2026-08-07T00:00:00Z',
+            'contents': [],
+          }),
+          200,
+        );
       }
     });
     await tester.pumpWidget(

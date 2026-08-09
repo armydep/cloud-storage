@@ -52,13 +52,12 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
       }
     });
 
-    return WillPopScope(
-      onWillPop: () async {
-        if (controller.canNavigateBack()) {
+    return PopScope(
+      canPop: !controller.canNavigateBack(),
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop && controller.canNavigateBack()) {
           await controller.navigateBack();
-          return false;
         }
-        return true;
       },
       child: Scaffold(
         appBar: AppBar(
@@ -378,8 +377,7 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
 class _CreateFolderDialogWidget extends StatefulWidget {
   final void Function(String name) onCreateFolder;
 
-  const _CreateFolderDialogWidget({Key? key, required this.onCreateFolder})
-    : super(key: key);
+  const _CreateFolderDialogWidget({super.key, required this.onCreateFolder});
 
   @override
   State<_CreateFolderDialogWidget> createState() => _CreateFolderDialogState();

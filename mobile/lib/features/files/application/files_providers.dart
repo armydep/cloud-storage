@@ -7,6 +7,7 @@ import 'package:cloudestorage/features/files/domain/file_models.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
@@ -61,14 +62,14 @@ class FilesController extends StateNotifier<FilesState> {
         folder: folder,
         clearError: true,
       );
-    } on FolderNotFoundError catch (e) {
+    } on FolderNotFoundError {
       state = state.copyWith(isLoading: false, error: 'Folder not found');
-    } on ServerError catch (e) {
+    } on ServerError {
       state = state.copyWith(
         isLoading: false,
         error: 'Server error. Please try again.',
       );
-    } on NetworkError catch (e) {
+    } on NetworkError {
       state = state.copyWith(
         isLoading: false,
         error: 'Network error. Please check your connection.',
@@ -113,24 +114,24 @@ class FilesController extends StateNotifier<FilesState> {
       );
       state = state.setDownloadedFilePath(fileId, filePath);
       state = state.updateDownloadProgress(fileId, 1.0);
-    } on FileNotFoundError catch (e) {
+    } on FileNotFoundError {
       state = state.setDownloadError(
         fileId,
         'File not found or you do not have permission',
       );
-    } on ServerError catch (e) {
+    } on ServerError {
       state = state.setDownloadError(
         fileId,
         'File download failed. Please try again later.',
       );
-    } on NetworkError catch (e) {
+    } on NetworkError {
       state = state.setDownloadError(
         fileId,
         'Connection lost. Please check your network and try again.',
       );
     } catch (e) {
       // Log the actual error for debugging
-      print('Download error for $fileId: $e');
+      debugPrint('Download error for $fileId: $e');
       state = state.setDownloadError(
         fileId,
         'Download failed. Please try again.',
@@ -150,7 +151,7 @@ class FilesController extends StateNotifier<FilesState> {
         throw Exception('Downloads directory not available');
       }
 
-      print('Downloading $fileName to ${downloadsDir.path}');
+      debugPrint('Downloading $fileName to ${downloadsDir.path}');
       final filePath = '${downloadsDir.path}/$fileName';
       await dio.download(
         url,
@@ -161,10 +162,10 @@ class FilesController extends StateNotifier<FilesState> {
           }
         },
       );
-      print('Download completed: $filePath');
+      debugPrint('Download completed: $filePath');
       return filePath;
     } catch (e) {
-      print('_downloadAndSaveFile error: $e');
+      debugPrint('_downloadAndSaveFile error: $e');
       rethrow;
     }
   }
@@ -181,43 +182,43 @@ class FilesController extends StateNotifier<FilesState> {
   }
 
   Future<void> selectAndUploadFile() async {
-    print('selectAndUploadFile: Starting file selection');
+    debugPrint('selectAndUploadFile: Starting file selection');
 
     final status = await Permission.storage.request();
-    print('selectAndUploadFile: Storage permission status = $status');
+    debugPrint('selectAndUploadFile: Storage permission status = $status');
     if (!status.isGranted) {
       throw Exception('Storage permission required to select files');
     }
 
-    print('selectAndUploadFile: Opening file picker');
+    debugPrint('selectAndUploadFile: Opening file picker');
     final result = await openFile(
       acceptedTypeGroups: <XTypeGroup>[
         XTypeGroup(label: 'All files', extensions: <String>['*']),
       ],
     );
-    print('selectAndUploadFile: File picker result = $result');
+    debugPrint('selectAndUploadFile: File picker result = $result');
     if (result == null) {
-      print('selectAndUploadFile: User cancelled file selection');
+      debugPrint('selectAndUploadFile: User cancelled file selection');
       return;
     }
 
     final filePath = result.path;
     final fileName = result.name;
     final fileSize = await result.length();
-    print(
+    debugPrint(
       'selectAndUploadFile: Selected file - name=$fileName, '
       'path=$filePath, size=$fileSize',
     );
 
     final validationError = validateFileName(fileName);
     if (validationError != null) {
-      print('selectAndUploadFile: Validation error = $validationError');
+      debugPrint('selectAndUploadFile: Validation error = $validationError');
       throw Exception(validationError);
     }
 
-    print('selectAndUploadFile: Starting upload');
+    debugPrint('selectAndUploadFile: Starting upload');
     await uploadFile(filePath, fileName, fileSize.toInt());
-    print('selectAndUploadFile: Upload completed');
+    debugPrint('selectAndUploadFile: Upload completed');
   }
 
   Future<void> uploadFile(
@@ -263,24 +264,24 @@ class FilesController extends StateNotifier<FilesState> {
 
       await refresh();
       state = state.updateUploadProgress(fileName, 1.0);
-    } on DuplicateFolderNameError catch (e) {
+    } on DuplicateFolderNameError {
       state = state.setUploadError(fileName, 'File already exists');
-    } on InvalidFolderNameError catch (e) {
+    } on InvalidFolderNameError {
       state = state.setUploadError(fileName, 'Invalid file name or size');
-    } on FolderNotFoundError catch (e) {
+    } on FolderNotFoundError {
       state = state.setUploadError(fileName, 'Folder not found');
-    } on ServerError catch (e) {
+    } on ServerError {
       state = state.setUploadError(
         fileName,
         'Upload failed. Please try again later.',
       );
-    } on NetworkError catch (e) {
+    } on NetworkError {
       state = state.setUploadError(
         fileName,
         'Connection lost. Please check your network and try again.',
       );
     } catch (e) {
-      print('Upload error for $fileName: $e');
+      debugPrint('Upload error for $fileName: $e');
       state = state.setUploadError(
         fileName,
         'Upload failed. Please try again.',
@@ -413,27 +414,27 @@ class FilesController extends StateNotifier<FilesState> {
       await _repository.createFolder(parentPath: currentPath, name: name);
       await refresh();
       state = state.copyWith(isCreatingFolder: false, clearCreateError: true);
-    } on DuplicateFolderNameError catch (e) {
+    } on DuplicateFolderNameError {
       state = state.copyWith(
         isCreatingFolder: false,
         createError: 'Folder already exists',
       );
-    } on InvalidFolderNameError catch (e) {
+    } on InvalidFolderNameError {
       state = state.copyWith(
         isCreatingFolder: false,
         createError: 'Invalid folder name',
       );
-    } on FolderNotFoundError catch (e) {
+    } on FolderNotFoundError {
       state = state.copyWith(
         isCreatingFolder: false,
         createError: 'Parent folder not found',
       );
-    } on ServerError catch (e) {
+    } on ServerError {
       state = state.copyWith(
         isCreatingFolder: false,
         createError: 'Server error. Please try again.',
       );
-    } on NetworkError catch (e) {
+    } on NetworkError {
       state = state.copyWith(
         isCreatingFolder: false,
         createError:
@@ -459,17 +460,17 @@ class FilesController extends StateNotifier<FilesState> {
       await refresh();
       state = state.finishDeleting(fileId);
       return true;
-    } on FileNotFoundError catch (e) {
+    } on FileNotFoundError {
       state = state.setDeleteError(
         fileId,
         'File not found or you do not have permission',
       );
-    } on ServerError catch (e) {
+    } on ServerError {
       state = state.setDeleteError(
         fileId,
         'File delete failed. Please try again later.',
       );
-    } on NetworkError catch (e) {
+    } on NetworkError {
       state = state.setDeleteError(
         fileId,
         'Connection lost. Please check your network and try again.',

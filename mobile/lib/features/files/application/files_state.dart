@@ -37,10 +37,10 @@ class FilesState {
 
   const FilesState.loading() : this(isLoading: true);
 
-  FilesState.loaded(FolderWithContents folder)
-      : this(folder: folder, isLoading: false);
+  const FilesState.loaded(FolderWithContents folder)
+    : this(folder: folder, isLoading: false);
 
-  FilesState.error(String error) : this(error: error, isLoading: false);
+  const FilesState.error(String error) : this(error: error, isLoading: false);
 
   bool get hasError => error != null;
   bool get isEmpty => !isLoading && folder != null && folder!.isEmpty;
