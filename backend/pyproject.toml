@@ -76,6 +76,11 @@ keep-runtime-typing = true
 
 [tool.coverage.run]
 source = ["app"]
+# Migrations now run in-process against the test container, so without this
+# they would count toward the gate. Their `downgrade()` bodies never execute,
+# which drags the total down and makes the 90% gate depend on how many
+# migrations exist rather than on how well the application is tested.
+omit = ["app/alembic/*"]
 dynamic_context = "test_function"
 
 [tool.coverage.report]

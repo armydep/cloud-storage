@@ -31,23 +31,27 @@ from testcontainers.community.postgres import PostgresContainer
 # are available.
 POSTGRES_IMAGE = "postgres:18"
 
-_CONTAINER_KEY: pytest.StashKey[PostgresContainer] = pytest.StashKey()
+# Set to the container's mapped port. `tests/conftest.py` refuses to migrate or
+# truncate unless the engine actually points there, so a run that somehow loses
+# this plugin fails loudly instead of rewriting a real database.
+CONTAINER_PORT_ENV_VAR = "BACKEND_TEST_CONTAINER_PORT"
 
 
 def pytest_load_initial_conftests(early_config: pytest.Config) -> None:
     container = PostgresContainer(POSTGRES_IMAGE)
     container.start()
-    early_config.stash[_CONTAINER_KEY] = container
+    # Registered immediately, and before anything below can fail. pytest drains
+    # these finalizers unconditionally — unlike `pytest_unconfigure`, which is
+    # skipped entirely when startup fails before the config is marked
+    # configured. That window is real: `tests/conftest.py` imports `app` in the
+    # very next hook, and an ImportError there would otherwise orphan the
+    # container.
+    early_config.add_cleanup(container.stop)
 
+    port = str(container.get_exposed_port(5432))
     os.environ["POSTGRES_SERVER"] = container.get_container_host_ip()
-    os.environ["POSTGRES_PORT"] = str(container.get_exposed_port(5432))
+    os.environ["POSTGRES_PORT"] = port
     os.environ["POSTGRES_DB"] = container.dbname
     os.environ["POSTGRES_USER"] = container.username
     os.environ["POSTGRES_PASSWORD"] = container.password
-
-
-def pytest_unconfigure(config: pytest.Config) -> None:
-    container = config.stash.get(_CONTAINER_KEY, None)
-    if container is not None:
-        container.stop()
-        del config.stash[_CONTAINER_KEY]
+    os.environ[CONTAINER_PORT_ENV_VAR] = port
