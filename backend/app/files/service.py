@@ -1,6 +1,7 @@
 import logging
 import re
 import uuid
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session
@@ -82,6 +83,10 @@ class DuplicateFileShareError(Exception):
 
 
 class FileShareNotFoundError(Exception):
+    pass
+
+
+class BlobIntegrityError(Exception):
     pass
 
 
@@ -384,7 +389,7 @@ def delete_file(*, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID) ->
         blob_hash=file.blob_hash,
     )
     if blob is None:
-        raise RuntimeError("File blob metadata is missing")
+        raise BlobIntegrityError("File blob metadata is missing")
 
     object_key = blob.object_key
     repository.delete_file(session=session, file=file)
@@ -402,6 +407,64 @@ def delete_file(*, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID) ->
             storage.delete_object(object_key=object_key)
         except Exception:
             logger.exception("Failed to delete unreferenced file blob object")
+
+
+def delete_folder(
+    *, session: Session, owner_id: uuid.UUID, folder_id: uuid.UUID
+) -> None:
+    folder = repository.get_folder_by_id(
+        session=session,
+        owner_id=owner_id,
+        folder_id=folder_id,
+    )
+    if not folder or folder.path == ROOT_FOLDER_PATH:
+        raise FolderNotFoundError
+
+    subtree_folders = repository.list_folder_subtree(
+        session=session,
+        owner_id=owner_id,
+        path=folder.path,
+        for_update=True,
+    )
+
+    folder_ids = [subtree_folder.id for subtree_folder in subtree_folders]
+    files = repository.list_files_in_folders(
+        session=session,
+        owner_id=owner_id,
+        folder_ids=folder_ids,
+    )
+    delete_counts = Counter(file.blob_hash for file in files)
+    blobs = repository.list_blobs_for_update(
+        session=session,
+        blob_hashes=list(delete_counts),
+    )
+    blobs_by_hash = {blob.blob_hash: blob for blob in blobs}
+    missing_blob_hashes = set(delete_counts) - set(blobs_by_hash)
+    if missing_blob_hashes:
+        raise BlobIntegrityError("File blob metadata is missing")
+
+    object_keys_to_delete: list[str] = []
+    repository.delete_files(session=session, files=files)
+    session.flush()
+
+    for blob_hash, delete_count in delete_counts.items():
+        blob = blobs_by_hash[blob_hash]
+        blob.ref_count -= delete_count
+        if blob.ref_count < 0:
+            raise BlobIntegrityError("File blob ref_count would become negative")
+        if blob.ref_count == 0:
+            object_keys_to_delete.append(blob.object_key)
+            repository.delete_blob(session=session, blob=blob)
+
+    session.flush()
+    repository.delete_folder(session=session, folder=folder)
+    session.commit()
+
+    for object_key in object_keys_to_delete:
+        try:
+            storage.delete_object(object_key=object_key)
+        except Exception:
+            logger.exception("Failed to delete unreferenced folder blob object")
 
 
 def create_presigned_download(
