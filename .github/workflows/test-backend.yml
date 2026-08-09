@@ -23,15 +23,11 @@ jobs:
           python-version: "3.10"
       - name: Install uv
         uses: astral-sh/setup-uv@v7
-      - run: docker compose down -v --remove-orphans
-      - run: docker compose up -d db mailcatcher
-      - name: Migrate DB
-        run: uv run bash scripts/prestart.sh
-        working-directory: backend
+      # No `docker compose up db` and no migrate step: the suite starts its own
+      # throwaway PostgreSQL container via testcontainers and migrates it.
       - name: Run tests
         run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         working-directory: backend
-      - run: docker compose down -v --remove-orphans
       - name: Store coverage files
         uses: actions/upload-artifact@v6
         with:

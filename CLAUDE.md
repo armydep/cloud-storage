@@ -36,7 +36,7 @@ Stack: `docker compose watch` (or `docker compose up -d`) from the repo root.
 
 Backend, from `backend/`:
 - Tests for the backend-test-runner subagent: `uv run bash scripts/tests-start.sh`
-  (needs Postgres reachable; CI gates coverage at 90%).
+  (needs Docker — the suite starts its own Postgres container; CI gates coverage at 90%).
 - Single test: `uv run pytest tests/api/routes/test_files.py::test_name -q`.
 - Lint: `uv run bash scripts/lint.sh` (mypy, ruff check, ruff format --check).
 - Format: `uv run bash scripts/format.sh`.
@@ -132,10 +132,18 @@ have drifted from the workflows — fix the agent, not just the immediate failur
   or Playwright cannot find its browsers.
 
 ### Testing
-- Tests need a real Postgres with the `ltree` extension; there is no SQLite fallback.
-- The `db` fixture wipes tables on teardown but only when the database name contains `test`
-  (`_is_test_database`). Point `POSTGRES_DB` at a throwaway database — running against your dev
-  database pollutes it.
+- Tests need a real Postgres with the `ltree` extension; there is no SQLite fallback. They start
+  their own: `tests/container.py` boots a throwaway `postgres:18` via testcontainers, so **Docker
+  must be running** and your own database is never touched. Nothing in `.env` configures the test
+  database — the plugin overrides `POSTGRES_*` in the environment, which outranks `.env`.
+- That has to be a plugin (`addopts = "-p tests.container"`), not a `conftest.py`. `app/core/db.py`
+  builds its engine at import time, and pytest loads `tests/conftest.py` before any
+  `pytest_configure` hook runs, so `pytest_load_initial_conftests` is the only hook early enough.
+- The schema comes from `alembic upgrade head` against the container, never `create_all`, so every
+  run exercises the real migration chain.
+- `reset_database` truncates every table between test **modules** and re-seeds the superuser. It is
+  per-module rather than per-test because `client`, `superuser_token_headers` and
+  `normal_user_token_headers` are module-scoped and cache a logged-in user.
 - Coverage gate is 90%.
 
 ### General
