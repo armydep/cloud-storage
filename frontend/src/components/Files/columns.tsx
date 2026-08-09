@@ -46,6 +46,21 @@ function formatSize(value?: number | null) {
   }).format(value)
 }
 
+function formatDate(value?: string | null) {
+  if (!value) {
+    return "—"
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return "—"
+  }
+
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+    date,
+  )
+}
+
 export function getColumns({
   currentPath,
   onOpenFolder,
@@ -97,11 +112,11 @@ export function getColumns({
       ),
     },
     {
-      accessorKey: "path",
-      header: "Path / Hash",
+      accessorKey: "created_at",
+      header: "Created at",
       cell: ({ row }) => (
-        <span className="max-w-xs truncate block font-mono text-xs text-muted-foreground">
-          {row.original.path || row.original.blob_hash || "—"}
+        <span className="text-muted-foreground">
+          {formatDate(row.original.created_at)}
         </span>
       ),
     },

@@ -12,6 +12,7 @@ const rootFolder = {
       name: "Documents",
       type: "folder",
       path: "root.documents",
+      created_at: "2026-08-05T09:15:00Z",
     },
     {
       id: "00000000-0000-0000-0000-000000000003",
@@ -22,6 +23,7 @@ const rootFolder = {
       blob_hash:
         "1111111111111111111111111111111111111111111111111111111111111111",
       size_bytes: 128,
+      created_at: "2026-08-06T12:00:00Z",
     },
   ],
 }
@@ -42,9 +44,15 @@ const documentsFolder = {
       blob_hash:
         "2222222222222222222222222222222222222222222222222222222222222222",
       size_bytes: 84210,
+      created_at: "2026-08-07T14:30:00Z",
     },
   ],
 }
+
+const formatTestDate = (value: string) =>
+  new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
+    new Date(value),
+  )
 
 const emptyFolder = {
   id: "00000000-0000-0000-0000-000000000005",
@@ -93,6 +101,37 @@ test("Files page shows current path and upload button", async ({ page }) => {
   await expect(page.getByRole("button", { name: "root" })).toBeVisible()
   await expect(page.getByRole("button", { name: "Upload" })).toBeVisible()
   await expect(page.getByRole("button", { name: "New folder" })).toBeVisible()
+})
+
+test("Files table shows created-at instead of path/hash", async ({ page }) => {
+  await page.goto("/files")
+
+  await expect(
+    page.getByRole("columnheader", { name: "Created at" }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("columnheader", { name: "Path / Hash" }),
+  ).toHaveCount(0)
+  await expect(
+    page
+      .getByRole("row")
+      .filter({ hasText: "Documents" })
+      .getByText(formatTestDate("2026-08-05T09:15:00Z")),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByRole("row")
+      .filter({ hasText: "welcome.txt" })
+      .getByText(formatTestDate("2026-08-06T12:00:00Z")),
+  ).toBeVisible()
+  await expect(page.locator("table").getByText("root.documents")).toHaveCount(0)
+  await expect(
+    page
+      .locator("table")
+      .getByText(
+        "1111111111111111111111111111111111111111111111111111111111111111",
+      ),
+  ).toHaveCount(0)
 })
 
 test("Create folder submits the current path and refreshes the listing", async ({
