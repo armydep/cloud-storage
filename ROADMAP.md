@@ -36,6 +36,8 @@ Keep development and delivery reliable while product capabilities expand.
       ([#91](https://github.com/armydep/cloude-file-storage/issues/91))
 - [ ] **2.7** Delay file blob row locks until upload metadata mutation
       ([#92](https://github.com/armydep/cloude-file-storage/issues/92))
+- [ ] **2.8** Add backend metrics for scaling decisions
+      ([#93](https://github.com/armydep/cloude-file-storage/issues/93))
 
 ## 3. Next phase: File experience
 

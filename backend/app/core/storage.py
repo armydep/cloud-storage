@@ -7,6 +7,7 @@ import boto3  # type: ignore[import-untyped]
 from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
 from app.core.config import settings
+from app.core.metrics import track_object_storage_operation
 
 
 class ObjectNotFoundError(Exception):
@@ -63,16 +64,17 @@ def create_presigned_upload_url(
     checksum_sha256: str,
     expires_in: int | None = None,
 ) -> str:
-    url = get_s3_client().generate_presigned_url(
-        ClientMethod="put_object",
-        Params={
-            "Bucket": settings.S3_BUCKET,
-            "Key": object_key,
-            "ContentType": mime_type,
-            "ChecksumSHA256": checksum_sha256,
-        },
-        ExpiresIn=_get_expires_in(expires_in),
-    )
+    with track_object_storage_operation("create_presigned_upload_url"):
+        url = get_s3_client().generate_presigned_url(
+            ClientMethod="put_object",
+            Params={
+                "Bucket": settings.S3_BUCKET,
+                "Key": object_key,
+                "ContentType": mime_type,
+                "ChecksumSHA256": checksum_sha256,
+            },
+            ExpiresIn=_get_expires_in(expires_in),
+        )
     return _rewrite_public_url(url)
 
 
@@ -84,18 +86,19 @@ def create_presigned_download_url(
 ) -> str:
     safe_filename = filename.replace("\\", "\\\\").replace('"', '\\"')
     encoded_filename = quote(filename)
-    url = get_s3_client().generate_presigned_url(
-        ClientMethod="get_object",
-        Params={
-            "Bucket": settings.S3_BUCKET,
-            "Key": object_key,
-            "ResponseContentDisposition": (
-                f'attachment; filename="{safe_filename}"; '
-                f"filename*=UTF-8''{encoded_filename}"
-            ),
-        },
-        ExpiresIn=_get_expires_in(expires_in),
-    )
+    with track_object_storage_operation("create_presigned_download_url"):
+        url = get_s3_client().generate_presigned_url(
+            ClientMethod="get_object",
+            Params={
+                "Bucket": settings.S3_BUCKET,
+                "Key": object_key,
+                "ResponseContentDisposition": (
+                    f'attachment; filename="{safe_filename}"; '
+                    f"filename*=UTF-8''{encoded_filename}"
+                ),
+            },
+            ExpiresIn=_get_expires_in(expires_in),
+        )
     return _rewrite_public_url(url)
 
 
@@ -107,13 +110,14 @@ def stat_object(*, object_key: str, include_checksum: bool = False) -> ObjectSta
     if include_checksum:
         params["ChecksumMode"] = "ENABLED"
 
-    try:
-        response = get_s3_client().head_object(**params)
-    except ClientError as exc:
-        error_code = exc.response.get("Error", {}).get("Code")
-        if error_code in {"404", "NoSuchKey", "NotFound"}:
-            raise ObjectNotFoundError from exc
-        raise
+    with track_object_storage_operation("stat_object"):
+        try:
+            response = get_s3_client().head_object(**params)
+        except ClientError as exc:
+            error_code = exc.response.get("Error", {}).get("Code")
+            if error_code in {"404", "NoSuchKey", "NotFound"}:
+                raise ObjectNotFoundError from exc
+            raise
 
     return ObjectStat(
         size_bytes=response["ContentLength"],
@@ -123,15 +127,17 @@ def stat_object(*, object_key: str, include_checksum: bool = False) -> ObjectSta
 
 
 def copy_object(*, source_object_key: str, destination_object_key: str) -> None:
-    get_s3_client().copy_object(
-        Bucket=settings.S3_BUCKET,
-        CopySource={"Bucket": settings.S3_BUCKET, "Key": source_object_key},
-        Key=destination_object_key,
-    )
+    with track_object_storage_operation("copy_object"):
+        get_s3_client().copy_object(
+            Bucket=settings.S3_BUCKET,
+            CopySource={"Bucket": settings.S3_BUCKET, "Key": source_object_key},
+            Key=destination_object_key,
+        )
 
 
 def delete_object(*, object_key: str) -> None:
-    get_s3_client().delete_object(
-        Bucket=settings.S3_BUCKET,
-        Key=object_key,
-    )
+    with track_object_storage_operation("delete_object"):
+        get_s3_client().delete_object(
+            Bucket=settings.S3_BUCKET,
+            Key=object_key,
+        )
