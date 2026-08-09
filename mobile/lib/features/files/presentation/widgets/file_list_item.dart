@@ -117,7 +117,7 @@ class FileListItem extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (primaryAction != null) primaryAction,
+        if (primaryAction != null) ...[primaryAction],
         IconButton(
           key: Key('delete-file-${item.id}'),
           icon: const Icon(Icons.delete_outline, color: Colors.red),

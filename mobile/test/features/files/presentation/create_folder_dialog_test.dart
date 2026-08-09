@@ -4,8 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Create Folder Dialog', () {
     testWidgets('dialog displays with text field and buttons', (tester) async {
-      var createCallCount = 0;
-
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -34,7 +32,6 @@ void main() {
                         ),
                         ElevatedButton(
                           onPressed: () {
-                            createCallCount++;
                             Navigator.pop(context);
                           },
                           child: const Text('Create'),
@@ -120,8 +117,7 @@ void main() {
                     builder: (context) => AlertDialog(
                       title: const Text('Create Folder'),
                       content: const TextField(
-                        decoration:
-                            InputDecoration(hintText: 'Folder name'),
+                        decoration: InputDecoration(hintText: 'Folder name'),
                       ),
                       actions: [
                         TextButton(
@@ -164,8 +160,7 @@ void main() {
                     builder: (context) => AlertDialog(
                       title: const Text('Create Folder'),
                       content: const TextField(
-                        decoration:
-                            InputDecoration(hintText: 'Folder name'),
+                        decoration: InputDecoration(hintText: 'Folder name'),
                       ),
                       actions: [
                         TextButton(

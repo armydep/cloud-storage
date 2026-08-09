@@ -1,0 +1,76 @@
+name: Test Frontend
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.filter.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            changed:
+              - backend/**
+              - frontend/**
+              - package.json
+              - bun.lock
+              - pyproject.toml
+              - uv.lock
+              - scripts/generate-client.sh
+              - .github/workflows/test-frontend.yml
+
+  build-frontend:
+    needs: changes
+    if: ${{ needs.changes.outputs.changed == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Install backend dependencies
+        run: uv sync
+        working-directory: backend
+      - name: Install frontend dependencies
+        run: bun ci
+        working-directory: frontend
+      - name: Create .env from the committed example
+        run: cp .env.example .env
+      - name: Generate frontend client
+        run: bash scripts/generate-client.sh
+      - name: Verify generated frontend client is committed
+        run: git diff --exit-code -- frontend/openapi.json frontend/src/client
+      - name: Build frontend
+        run: bun run --filter frontend build
+
+  alls-green-frontend:
+    if: always()
+    needs:
+      - changes
+      - build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decide whether the needed jobs succeeded or failed
+        uses: re-actors/alls-green@release/v1
+        with:
+          jobs: ${{ toJSON(needs) }}
+          allowed-skips: build-frontend

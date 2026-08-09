@@ -14,7 +14,7 @@ from sqlalchemy.types import UserDefinedType
 from sqlmodel import Field, SQLModel
 
 
-class LtreeType(UserDefinedType):
+class LtreeType(UserDefinedType[str]):
     cache_ok = True
 
     def get_col_spec(self, **kw: object) -> str:
@@ -28,7 +28,7 @@ class LtreeType(UserDefinedType):
 
 
 class FolderBase(SQLModel):
-    path: str = Field(min_length=1, max_length=1024, sa_type=LtreeType)  # type: ignore
+    path: str = Field(min_length=1, max_length=1024, sa_type=LtreeType)
     name: str = Field(min_length=1, max_length=255)
 
 
@@ -63,7 +63,7 @@ class StoredFileBase(SQLModel):
         nullable=False,
         ondelete="CASCADE",
     )
-    size_bytes: int = Field(ge=0, sa_type=BigInteger)  # type: ignore
+    size_bytes: int = Field(ge=0, sa_type=BigInteger)
 
 
 def get_datetime_utc() -> datetime:
@@ -89,7 +89,7 @@ class StoredFile(StoredFileBase, table=True):
     )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
         nullable=False,
     )
 
@@ -103,11 +103,11 @@ class FileBlob(SQLModel, table=True):
     )
     blob_hash: str = Field(min_length=1, max_length=128, primary_key=True)
     object_key: str = Field(min_length=1, max_length=512, nullable=False)
-    size_bytes: int = Field(ge=0, sa_type=BigInteger)  # type: ignore
+    size_bytes: int = Field(ge=0, sa_type=BigInteger)
     ref_count: int = Field(default=0, ge=0, nullable=False)
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
         nullable=False,
     )
 
@@ -134,7 +134,7 @@ class FileBlobClaim(SQLModel, table=True):
     )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
         nullable=False,
     )
 
@@ -152,15 +152,15 @@ class PendingUpload(SQLModel, table=True):
     )
     blob_hash: str = Field(min_length=1, max_length=128, nullable=False)
     object_key: str = Field(min_length=1, max_length=512, nullable=False)
-    size_bytes: int = Field(ge=0, sa_type=BigInteger)  # type: ignore
+    size_bytes: int = Field(ge=0, sa_type=BigInteger)
     mime_type: str = Field(min_length=1, max_length=255)
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
         nullable=False,
     )
     expires_at: datetime = Field(
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
         nullable=False,
     )
 
@@ -183,6 +183,6 @@ class FileShare(SQLModel, table=True):
     )
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
-        sa_type=DateTime(timezone=True),  # type: ignore
+        sa_type=DateTime(timezone=True),  # type: ignore[call-overload]
         nullable=False,
     )

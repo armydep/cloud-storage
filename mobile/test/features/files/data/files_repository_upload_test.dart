@@ -236,10 +236,7 @@ class _MockApiClient implements ApiClient {
   String? lastPostPath;
 
   @override
-  Future<void> delete(
-    String path, {
-    bool authenticated = false,
-  }) async {
+  Future<void> delete(String path, {bool authenticated = false}) async {
     throw UnimplementedError();
   }
 

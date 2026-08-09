@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
-import boto3
-from botocore.exceptions import ClientError
+import boto3  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
 from app.core.config import settings
 

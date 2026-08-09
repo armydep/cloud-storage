@@ -112,8 +112,11 @@ void main() {
     await expectLater(
       apiClient.delete('/api/v1/files/file-123'),
       throwsA(
-        isA<ApiException>()
-            .having((error) => error.isNetworkError, 'isNetworkError', isTrue),
+        isA<ApiException>().having(
+          (error) => error.isNetworkError,
+          'isNetworkError',
+          isTrue,
+        ),
       ),
     );
   });

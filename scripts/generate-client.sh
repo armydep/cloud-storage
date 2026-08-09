@@ -8,4 +8,5 @@ uv run python -c "import app.main; import json; print(json.dumps(app.main.app.op
 cd ..
 mv openapi.json frontend/
 bun run --filter frontend generate-client
+find frontend/src/client -type f -name "*.ts" -exec sed -i 's/[[:space:]]*$//' {} +
 bun run lint
