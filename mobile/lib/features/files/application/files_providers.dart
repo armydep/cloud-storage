@@ -250,7 +250,13 @@ class FilesController extends StateNotifier<FilesState> {
         if (uploadUrl == null || uploadUrl.isEmpty) {
           throw ApiError('Upload URL was not provided');
         }
-        await _uploadToPresignedUrl(fileName, file, mimeType, uploadUrl);
+        await _uploadToPresignedUrl(
+          fileName,
+          file,
+          mimeType,
+          uploadUrl,
+          urlResponse.headers,
+        );
       }
 
       await _repository.completeUpload(
@@ -299,6 +305,7 @@ class FilesController extends StateNotifier<FilesState> {
     File file,
     String mimeType,
     String url,
+    Map<String, String> headers,
   ) async {
     try {
       final dio = Dio();
@@ -306,7 +313,10 @@ class FilesController extends StateNotifier<FilesState> {
       await dio.put(
         url,
         data: fileBytes,
-        options: Options(contentType: mimeType),
+        options: Options(
+          contentType: headers['Content-Type'] ?? mimeType,
+          headers: headers,
+        ),
         onSendProgress: (count, total) {
           if (total > 0) {
             state = state.updateUploadProgress(fileName, count / total);

@@ -282,20 +282,24 @@ class UploadUrlResponse {
   final bool uploadRequired;
   final String? url;
   final String? method;
+  final Map<String, String> headers;
   final int expiresInSeconds;
 
   UploadUrlResponse({
     required this.uploadRequired,
     this.url,
     this.method,
+    this.headers = const {},
     required this.expiresInSeconds,
   });
 
   factory UploadUrlResponse.fromJson(Map<String, dynamic> json) {
+    final headersJson = json['headers'] as Map<String, dynamic>? ?? {};
     return UploadUrlResponse(
       uploadRequired: json['upload_required'] as bool? ?? true,
       url: json['upload_url'] as String?,
       method: json['method'] as String?,
+      headers: headersJson.map((key, value) => MapEntry(key, value as String)),
       expiresInSeconds: json['expires_in'] as int? ?? 3600,
     );
   }

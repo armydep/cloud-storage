@@ -94,7 +94,7 @@ services:
       - "1025:1025"
 
   minio:
-    image: minio/minio
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -106,18 +106,33 @@ services:
       - minio-data:/data
 
   minio-create-bucket:
-    image: minio/mc
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
     depends_on:
       - minio
-    entrypoint: >
-      /bin/sh -c "
-      until mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin}; do
-        echo 'Waiting for MinIO...';
-        sleep 2;
-      done;
-      mc mb -p local/${S3_BUCKET:-cloud-file-storage};
-      exit 0;
-      "
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin}; do
+          echo 'Waiting for MinIO...';
+          sleep 2;
+        done;
+        mc mb -p local/${S3_BUCKET:-cloud-file-storage};
+        printf '%s\n' \
+          '{' \
+          '  "CORSRules": [' \
+          '    {' \
+          '      "AllowedOrigins": ["*"],' \
+          '      "AllowedMethods": ["GET", "PUT", "HEAD"],' \
+          '      "AllowedHeaders": ["*"],' \
+          '      "ExposeHeaders": ["ETag", "x-amz-checksum-sha256"],' \
+          '      "MaxAgeSeconds": 3000' \
+          '    }' \
+          '  ]' \
+          '}' \
+          > /tmp/cors.json;
+        mc cors set local/${S3_BUCKET:-cloud-file-storage} /tmp/cors.json;
+        exit 0;
 
   frontend:
     restart: "no"

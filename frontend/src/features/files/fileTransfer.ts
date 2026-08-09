@@ -13,17 +13,26 @@ type DownloadFileParams = {
   name: string
 }
 
+function sha256HexToBase64(blobHash: string): string {
+  const bytes =
+    blobHash.match(/.{2}/g)?.map((byte) => Number.parseInt(byte, 16)) ?? []
+
+  return btoa(String.fromCharCode(...bytes))
+}
+
 export async function uploadFileToCurrentFolder({
   file,
   currentPath,
 }: UploadFileToCurrentFolderParams): Promise<void> {
   const mimeType = file.type || "application/octet-stream"
+  const blobHash = await calculateSha256(file)
+  const checksumSha256 = sha256HexToBase64(blobHash)
   const metadata: PresignUploadRequest = {
     folder_path: currentPath,
     name: file.name,
     mime_type: mimeType,
     category: getFileCategory(mimeType),
-    blob_hash: await calculateSha256(file),
+    blob_hash: blobHash,
     size_bytes: file.size,
   }
 
@@ -38,7 +47,10 @@ export async function uploadFileToCurrentFolder({
 
     const uploadResponse = await fetch(presignResponse.upload_url, {
       method: presignResponse.method || "PUT",
-      headers: presignResponse.headers,
+      headers: {
+        ...presignResponse.headers,
+        "x-amz-checksum-sha256": checksumSha256,
+      },
       body: file,
     })
 
