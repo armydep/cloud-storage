@@ -130,6 +130,14 @@ have drifted from the workflows — fix the agent, not just the immediate failur
 - E2E is Playwright; there is no Vitest in this project.
 - `@playwright/test` in `package.json` must match the image tag in `frontend/Dockerfile.playwright`,
   or Playwright cannot find its browsers.
+- `bunx playwright test` reuses whatever is already serving `localhost:5173` — locally that's your
+  own `docker compose watch` stack. Only `files.spec.ts` and `shared-files.spec.ts` mock the API and
+  are safe to run that way. The other six specs hit the real backend, and `user-settings.spec.ts`
+  rewrites the superuser's own email and password. Use `bun run test:e2e` (from `frontend/`) for
+  those, or for the full suite — it runs Playwright in a disposable `docker compose -p cfs-e2e`
+  project via `scripts/test-e2e-local.sh`, so it never touches the dev stack or its database. CI is
+  unaffected either way: each run gets a fresh runner and the workflow wraps itself in
+  `docker compose down -v`.
 
 ### Testing
 - Tests need a real Postgres with the `ltree` extension; there is no SQLite fallback. They start
