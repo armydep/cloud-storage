@@ -11,6 +11,13 @@
 # (e.g. http://backend:8000) regardless of what is or isn't published to the
 # host. `!reset` (Compose Specification, supported since Compose 2.24) clears
 # the inherited port list instead of appending to it.
+# `minio` is deliberately not listed: it isn't in the dependency chain
+# `docker compose run --rm playwright` starts (playwright -> backend,
+# mailcatcher; backend -> db, prestart), so its ports are never bound during
+# this run. No current spec exercises real (unmocked) upload/download, so
+# that's fine today. If one is ever added and needs minio pulled into the
+# chain, its ports (9000, 9001) will need resetting here too, or the same
+# host-port collision this file exists to avoid comes right back.
 services:
   db:
     ports: !reset []

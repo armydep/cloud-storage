@@ -5,8 +5,8 @@
 # Without this, `bunx playwright test` reuses whatever is already serving
 # http://localhost:5173 (Playwright's `reuseExistingServer: !CI`), which
 # locally is the developer's own frontend, backend and database. Six of the
-# eight spec files are not mocked and hit that backend for real; one of them
-# (user-settings.spec.ts) rewrites the superuser's own email and password.
+# eight spec files are not mocked: they create and log in as arbitrary new
+# users against that real backend, polluting the dev database.
 #
 # `-p` alone separates containers, volumes and networks, but not host port
 # publishing — compose.e2e.yml resets the ports that would otherwise collide
@@ -33,10 +33,18 @@ COMPOSE=(docker compose -p "$PROJECT_NAME" -f compose.yml -f compose.override.ym
 cleanup() {
   "${COMPOSE[@]}" down -v --remove-orphans
 }
-trap cleanup EXIT
+# EXIT alone isn't guaranteed to fire on a real terminal Ctrl-C; INT/TERM are
+# belt-and-suspenders. If a run is ever killed hard enough to skip all three,
+# `docker compose -p cfs-e2e down -v --remove-orphans` cleans it up by hand —
+# safe to run any time, and the next invocation of this script does exactly
+# that before starting anyway.
+trap cleanup EXIT INT TERM
 
 # Clears anything left behind by a previous run that crashed before the trap
 # above could run. Safe against the dev stack: distinct project name.
 "${COMPOSE[@]}" down -v --remove-orphans
-"${COMPOSE[@]}" build
+# Scoped to what `run --rm playwright` actually starts (playwright -> backend,
+# mailcatcher; backend -> db, prestart) — a bare `build` would also build the
+# unrelated `frontend` image, which this run never touches.
+"${COMPOSE[@]}" build backend prestart playwright
 "${COMPOSE[@]}" run --rm playwright bunx playwright test "$@"
