@@ -19,10 +19,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: FileListItem(
-              item: testFile,
-              uploadProgress: 0.5,
-            ),
+            body: FileListItem(item: testFile, uploadProgress: 0.5),
           ),
         ),
       );
@@ -70,15 +67,10 @@ void main() {
     });
 
     testWidgets('retry button visible on upload error', (tester) async {
-      var retryCalled = false;
-
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: FileListItem(
-              item: testFile,
-              uploadError: 'Upload failed',
-            ),
+            body: FileListItem(item: testFile, uploadError: 'Upload failed'),
           ),
         ),
       );

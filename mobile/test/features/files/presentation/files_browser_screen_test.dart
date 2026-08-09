@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('FileListItem', () {
-    testWidgets('displays folder with correct icon', (WidgetTester tester) async {
+    testWidgets('displays folder with correct icon', (
+      WidgetTester tester,
+    ) async {
       final folder = FileContent(
         id: '1',
         name: 'Documents',
@@ -15,9 +17,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: FileListItem(item: folder),
-          ),
+          home: Scaffold(body: FileListItem(item: folder)),
         ),
       );
 
@@ -38,9 +38,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: Scaffold(
-            body: FileListItem(item: file),
-          ),
+          home: Scaffold(body: FileListItem(item: file)),
         ),
       );
 
@@ -49,8 +47,9 @@ void main() {
       expect(find.byIcon(Icons.description), findsOneWidget);
     });
 
-    testWidgets('displays correct icon for different file categories',
-        (WidgetTester tester) async {
+    testWidgets('displays correct icon for different file categories', (
+      WidgetTester tester,
+    ) async {
       final categories = {
         'image': Icons.image,
         'video': Icons.videocam,
@@ -79,7 +78,9 @@ void main() {
       }
     });
 
-    testWidgets('calls onTap when folder is tapped', (WidgetTester tester) async {
+    testWidgets('calls onTap when folder is tapped', (
+      WidgetTester tester,
+    ) async {
       var tapped = false;
       final folder = FileContent(
         id: '1',
@@ -91,10 +92,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: FileListItem(
-              item: folder,
-              onTap: () => tapped = true,
-            ),
+            body: FileListItem(item: folder, onTap: () => tapped = true),
           ),
         ),
       );

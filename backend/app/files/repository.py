@@ -104,7 +104,7 @@ def list_folder_subtree(
 ) -> list[Folder]:
     statement = select(Folder).where(
         Folder.owner_id == owner_id,
-        Folder.path.op("<@")(path),
+        col(Folder.path).op("<@")(path),
     )
     if for_update:
         statement = statement.with_for_update()
@@ -464,7 +464,7 @@ def create_file(
 
 
 def delete_file(*, session: Session, file: StoredFile) -> None:
-    session.execute(sql_delete(StoredFile).where(StoredFile.id == file.id))
+    session.execute(sql_delete(StoredFile).where(col(StoredFile.id) == file.id))
     if file in session:
         session.expunge(file)
 

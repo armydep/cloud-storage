@@ -52,7 +52,8 @@ void main() {
 
       final repository = FilesRepository(mockApiClient);
       expect(
-        () => repository.createFolder(parentPath: 'root', name: 'Invalid\0Name'),
+        () =>
+            repository.createFolder(parentPath: 'root', name: r'Invalid\0Name'),
         throwsA(isA<InvalidFolderNameError>()),
       );
     });
@@ -66,7 +67,10 @@ void main() {
 
       final repository = FilesRepository(mockApiClient);
       expect(
-        () => repository.createFolder(parentPath: 'root.NonExistent', name: 'New'),
+        () => repository.createFolder(
+          parentPath: 'root.NonExistent',
+          name: 'New',
+        ),
         throwsA(isA<FolderNotFoundError>()),
       );
     });
@@ -107,10 +111,7 @@ class _MockApiClient implements ApiClient {
   Map<String, dynamic>? lastRequestBody;
 
   @override
-  Future<void> delete(
-    String path, {
-    bool authenticated = false,
-  }) async {
+  Future<void> delete(String path, {bool authenticated = false}) async {
     throw UnimplementedError();
   }
 

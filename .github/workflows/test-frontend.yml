@@ -53,6 +53,8 @@ jobs:
       - name: Install frontend dependencies
         run: bun ci
         working-directory: frontend
+      - name: Create .env from the committed example
+        run: cp .env.example .env
       - name: Generate frontend client
         run: bash scripts/generate-client.sh
       - name: Verify generated frontend client is committed

@@ -19,10 +19,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: FileListItem(
-              item: testFile,
-              onDownload: () {},
-            ),
+            body: FileListItem(item: testFile, onDownload: () {}),
           ),
         ),
       );
@@ -73,14 +70,18 @@ void main() {
           home: Scaffold(
             body: FileListItem(
               item: testFile,
-              downloadError: 'Connection lost. Please check your network and try again.',
+              downloadError:
+                  'Connection lost. Please check your network and try again.',
               onDownload: () {},
             ),
           ),
         ),
       );
 
-      expect(find.text('Connection lost. Please check your network and try again.'), findsOneWidget);
+      expect(
+        find.text('Connection lost. Please check your network and try again.'),
+        findsOneWidget,
+      );
       expect(find.byIcon(Icons.refresh), findsOneWidget);
     });
 
