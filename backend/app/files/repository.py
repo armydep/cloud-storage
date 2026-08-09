@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 
+from sqlalchemy import delete as sql_delete
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
@@ -249,6 +250,10 @@ def decrement_blob_ref_count(*, blob: FileBlob) -> None:
     blob.ref_count -= 1
 
 
+def delete_blob(*, session: Session, blob: FileBlob) -> None:
+    session.delete(blob)
+
+
 def get_file_by_folder_and_name(
     *, session: Session, folder_id: uuid.UUID, name: str
 ) -> StoredFile | None:
@@ -288,3 +293,9 @@ def create_file(
     if commit:
         session.refresh(file)
     return file
+
+
+def delete_file(*, session: Session, file: StoredFile) -> None:
+    session.execute(sql_delete(StoredFile).where(StoredFile.id == file.id))
+    if file in session:
+        session.expunge(file)

@@ -73,6 +73,8 @@ Detailed spec:
 
 GitHub issue: [#65](https://github.com/armydep/cloude-file-storage/issues/65)
 
+Status: Completed in PR [#66](https://github.com/armydep/cloude-file-storage/pull/66).
+
 - Add `file_blobs` table.
 - Backfill one blob row per existing `files.blob_hash`.
 - Set `ref_count` from current `files` references.
@@ -90,6 +92,8 @@ Detailed spec:
 GitHub issue: [#62](https://github.com/armydep/cloude-file-storage/issues/62)
 
 Depends on Slice 1.
+
+Status: Next slice.
 
 - Add `DELETE /api/v1/files/{file_id}`.
 - Authorize by owner only.

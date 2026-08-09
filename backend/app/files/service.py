@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 
@@ -23,6 +24,8 @@ from app.files.schemas import (
     SharedFilesPublic,
     StoredFilePublic,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class FolderNotFoundError(Exception):
@@ -279,6 +282,40 @@ def complete_upload(
         session.rollback()
         raise DuplicateFileNameError
     return StoredFilePublic.model_validate(file)
+
+
+def delete_file(*, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID) -> None:
+    file = repository.get_file_by_id(
+        session=session,
+        owner_id=owner_id,
+        file_id=file_id,
+    )
+    if not file:
+        raise StoredFileNotFoundError
+
+    blob = repository.get_blob_for_update(
+        session=session,
+        blob_hash=file.blob_hash,
+    )
+    if blob is None:
+        raise RuntimeError("File blob metadata is missing")
+
+    object_key = blob.object_key
+    repository.delete_file(session=session, file=file)
+    repository.decrement_blob_ref_count(blob=blob)
+
+    should_delete_object = blob.ref_count == 0
+    if should_delete_object:
+        session.flush()
+        repository.delete_blob(session=session, blob=blob)
+
+    session.commit()
+
+    if should_delete_object:
+        try:
+            storage.delete_object(object_key=object_key)
+        except Exception:
+            logger.exception("Failed to delete unreferenced file blob object")
 
 
 def create_presigned_download(

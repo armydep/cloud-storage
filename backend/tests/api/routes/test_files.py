@@ -1327,6 +1327,369 @@ def test_presign_download_requires_authentication(client: TestClient) -> None:
     assert response.status_code == 401
 
 
+def test_delete_file_succeeds_for_owner(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="Delete",
+    )
+    calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: calls.append(object_key),
+    )
+    file_id = file.id
+    blob_hash = file.blob_hash
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+    db.expire_all()
+    assert db.get(StoredFile, file_id) is None
+    assert db.get(FileBlob, blob_hash) is None
+    assert calls == [f"sha256/{blob_hash}"]
+
+
+def test_delete_file_removes_file_from_folder_listing(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteListing",
+    )
+    folder = db.get(Folder, file.folder_id)
+    assert folder is not None
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+    assert response.status_code == 204
+
+    listing_response = client.get(
+        f"{settings.API_V1_STR}/files",
+        headers=normal_user_token_headers,
+        params={"path": folder.path},
+    )
+    assert listing_response.status_code == 200
+    assert all(
+        item["id"] != str(file.id)
+        for item in listing_response.json()["contents"]
+    )
+
+
+def test_delete_file_prevents_later_download(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteDownload",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+    assert delete_response.status_code == 204
+
+    download_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/presign-download",
+        headers=normal_user_token_headers,
+    )
+    assert download_response.status_code == 404
+    assert download_response.json()["detail"] == "File not found"
+
+
+def test_delete_file_removes_shares(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteShared",
+    )
+    share_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/shares",
+        headers=normal_user_token_headers,
+        json={"recipient_email": settings.FIRST_SUPERUSER},
+    )
+    assert share_response.status_code == 201
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+    assert delete_response.status_code == 204
+
+    recipient_listing = client.get(
+        f"{settings.API_V1_STR}/files/shared-with-me",
+        headers=superuser_token_headers,
+    )
+    assert recipient_listing.status_code == 200
+    assert all(item["id"] != str(file.id) for item in recipient_listing.json()["data"])
+
+    download_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/presign-download",
+        headers=superuser_token_headers,
+    )
+    assert download_response.status_code == 404
+
+
+def test_delete_file_rejects_another_users_file(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="DeleteOtherUser",
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "File not found"
+    assert db.get(StoredFile, file.id) is not None
+
+
+def test_delete_file_rejects_shared_recipient(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteRecipient",
+    )
+    share_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/shares",
+        headers=normal_user_token_headers,
+        json={"recipient_email": settings.FIRST_SUPERUSER},
+    )
+    assert share_response.status_code == 201
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=superuser_token_headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "File not found"
+    assert db.get(StoredFile, file.id) is not None
+
+
+def test_delete_file_repeated_delete_returns_404(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteRepeated",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    first_response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+    second_response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert first_response.status_code == 204
+    assert second_response.status_code == 404
+    assert second_response.json()["detail"] == "File not found"
+
+
+def test_delete_file_requires_authentication(client: TestClient) -> None:
+    response = client.delete(f"{settings.API_V1_STR}/files/{uuid.uuid4()}")
+
+    assert response.status_code == 401
+
+
+def test_delete_file_invalid_uuid_returns_422(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+) -> None:
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/not-a-uuid",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 422
+
+
+def test_delete_file_shared_blob_decrements_ref_count_without_s3_delete(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    blob_hash = uuid.uuid4().hex * 2
+    first_file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteSharedBlobA",
+        blob_hash=blob_hash,
+    )
+    second_file = StoredFile(
+        owner_id=first_file.owner_id,
+        folder_id=first_file.folder_id,
+        name=f"shared-blob-{uuid.uuid4().hex}.pdf",
+        mime_type="application/pdf",
+        category="document",
+        blob_hash=blob_hash,
+        size_bytes=123,
+    )
+    blob = db.get(FileBlob, blob_hash)
+    assert blob is not None
+    blob.ref_count = 2
+    db.add(second_file)
+    db.add(blob)
+    db.commit()
+    db.refresh(second_file)
+
+    def fail_delete_object(*, object_key: str) -> None:
+        del object_key
+        raise AssertionError("shared blob object must not be deleted")
+
+    monkeypatch.setattr("app.files.service.storage.delete_object", fail_delete_object)
+    first_file_id = first_file.id
+    second_file_id = second_file.id
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{first_file_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    db.expire_all()
+    assert db.get(StoredFile, first_file_id) is None
+    assert db.get(StoredFile, second_file_id) is not None
+    stored_blob = db.get(FileBlob, blob_hash)
+    assert stored_blob is not None
+    assert stored_blob.ref_count == 1
+
+
+def test_delete_file_final_blob_reference_deletes_blob_and_s3_object(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteFinalBlob",
+    )
+    calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: calls.append(object_key),
+    )
+    file_id = file.id
+    blob_hash = file.blob_hash
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    db.expire_all()
+    assert db.get(StoredFile, file_id) is None
+    assert db.get(FileBlob, blob_hash) is None
+    assert calls == [f"sha256/{blob_hash}"]
+
+
+def test_delete_file_s3_delete_failure_does_not_restore_file(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteS3Failure",
+    )
+
+    def fail_delete_object(*, object_key: str) -> None:
+        del object_key
+        raise RuntimeError("S3 unavailable")
+
+    monkeypatch.setattr("app.files.service.storage.delete_object", fail_delete_object)
+    file_id = file.id
+    blob_hash = file.blob_hash
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    db.expire_all()
+    assert db.get(StoredFile, file_id) is None
+    assert db.get(FileBlob, blob_hash) is None
+
+
 def test_share_file_lists_for_recipient_and_allows_download(
     client: TestClient,
     normal_user_token_headers: dict[str, str],

@@ -23,6 +23,7 @@ class MockS3Client:
         self.head_error = head_error
         self.presigned_calls: list[dict[str, Any]] = []
         self.head_calls: list[dict[str, Any]] = []
+        self.delete_calls: list[dict[str, Any]] = []
 
     def generate_presigned_url(self, **kwargs: Any) -> str:
         self.presigned_calls.append(kwargs)
@@ -33,6 +34,9 @@ class MockS3Client:
         if self.head_error:
             raise self.head_error
         return self.head_response
+
+    def delete_object(self, **kwargs: Any) -> None:
+        self.delete_calls.append(kwargs)
 
 
 def test_get_object_key_is_deterministic() -> None:
@@ -156,3 +160,17 @@ def test_stat_object_maps_missing_object(monkeypatch: pytest.MonkeyPatch) -> Non
 
     with pytest.raises(storage.ObjectNotFoundError):
         storage.stat_object(object_key="sha256/missing")
+
+
+def test_delete_object_uses_bucket_and_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = MockS3Client()
+    monkeypatch.setattr(storage, "get_s3_client", lambda: client)
+
+    storage.delete_object(object_key="sha256/abc")
+
+    assert client.delete_calls == [
+        {
+            "Bucket": settings.S3_BUCKET,
+            "Key": "sha256/abc",
+        }
+    ]

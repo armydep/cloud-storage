@@ -103,3 +103,10 @@ def stat_object(*, object_key: str) -> ObjectStat:
         size_bytes=response["ContentLength"],
         content_type=response.get("ContentType"),
     )
+
+
+def delete_object(*, object_key: str) -> None:
+    get_s3_client().delete_object(
+        Bucket=settings.S3_BUCKET,
+        Key=object_key,
+    )
