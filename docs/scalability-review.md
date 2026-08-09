@@ -233,12 +233,18 @@ user only to a blob that user demonstrably uploaded.
 | 9.1 | No rate limiting; presign endpoints issue object-storage write credentials on demand | — | Gap |
 | 9.2 | No storage quota enforcement | — | Tracked — *"Set per-user storage quotas"* |
 | 9.3 | One additional database query on every authenticated request (`session.get(User, ...)`) | `app/api/deps.py` | Gap |
-| 9.4 | No metrics or tracing; Sentry covers errors only, with no Prometheus or OpenTelemetry | — | Gap |
+| 9.4 | No metrics or tracing; Sentry covers errors only, with no Prometheus or OpenTelemetry | — | Resolved by #93 for metrics; tracing remains future work |
 | 9.5 | A single PostgreSQL instance serves both browse reads and upload writes; no read replica | `compose.yml` | Partial — *"Split the application into independently deployable services"* |
 | 9.6 | No resource limits or replica counts defined for services | `compose.yml` | Gap |
 
 9.4 is a force multiplier on everything above: without instrumentation, each of
 these limits is diagnosed only after it has already caused an outage.
+
+Update 2026-08-10: #93 adds Prometheus metrics for HTTP request rate/latency,
+database pool utilisation and checkout wait, and object-storage operation
+duration. Check `db_pool_checked_out_connections`,
+`db_pool_overflow_connections`, and `db_pool_checkout_wait_seconds` before
+acting on SCALE 2.1 / 2.2 connection-pool limits.
 
 ---
 
