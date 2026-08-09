@@ -38,6 +38,18 @@ updates:
       bun-minor-patch:
         patterns: ["*"]
         update-types: [minor, patch]
+  # Flutter/Dart
+  - package-ecosystem: pub
+    directory: /mobile
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ⬆
+    labels: [dependencies, internal]
+    groups:
+      pub-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
   # Docker
   - package-ecosystem: docker
     directories:

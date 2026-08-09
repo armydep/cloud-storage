@@ -8,12 +8,16 @@ on:
     types:
     - opened
     - synchronize
+    - reopened
   workflow_dispatch:
     inputs:
       debug_enabled:
         description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
         required: false
         default: 'false'
+
+permissions:
+  contents: read
 
 jobs:
   changes:
@@ -70,7 +74,9 @@ jobs:
     - run: docker compose down -v --remove-orphans
     - name: Run Playwright tests
       run: docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-failure --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
-    - run: docker compose down -v --remove-orphans
+    - name: Stop Docker Compose services
+      if: always()
+      run: docker compose down -v --remove-orphans
     - name: Upload blob report to GitHub Actions Artifacts
       if: ${{ !cancelled() }}
       uses: actions/upload-artifact@v6
