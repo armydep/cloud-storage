@@ -1,7 +1,16 @@
-export async function calculateSha256(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer()
-  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer)
-  const hashBytes = Array.from(new Uint8Array(hashBuffer))
+import { sha256 } from "js-sha256"
 
-  return hashBytes.map((byte) => byte.toString(16).padStart(2, "0")).join("")
+export async function calculateSha256(file: File): Promise<string> {
+  const chunkSize = 64 * 1024
+  let offset = 0
+  const hash = sha256.create()
+
+  while (offset < file.size) {
+    const chunk = file.slice(offset, offset + chunkSize)
+    const buffer = await chunk.arrayBuffer()
+    hash.update(new Uint8Array(buffer))
+    offset += chunkSize
+  }
+
+  return hash.hex()
 }
