@@ -7,10 +7,12 @@ class FileListItem extends StatelessWidget {
   final VoidCallback? onDownload;
   final VoidCallback? onCancel;
   final VoidCallback? onOpen;
+  final VoidCallback? onDelete;
   final double? downloadProgress;
   final String? downloadError;
   final double? uploadProgress;
   final String? uploadError;
+  final bool isDeleting;
 
   const FileListItem({
     required this.item,
@@ -18,10 +20,12 @@ class FileListItem extends StatelessWidget {
     this.onDownload,
     this.onCancel,
     this.onOpen,
+    this.onDelete,
     this.downloadProgress,
     this.downloadError,
     this.uploadProgress,
     this.uploadError,
+    this.isDeleting = false,
     super.key,
   });
 
@@ -37,7 +41,7 @@ class FileListItem extends StatelessWidget {
           title: Text(item.name),
           subtitle: _buildSubtitle(),
           onTap: onTap,
-          trailing: _buildTrailing(context),
+          trailing: _buildTrailing(),
         ),
         if (downloadProgress != null && downloadProgress! > 0)
           Positioned(
@@ -86,10 +90,34 @@ class FileListItem extends StatelessWidget {
     return null;
   }
 
-  Widget? _buildTrailing(BuildContext context) {
+  Widget? _buildTrailing() {
     if (item.isFolder) {
       return const Icon(Icons.chevron_right);
     }
+    if (isDeleting) {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    final primaryAction = _buildPrimaryFileAction();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (primaryAction != null) primaryAction,
+        IconButton(
+          key: Key('delete-file-${item.id}'),
+          icon: const Icon(Icons.delete_outline, color: Colors.red),
+          onPressed: onDelete,
+          tooltip: 'Delete file',
+        ),
+      ],
+    );
+  }
+
+  Widget? _buildPrimaryFileAction() {
     if (downloadProgress != null && downloadProgress! >= 1.0) {
       return IconButton(
         icon: const Icon(Icons.open_in_new),
@@ -97,7 +125,9 @@ class FileListItem extends StatelessWidget {
         tooltip: 'Open file',
       );
     }
-    if (downloadProgress != null && downloadProgress! > 0 && downloadProgress! < 1.0) {
+    if (downloadProgress != null &&
+        downloadProgress! > 0 &&
+        downloadProgress! < 1.0) {
       return IconButton(
         icon: const Icon(Icons.close),
         onPressed: onCancel,

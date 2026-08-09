@@ -81,6 +81,17 @@ class ApiClient {
     return _decodeObject(response);
   }
 
+  Future<void> delete(
+    String path, {
+    bool authenticated = false,
+  }) async {
+    final token = authenticated ? await _requiredToken() : null;
+    await _send(
+      () => _httpClient.delete(resolve(path), headers: _headers(token: token)),
+      authenticatedToken: token,
+    );
+  }
+
   Map<String, String> _headers({String? token}) {
     final headers = <String, String>{'Accept': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';

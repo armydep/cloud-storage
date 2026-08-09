@@ -3,35 +3,25 @@ import 'package:cloudestorage/features/files/data/files_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('FilesRepository.getDownloadUrl', () {
-    test('calls correct presign-download endpoint', () async {
+  group('FilesRepository.deleteFile', () {
+    test('calls expected authenticated delete endpoint', () async {
       final mockApiClient = _MockApiClient();
-      mockApiClient.nextResponse = {
-        'download_url': 'https://minio:9000/bucket/sha256/abc123',
-        'expires_in': 3600,
-      };
-
       final repository = FilesRepository(mockApiClient);
-      await repository.getDownloadUrl(fileId: 'file-123');
 
-      expect(
-        mockApiClient.lastPostPath,
-        '/api/v1/files/file-123/presign-download',
-      );
+      await repository.deleteFile(fileId: 'file-123');
+
+      expect(mockApiClient.lastDeletePath, '/api/v1/files/file-123');
+      expect(mockApiClient.lastDeleteAuthenticated, isTrue);
     });
 
-    test('returns DownloadUrlResponse on success (200)', () async {
+    test('completes successfully on 204', () async {
       final mockApiClient = _MockApiClient();
-      mockApiClient.nextResponse = {
-        'download_url': 'https://minio:9000/bucket/sha256/abc123',
-        'expires_in': 3600,
-      };
-
       final repository = FilesRepository(mockApiClient);
-      final result = await repository.getDownloadUrl(fileId: 'file-123');
 
-      expect(result.url, 'https://minio:9000/bucket/sha256/abc123');
-      expect(result.expiresInSeconds, 3600);
+      await expectLater(
+        repository.deleteFile(fileId: 'file-123'),
+        completes,
+      );
     });
 
     test('throws FileNotFoundError on 404', () async {
@@ -42,8 +32,9 @@ void main() {
       );
 
       final repository = FilesRepository(mockApiClient);
+
       expect(
-        () => repository.getDownloadUrl(fileId: 'file-nonexistent'),
+        () => repository.deleteFile(fileId: 'missing-file'),
         throwsA(isA<FileNotFoundError>()),
       );
     });
@@ -56,8 +47,9 @@ void main() {
       );
 
       final repository = FilesRepository(mockApiClient);
+
       expect(
-        () => repository.getDownloadUrl(fileId: 'file-123'),
+        () => repository.deleteFile(fileId: 'file-123'),
         throwsA(isA<ServerError>()),
       );
     });
@@ -70,8 +62,9 @@ void main() {
       );
 
       final repository = FilesRepository(mockApiClient);
+
       expect(
-        () => repository.getDownloadUrl(fileId: 'file-123'),
+        () => repository.deleteFile(fileId: 'file-123'),
         throwsA(isA<NetworkError>()),
       );
     });
@@ -79,16 +72,20 @@ void main() {
 }
 
 class _MockApiClient implements ApiClient {
-  Map<String, dynamic>? nextResponse;
   ApiException? nextException;
-  String? lastPostPath;
+  String? lastDeletePath;
+  bool? lastDeleteAuthenticated;
 
   @override
   Future<void> delete(
     String path, {
     bool authenticated = false,
   }) async {
-    throw UnimplementedError();
+    lastDeletePath = path;
+    lastDeleteAuthenticated = authenticated;
+    if (nextException != null) {
+      throw nextException!;
+    }
   }
 
   @override
@@ -97,10 +94,15 @@ class _MockApiClient implements ApiClient {
     bool authenticated = false,
     Map<String, String>? queryParameters,
   }) async {
-    if (nextException != null) {
-      throw nextException!;
-    }
-    return nextResponse ?? {};
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<Map<String, dynamic>> postForm(
+    String path, {
+    required Map<String, String> fields,
+  }) async {
+    throw UnimplementedError();
   }
 
   @override
@@ -109,18 +111,6 @@ class _MockApiClient implements ApiClient {
     bool authenticated = false,
     String? authenticationToken,
     Map<String, dynamic>? body,
-  }) async {
-    lastPostPath = path;
-    if (nextException != null) {
-      throw nextException!;
-    }
-    return nextResponse ?? {};
-  }
-
-  @override
-  Future<Map<String, dynamic>> postForm(
-    String path, {
-    required Map<String, String> fields,
   }) async {
     throw UnimplementedError();
   }

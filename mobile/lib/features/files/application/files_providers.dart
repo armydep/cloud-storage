@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cloudestorage/features/auth/application/auth_providers.dart';
 import 'package:cloudestorage/features/files/application/files_state.dart';
 import 'package:cloudestorage/features/files/data/files_repository.dart';
@@ -9,7 +11,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'dart:io';
 
 final filesRepositoryProvider = Provider<FilesRepository>((ref) {
   return FilesRepository(ref.watch(apiClientProvider));
@@ -48,20 +49,38 @@ class FilesController extends StateNotifier<FilesState> {
   FilesController(this._repository, this._ref) : super(const FilesState());
 
   Future<void> loadFolder(String path) async {
-    state = const FilesState.loading();
+    final currentPath = _ref.read(currentFolderPathProvider);
+    state = state.copyWith(
+      isLoading: true,
+      clearError: true,
+      clearFolder: currentPath != path,
+    );
     _ref.read(currentFolderPathProvider.notifier).state = path;
 
     try {
       final folder = await _repository.getFolder(path: path);
-      state = FilesState.loaded(folder);
+      state = state.copyWith(
+        isLoading: false,
+        folder: folder,
+        clearError: true,
+      );
     } on FolderNotFoundError catch (e) {
-      state = FilesState.error('Folder not found');
+      state = state.copyWith(isLoading: false, error: 'Folder not found');
     } on ServerError catch (e) {
-      state = FilesState.error('Server error. Please try again.');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Server error. Please try again.',
+      );
     } on NetworkError catch (e) {
-      state = FilesState.error('Network error. Please check your connection.');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'Network error. Please check your connection.',
+      );
     } catch (e) {
-      state = FilesState.error('An error occurred. Please try again.');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'An error occurred. Please try again.',
+      );
     }
   }
 
@@ -90,15 +109,28 @@ class FilesController extends StateNotifier<FilesState> {
 
     try {
       final urlResponse = await _repository.getDownloadUrl(fileId: fileId);
-      final filePath = await _downloadAndSaveFile(fileId, fileName, urlResponse.url);
+      final filePath = await _downloadAndSaveFile(
+        fileId,
+        fileName,
+        urlResponse.url,
+      );
       state = state.setDownloadedFilePath(fileId, filePath);
       state = state.updateDownloadProgress(fileId, 1.0);
     } on FileNotFoundError catch (e) {
-      state = state.setDownloadError(fileId, 'File not found or you do not have permission');
+      state = state.setDownloadError(
+        fileId,
+        'File not found or you do not have permission',
+      );
     } on ServerError catch (e) {
-      state = state.setDownloadError(fileId, 'File download failed. Please try again later.');
+      state = state.setDownloadError(
+        fileId,
+        'File download failed. Please try again later.',
+      );
     } on NetworkError catch (e) {
-      state = state.setDownloadError(fileId, 'Connection lost. Please check your network and try again.');
+      state = state.setDownloadError(
+        fileId,
+        'Connection lost. Please check your network and try again.',
+      );
     } catch (e) {
       // Log the actual error for debugging
       print('Download error for $fileId: $e');
@@ -106,7 +138,11 @@ class FilesController extends StateNotifier<FilesState> {
     }
   }
 
-  Future<String> _downloadAndSaveFile(String fileId, String fileName, String url) async {
+  Future<String> _downloadAndSaveFile(
+    String fileId,
+    String fileName,
+    String url,
+  ) async {
     try {
       final dio = Dio();
       final downloadsDir = await getDownloadsDirectory();
@@ -171,7 +207,10 @@ class FilesController extends StateNotifier<FilesState> {
     final filePath = result.path;
     final fileName = result.name;
     final fileSize = await result.length();
-    print('selectAndUploadFile: Selected file - name=$fileName, path=$filePath, size=$fileSize');
+    print(
+      'selectAndUploadFile: Selected file - name=$fileName, '
+      'path=$filePath, size=$fileSize',
+    );
 
     final validationError = validateFileName(fileName);
     if (validationError != null) {
@@ -208,7 +247,13 @@ class FilesController extends StateNotifier<FilesState> {
         sizeBytes: fileSize,
       );
 
-      await _uploadToPresignedUrl(fileName, file, mimeType, urlResponse.url);
+      if (urlResponse.uploadRequired) {
+        final uploadUrl = urlResponse.url;
+        if (uploadUrl == null || uploadUrl.isEmpty) {
+          throw ApiError('Upload URL was not provided');
+        }
+        await _uploadToPresignedUrl(fileName, file, mimeType, uploadUrl);
+      }
 
       await _repository.completeUpload(
         folderPath: currentPath,
@@ -228,9 +273,15 @@ class FilesController extends StateNotifier<FilesState> {
     } on FolderNotFoundError catch (e) {
       state = state.setUploadError(fileName, 'Folder not found');
     } on ServerError catch (e) {
-      state = state.setUploadError(fileName, 'Upload failed. Please try again later.');
+      state = state.setUploadError(
+        fileName,
+        'Upload failed. Please try again later.',
+      );
     } on NetworkError catch (e) {
-      state = state.setUploadError(fileName, 'Connection lost. Please check your network and try again.');
+      state = state.setUploadError(
+        fileName,
+        'Connection lost. Please check your network and try again.',
+      );
     } catch (e) {
       print('Upload error for $fileName: $e');
       state = state.setUploadError(fileName, 'Upload failed. Please try again.');
@@ -279,11 +330,14 @@ class FilesController extends StateNotifier<FilesState> {
       'pdf': 'application/pdf',
       'txt': 'text/plain',
       'doc': 'application/msword',
-      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'docx':
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       'xls': 'application/vnd.ms-excel',
-      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'xlsx':
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'ppt': 'application/vnd.ms-powerpoint',
-      'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'pptx':
+          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       'jpg': 'image/jpeg',
       'jpeg': 'image/jpeg',
       'png': 'image/png',
@@ -304,8 +358,12 @@ class FilesController extends StateNotifier<FilesState> {
     if (mimeType.startsWith('image/')) return 'image';
     if (mimeType.startsWith('video/')) return 'video';
     if (mimeType.startsWith('audio/')) return 'audio';
-    if (mimeType.contains('spreadsheet') || mimeType.contains('excel')) return 'spreadsheet';
-    if (mimeType.contains('zip') || mimeType.contains('rar') || mimeType.contains('7z')) {
+    if (mimeType.contains('spreadsheet') || mimeType.contains('excel')) {
+      return 'spreadsheet';
+    }
+    if (mimeType.contains('zip') ||
+        mimeType.contains('rar') ||
+        mimeType.contains('7z')) {
       return 'archive';
     }
     return 'document';
@@ -389,5 +447,39 @@ class FilesController extends StateNotifier<FilesState> {
         createError: 'An error occurred. Please try again.',
       );
     }
+  }
+
+  Future<bool> deleteFile(String fileId) async {
+    if (state.isDeleting(fileId)) {
+      return false;
+    }
+
+    state = state.clearDownloadState(fileId).startDeleting(fileId);
+
+    try {
+      await _repository.deleteFile(fileId: fileId);
+      await refresh();
+      state = state.finishDeleting(fileId);
+      return true;
+    } on FileNotFoundError catch (e) {
+      state = state.setDeleteError(
+        fileId,
+        'File not found or you do not have permission',
+      );
+    } on ServerError catch (e) {
+      state = state.setDeleteError(
+        fileId,
+        'File delete failed. Please try again later.',
+      );
+    } on NetworkError catch (e) {
+      state = state.setDeleteError(
+        fileId,
+        'Connection lost. Please check your network and try again.',
+      );
+    } catch (e) {
+      state = state.setDeleteError(fileId, 'Delete failed. Please try again.');
+    }
+
+    return false;
   }
 }

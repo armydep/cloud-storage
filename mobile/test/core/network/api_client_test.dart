@@ -81,6 +81,43 @@ void main() {
     );
   });
 
+  test('sends authenticated DELETE requests without decoding a body', () async {
+    final storage = FakeTokenStorage(token: 'secret-token');
+    final session = AuthSession(storage);
+    late http.Request capturedRequest;
+    final apiClient = ApiClient(
+      Uri.parse('https://example.com/'),
+      authSession: session,
+      httpClient: MockClient((request) async {
+        capturedRequest = request;
+        return http.Response('', 204);
+      }),
+    );
+
+    await apiClient.delete('/api/v1/files/file-123', authenticated: true);
+
+    expect(capturedRequest.method, 'DELETE');
+    expect(capturedRequest.url.path, '/api/v1/files/file-123');
+    expect(capturedRequest.headers['Authorization'], 'Bearer secret-token');
+  });
+
+  test('maps DELETE network failures to ApiException network errors', () async {
+    final apiClient = ApiClient(
+      Uri.parse('https://example.com/'),
+      httpClient: MockClient(
+        (_) async => throw const SocketException('private'),
+      ),
+    );
+
+    await expectLater(
+      apiClient.delete('/api/v1/files/file-123'),
+      throwsA(
+        isA<ApiException>()
+            .having((error) => error.isNetworkError, 'isNetworkError', isTrue),
+      ),
+    );
+  });
+
   test('missing authenticated token remains an authentication error', () async {
     final session = AuthSession(FakeTokenStorage());
     final apiClient = ApiClient(

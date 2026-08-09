@@ -15,6 +15,8 @@ class FilesState {
   final Map<String, double> uploadProgress;
   final Map<String, String?> uploadError;
   final Set<String> completedUploads;
+  final Set<String> deletingFiles;
+  final Map<String, String?> deleteError;
 
   const FilesState({
     this.isLoading = false,
@@ -29,6 +31,8 @@ class FilesState {
     this.uploadProgress = const {},
     this.uploadError = const {},
     this.completedUploads = const {},
+    this.deletingFiles = const {},
+    this.deleteError = const {},
   });
 
   const FilesState.loading() : this(isLoading: true);
@@ -51,11 +55,15 @@ class FilesState {
   String? getUploadError(String fileName) => uploadError[fileName];
   bool isUploading(String fileName) => uploadProgress.containsKey(fileName);
   bool isUploadComplete(String fileName) => completedUploads.contains(fileName);
+  bool isDeleting(String fileId) => deletingFiles.contains(fileId);
+  String? getDeleteError(String fileId) => deleteError[fileId];
 
   FilesState copyWith({
     bool? isLoading,
     FolderWithContents? folder,
+    bool clearFolder = false,
     String? error,
+    bool clearError = false,
     bool? isCreatingFolder,
     String? createError,
     bool clearCreateError = false,
@@ -66,11 +74,13 @@ class FilesState {
     Map<String, double>? uploadProgress,
     Map<String, String?>? uploadError,
     Set<String>? completedUploads,
+    Set<String>? deletingFiles,
+    Map<String, String?>? deleteError,
   }) {
     return FilesState(
       isLoading: isLoading ?? this.isLoading,
-      folder: folder ?? this.folder,
-      error: error ?? this.error,
+      folder: clearFolder ? null : (folder ?? this.folder),
+      error: clearError ? null : (error ?? this.error),
       isCreatingFolder: isCreatingFolder ?? this.isCreatingFolder,
       createError: clearCreateError ? null : (createError ?? this.createError),
       downloadProgress: downloadProgress ?? this.downloadProgress,
@@ -80,6 +90,8 @@ class FilesState {
       uploadProgress: uploadProgress ?? this.uploadProgress,
       uploadError: uploadError ?? this.uploadError,
       completedUploads: completedUploads ?? this.completedUploads,
+      deletingFiles: deletingFiles ?? this.deletingFiles,
+      deleteError: deleteError ?? this.deleteError,
     );
   }
 
@@ -165,5 +177,24 @@ class FilesState {
     final newError = Map<String, String?>.from(uploadError);
     newError.remove(fileName);
     return copyWith(uploadProgress: newProgress, uploadError: newError);
+  }
+
+  FilesState startDeleting(String fileId) {
+    final newDeleting = Set<String>.from(deletingFiles)..add(fileId);
+    final newError = Map<String, String?>.from(deleteError)..remove(fileId);
+    return copyWith(deletingFiles: newDeleting, deleteError: newError);
+  }
+
+  FilesState finishDeleting(String fileId) {
+    final newDeleting = Set<String>.from(deletingFiles)..remove(fileId);
+    final newError = Map<String, String?>.from(deleteError)..remove(fileId);
+    return copyWith(deletingFiles: newDeleting, deleteError: newError);
+  }
+
+  FilesState setDeleteError(String fileId, String error) {
+    final newDeleting = Set<String>.from(deletingFiles)..remove(fileId);
+    final newError = Map<String, String?>.from(deleteError);
+    newError[fileId] = error;
+    return copyWith(deletingFiles: newDeleting, deleteError: newError);
   }
 }

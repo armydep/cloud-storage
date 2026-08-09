@@ -107,6 +107,14 @@ class _MockApiClient implements ApiClient {
   Map<String, dynamic>? lastRequestBody;
 
   @override
+  Future<void> delete(
+    String path, {
+    bool authenticated = false,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<Map<String, dynamic>> postJson(
     String path, {
     bool authenticated = false,
