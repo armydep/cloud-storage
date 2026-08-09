@@ -14,7 +14,7 @@ const PendingFiles = () => (
       <TableRow>
         <TableHead>Name</TableHead>
         <TableHead>Type</TableHead>
-        <TableHead>Created at</TableHead>
+        <TableHead>Created</TableHead>
         <TableHead>Size</TableHead>
         <TableHead>ID</TableHead>
       </TableRow>

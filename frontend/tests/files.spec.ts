@@ -50,9 +50,10 @@ const documentsFolder = {
 }
 
 const formatTestDate = (value: string) =>
-  new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    new Date(value),
-  )
+  new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value))
 
 const emptyFolder = {
   id: "00000000-0000-0000-0000-000000000005",
@@ -103,11 +104,13 @@ test("Files page shows current path and upload button", async ({ page }) => {
   await expect(page.getByRole("button", { name: "New folder" })).toBeVisible()
 })
 
-test("Files table shows created-at instead of path/hash", async ({ page }) => {
+test("Files table shows created date and time instead of path/hash", async ({
+  page,
+}) => {
   await page.goto("/files")
 
   await expect(
-    page.getByRole("columnheader", { name: "Created at" }),
+    page.getByRole("columnheader", { name: "Created" }),
   ).toBeVisible()
   await expect(
     page.getByRole("columnheader", { name: "Path / Hash" }),

@@ -56,9 +56,10 @@ function formatDate(value?: string | null) {
     return "—"
   }
 
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-    date,
-  )
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date)
 }
 
 export function getColumns({
@@ -113,7 +114,7 @@ export function getColumns({
     },
     {
       accessorKey: "created_at",
-      header: "Created at",
+      header: "Created",
       cell: ({ row }) => (
         <span className="text-muted-foreground">
           {formatDate(row.original.created_at)}
