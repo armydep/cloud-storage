@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from app.core import storage
@@ -61,6 +62,45 @@ def test_sha256_hex_to_base64_encodes_digest_bytes() -> None:
         )
         == "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ="
     )
+
+
+def test_get_s3_client_reuses_configured_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    client = object()
+
+    def fake_boto3_client(*args: Any, **kwargs: Any) -> object:
+        calls.append((args, kwargs))
+        return client
+
+    storage.clear_s3_client_cache()
+    monkeypatch.setattr(storage.boto3, "client", fake_boto3_client)
+
+    try:
+        first_client = storage.get_s3_client()
+        second_client = storage.get_s3_client()
+    finally:
+        storage.clear_s3_client_cache()
+
+    assert first_client is client
+    assert second_client is client
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args == ("s3",)
+    assert kwargs["endpoint_url"] == settings.S3_ENDPOINT_URL
+    assert kwargs["aws_access_key_id"] == settings.S3_ACCESS_KEY
+    assert kwargs["aws_secret_access_key"] == settings.S3_SECRET_KEY
+    assert kwargs["region_name"] == settings.S3_REGION
+
+    config = kwargs["config"]
+    assert isinstance(config, Config)
+    assert config.connect_timeout == settings.S3_CONNECT_TIMEOUT_SECONDS
+    assert config.read_timeout == settings.S3_READ_TIMEOUT_SECONDS
+    assert config.retries == {
+        "max_attempts": settings.S3_MAX_ATTEMPTS,
+        "mode": "standard",
+    }
 
 
 def test_create_presigned_upload_url_uses_put_object_params(

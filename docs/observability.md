@@ -82,6 +82,11 @@ bottleneck. If checkout wait rises while checked-out and overflow connections
 are saturated, pool sizing, worker count, and PostgreSQL `max_connections`
 should be evaluated together.
 
+The pool sizing knobs are `BACKEND_WORKERS`, `DB_POOL_SIZE`,
+`DB_MAX_OVERFLOW`, `DB_POOL_RECYCLE_SECONDS`, and `DB_POOL_PRE_PING`. See
+[Backend Scaling Configuration](backend-scaling.md) for connection math before
+changing them.
+
 ## Tracing
 
 Sentry still handles error reporting. OpenTelemetry tracing is intentionally not

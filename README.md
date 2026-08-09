@@ -8,6 +8,7 @@ Feature designs:
 - [File sharing with specific users](docs/phases/phase-4-file-sharing.md)
 - [Delete files with deduplicated blob storage](docs/phases/phase-6-delete-file.md)
 - [Delete folders recursively](docs/phases/phase-7-delete-folder.md)
+- [Backend scaling configuration](docs/backend-scaling.md)
 
 ## Phase 1 scope
 
