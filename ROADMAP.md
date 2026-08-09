@@ -32,6 +32,8 @@ Keep development and delivery reliable while product capabilities expand.
 - [ ] **2.3** Add automated coverage for new file and folder operations
 - [ ] **2.4** Define validation, conflict, and error-handling conventions
 - [ ] **2.5** Enable TLS for all production-facing endpoints
+- [ ] **2.6** Verify upload hashes with S3-side checksums
+      ([#91](https://github.com/armydep/cloude-file-storage/issues/91))
 
 ## 3. Next phase: File experience
 

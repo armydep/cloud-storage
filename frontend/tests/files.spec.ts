@@ -64,6 +64,10 @@ for (let index = 0; index < multiChunkUploadBuffer.length; index += 1) {
 const multiChunkUploadHash = createHash("sha256")
   .update(multiChunkUploadBuffer)
   .digest("hex")
+const multiChunkUploadChecksum = Buffer.from(
+  multiChunkUploadHash,
+  "hex",
+).toString("base64")
 
 const emptyFolder = {
   id: "00000000-0000-0000-0000-000000000005",
@@ -384,6 +388,9 @@ test("Upload performs direct object upload when presign requires it", async ({
   await page.route("**/object-upload-target", async (route) => {
     putCount += 1
     expect(route.request().method()).toBe("PUT")
+    expect(route.request().headers()["x-amz-checksum-sha256"]).toBe(
+      multiChunkUploadChecksum,
+    )
     await route.fulfill({ status: 200 })
   })
   await page.route("**/api/v1/files/complete-upload", async (route) => {

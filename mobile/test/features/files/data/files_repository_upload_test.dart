@@ -9,6 +9,10 @@ void main() {
       mockApiClient.nextResponse = {
         'upload_url': 'https://minio:9000/bucket/sha256/abc123',
         'method': 'PUT',
+        'headers': {
+          'Content-Type': 'application/pdf',
+          'x-amz-checksum-sha256': 'checksum-base64',
+        },
         'expires_in': 3600,
       };
 
@@ -30,6 +34,10 @@ void main() {
       mockApiClient.nextResponse = {
         'upload_url': 'https://minio:9000/bucket/sha256/abc123',
         'method': 'PUT',
+        'headers': {
+          'Content-Type': 'application/pdf',
+          'x-amz-checksum-sha256': 'checksum-base64',
+        },
         'expires_in': 3600,
       };
 
@@ -45,6 +53,10 @@ void main() {
 
       expect(result.url, 'https://minio:9000/bucket/sha256/abc123');
       expect(result.method, 'PUT');
+      expect(result.headers, {
+        'Content-Type': 'application/pdf',
+        'x-amz-checksum-sha256': 'checksum-base64',
+      });
       expect(result.uploadRequired, isTrue);
       expect(result.expiresInSeconds, 3600);
     });

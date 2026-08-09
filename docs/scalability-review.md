@@ -126,6 +126,11 @@ hot path of every upload and download.
 Presigned URL *generation* is local HMAC work and requires no network call, so
 that part is already efficient; 3.2 concerns the separate existence check.
 
+Update 2026-08-09: #91 removes the larger upload-completion asymmetry that was
+found after this review. `complete_upload` no longer streams the object back
+through the API to recompute SHA-256; object storage enforces the checksum on
+PUT and completion reads checksum metadata with a constant-time HEAD request.
+
 ---
 
 # Tier 2 — surfaces as data volume grows
@@ -171,13 +176,14 @@ exercise it.
 
 | # | Finding | Evidence | Roadmap |
 | --- | --- | --- | --- |
-| 7.1 | `await file.arrayBuffer()` loads the entire file into browser memory before hashing | `frontend/src/features/files/fileHash.ts:2` | Gap |
+| 7.1 | `await file.arrayBuffer()` loads the entire file into browser memory before hashing | `frontend/src/features/files/fileHash.ts:2` | Resolved by #90 |
 | 7.2 | Hashing is fully serial: it must complete before the upload begins | `frontend/src/features/files/fileTransfer.ts:26` and `:34` | Gap |
 | 7.3 | A single `PUT` means no resumability, no parallel parts, and a hard single-request size ceiling | `frontend/src/features/files/fileTransfer.ts:34` | Tracked — *"Support resumable uploads"*, *"Support resumable downloads"* |
 | 7.4 | No server-side maximum file size; the schema only requires `size_bytes > 0` | `app/files/schemas.py:30` | Tracked — *"Enforce a maximum file size"* |
 
-7.1 and 7.2 are the reason large uploads fail in the browser before they ever
-reach object storage, and they are not covered by the resumable-upload entries.
+7.1 was resolved by chunked browser hashing in #90. 7.2 remains: hashing still
+completes before upload begins, and that is not covered by the resumable-upload
+entries.
 
 ---
 

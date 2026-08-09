@@ -1,4 +1,4 @@
-import hashlib
+import base64
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
@@ -17,6 +17,7 @@ class ObjectNotFoundError(Exception):
 class ObjectStat:
     size_bytes: int
     content_type: str | None = None
+    checksum_sha256: str | None = None
 
 
 def get_object_key(blob_hash: str) -> str:
@@ -25,6 +26,10 @@ def get_object_key(blob_hash: str) -> str:
 
 def get_pending_upload_object_key(*, owner_id: Any, upload_id: Any) -> str:
     return f"uploads/{owner_id}/{upload_id}"
+
+
+def sha256_hex_to_base64(blob_hash: str) -> str:
+    return base64.b64encode(bytes.fromhex(blob_hash)).decode("ascii")
 
 
 def get_s3_client() -> Any:
@@ -55,6 +60,7 @@ def create_presigned_upload_url(
     *,
     object_key: str,
     mime_type: str,
+    checksum_sha256: str,
     expires_in: int | None = None,
 ) -> str:
     url = get_s3_client().generate_presigned_url(
@@ -63,6 +69,7 @@ def create_presigned_upload_url(
             "Bucket": settings.S3_BUCKET,
             "Key": object_key,
             "ContentType": mime_type,
+            "ChecksumSHA256": checksum_sha256,
         },
         ExpiresIn=_get_expires_in(expires_in),
     )
@@ -92,12 +99,16 @@ def create_presigned_download_url(
     return _rewrite_public_url(url)
 
 
-def stat_object(*, object_key: str) -> ObjectStat:
+def stat_object(*, object_key: str, include_checksum: bool = False) -> ObjectStat:
+    params = {
+        "Bucket": settings.S3_BUCKET,
+        "Key": object_key,
+    }
+    if include_checksum:
+        params["ChecksumMode"] = "ENABLED"
+
     try:
-        response = get_s3_client().head_object(
-            Bucket=settings.S3_BUCKET,
-            Key=object_key,
-        )
+        response = get_s3_client().head_object(**params)
     except ClientError as exc:
         error_code = exc.response.get("Error", {}).get("Code")
         if error_code in {"404", "NoSuchKey", "NotFound"}:
@@ -107,24 +118,8 @@ def stat_object(*, object_key: str) -> ObjectStat:
     return ObjectStat(
         size_bytes=response["ContentLength"],
         content_type=response.get("ContentType"),
+        checksum_sha256=response.get("ChecksumSHA256"),
     )
-
-
-def calculate_object_sha256(*, object_key: str) -> str:
-    response = get_s3_client().get_object(
-        Bucket=settings.S3_BUCKET,
-        Key=object_key,
-    )
-    digest = hashlib.sha256()
-    body = response["Body"]
-    try:
-        for chunk in iter(lambda: body.read(1024 * 1024), b""):
-            digest.update(chunk)
-    finally:
-        close = getattr(body, "close", None)
-        if close:
-            close()
-    return digest.hexdigest()
 
 
 def copy_object(*, source_object_key: str, destination_object_key: str) -> None:

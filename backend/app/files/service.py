@@ -219,6 +219,7 @@ def create_presigned_upload(
     upload_url = storage.create_presigned_upload_url(
         object_key=object_key,
         mime_type=request.mime_type,
+        checksum_sha256=storage.sha256_hex_to_base64(request.blob_hash),
     )
     repository.create_pending_upload(
         session=session,
@@ -236,7 +237,10 @@ def create_presigned_upload(
     return PresignUploadResponse(
         upload_required=True,
         upload_url=upload_url,
-        headers={"Content-Type": request.mime_type},
+        headers={
+            "Content-Type": request.mime_type,
+            "x-amz-checksum-sha256": storage.sha256_hex_to_base64(request.blob_hash),
+        },
         object_key=object_key,
         expires_in=settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
     )
@@ -303,7 +307,10 @@ def complete_upload(
             raise ObjectContentTypeMismatchError
 
         try:
-            object_stat = storage.stat_object(object_key=pending_upload.object_key)
+            object_stat = storage.stat_object(
+                object_key=pending_upload.object_key,
+                include_checksum=True,
+            )
         except storage.ObjectNotFoundError:
             raise ObjectNotUploadedError
 
@@ -313,10 +320,8 @@ def complete_upload(
         if object_stat.content_type and object_stat.content_type != request.mime_type:
             raise ObjectContentTypeMismatchError
 
-        object_hash = storage.calculate_object_sha256(
-            object_key=pending_upload.object_key,
-        )
-        if object_hash != request.blob_hash:
+        expected_checksum = storage.sha256_hex_to_base64(request.blob_hash)
+        if object_stat.checksum_sha256 != expected_checksum:
             raise ObjectHashMismatchError
 
     if blob is None:

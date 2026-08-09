@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 from app import crud
 from app.core.config import settings
 from app.core.db import engine
-from app.core.storage import ObjectNotFoundError, ObjectStat
+from app.core.storage import ObjectNotFoundError, ObjectStat, sha256_hex_to_base64
 from app.files.models import (
     FileBlob,
     FileBlobClaim,
@@ -430,8 +430,16 @@ def test_presign_upload_succeeds_for_owned_folder(
     )
     calls = []
 
-    def mock_create_presigned_upload_url(*, object_key: str, mime_type: str) -> str:
-        calls.append({"object_key": object_key, "mime_type": mime_type})
+    def mock_create_presigned_upload_url(
+        *, object_key: str, mime_type: str, checksum_sha256: str
+    ) -> str:
+        calls.append(
+            {
+                "object_key": object_key,
+                "mime_type": mime_type,
+                "checksum_sha256": checksum_sha256,
+            }
+        )
         return "http://localhost:9000/cloud-file-storage/sha256/upload?sig=1"
 
     monkeypatch.setattr(
@@ -459,13 +467,17 @@ def test_presign_upload_succeeds_for_owned_folder(
         "http://localhost:9000/cloud-file-storage/sha256/upload?sig=1"
     )
     assert content["method"] == "PUT"
-    assert content["headers"] == {"Content-Type": "application/pdf"}
+    assert content["headers"] == {
+        "Content-Type": "application/pdf",
+        "x-amz-checksum-sha256": sha256_hex_to_base64("a" * 64),
+    }
     assert content["object_key"].startswith(f"uploads/{folder.owner_id}/")
     assert content["expires_in"] == settings.S3_PRESIGNED_URL_EXPIRES_SECONDS
     assert calls == [
         {
             "object_key": content["object_key"],
             "mime_type": "application/pdf",
+            "checksum_sha256": sha256_hex_to_base64("a" * 64),
         }
     ]
 
@@ -493,8 +505,10 @@ def test_presign_upload_existing_blob_with_claim_skips_upload(
     db.commit()
     _create_blob_claim(db=db, owner_id=folder.owner_id, blob_hash=blob_hash)
 
-    def fail_create_presigned_upload_url(*, object_key: str, mime_type: str) -> str:
-        del object_key, mime_type
+    def fail_create_presigned_upload_url(
+        *, object_key: str, mime_type: str, checksum_sha256: str
+    ) -> str:
+        del object_key, mime_type, checksum_sha256
         raise AssertionError("existing blobs must not receive a PUT URL")
 
     monkeypatch.setattr(
@@ -559,7 +573,9 @@ def test_presign_upload_existing_blob_without_claim_requires_upload(
 
     monkeypatch.setattr(
         "app.files.service.storage.create_presigned_upload_url",
-        lambda *, object_key, mime_type: "http://localhost:9000/upload",
+        lambda *, object_key, mime_type, checksum_sha256: (
+            "http://localhost:9000/upload"
+        ),
     )
 
     response = client.post(
@@ -596,7 +612,9 @@ def test_presign_upload_does_not_insert_file(
     files_before = len(db.exec(select(StoredFile)).all())
     monkeypatch.setattr(
         "app.files.service.storage.create_presigned_upload_url",
-        lambda *, object_key, mime_type: "http://localhost:9000/upload",
+        lambda *, object_key, mime_type, checksum_sha256: (
+            "http://localhost:9000/upload"
+        ),
     )
 
     response = client.post(
@@ -722,14 +740,11 @@ def test_complete_upload_succeeds_for_owned_folder(
     )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(
+        lambda *, object_key, include_checksum=False: ObjectStat(
             size_bytes=123,
             content_type="application/pdf",
+            checksum_sha256=sha256_hex_to_base64(blob_hash),
         ),
-    )
-    monkeypatch.setattr(
-        "app.files.service.storage.calculate_object_sha256",
-        lambda *, object_key: blob_hash,
     )
     copy_calls = []
     monkeypatch.setattr(
@@ -819,8 +834,10 @@ def test_complete_upload_existing_blob_increments_ref_count(
     db.commit()
     _create_blob_claim(db=db, owner_id=folder.owner_id, blob_hash=blob_hash)
 
-    def fail_stat_object(*, object_key: str) -> ObjectStat:
-        del object_key
+    def fail_stat_object(
+        *, object_key: str, include_checksum: bool = False
+    ) -> ObjectStat:
+        del object_key, include_checksum
         raise AssertionError("existing blobs should not require object stat")
 
     monkeypatch.setattr("app.files.service.storage.stat_object", fail_stat_object)
@@ -934,13 +951,11 @@ def test_complete_upload_existing_blob_without_claim_accepts_verified_pending_up
     pending_upload_id = pending_upload.id
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(
-            size_bytes=123, content_type="application/pdf"
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=123,
+            content_type="application/pdf",
+            checksum_sha256=sha256_hex_to_base64(blob_hash),
         ),
-    )
-    monkeypatch.setattr(
-        "app.files.service.storage.calculate_object_sha256",
-        lambda *, object_key: blob_hash,
     )
     copy_calls = []
     monkeypatch.setattr(
@@ -1003,11 +1018,10 @@ def test_complete_upload_recovers_when_concurrent_request_creates_blob(
     )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(size_bytes=123),
-    )
-    monkeypatch.setattr(
-        "app.files.service.storage.calculate_object_sha256",
-        lambda *, object_key: blob_hash,
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=123,
+            checksum_sha256=sha256_hex_to_base64(blob_hash),
+        ),
     )
     monkeypatch.setattr(
         "app.files.service.storage.copy_object",
@@ -1130,11 +1144,10 @@ def test_complete_upload_file_appears_in_folder_listing(
     )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(size_bytes=456),
-    )
-    monkeypatch.setattr(
-        "app.files.service.storage.calculate_object_sha256",
-        lambda *, object_key: blob_hash,
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=456,
+            checksum_sha256=sha256_hex_to_base64(blob_hash),
+        ),
     )
     monkeypatch.setattr(
         "app.files.service.storage.copy_object",
@@ -1208,8 +1221,10 @@ def test_complete_upload_missing_object_returns_400(
         blob_hash="3" * 64,
     )
 
-    def mock_stat_object(*, object_key: str) -> ObjectStat:
-        del object_key
+    def mock_stat_object(
+        *, object_key: str, include_checksum: bool = False
+    ) -> ObjectStat:
+        del object_key, include_checksum
         raise ObjectNotFoundError
 
     monkeypatch.setattr("app.files.service.storage.stat_object", mock_stat_object)
@@ -1250,7 +1265,10 @@ def test_complete_upload_size_mismatch_returns_400(
     )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(size_bytes=999),
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=999,
+            checksum_sha256=sha256_hex_to_base64("4" * 64),
+        ),
     )
 
     response = client.post(
@@ -1289,7 +1307,11 @@ def test_complete_upload_content_type_mismatch_returns_400(
     )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(size_bytes=123, content_type="text/plain"),
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=123,
+            content_type="text/plain",
+            checksum_sha256=sha256_hex_to_base64("5" * 64),
+        ),
     )
 
     response = client.post(
@@ -1329,13 +1351,11 @@ def test_complete_upload_hash_mismatch_returns_400(
     )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(
-            size_bytes=123, content_type="application/pdf"
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=123,
+            content_type="application/pdf",
+            checksum_sha256=sha256_hex_to_base64("a" * 64),
         ),
-    )
-    monkeypatch.setattr(
-        "app.files.service.storage.calculate_object_sha256",
-        lambda *, object_key: "a" * 64,
     )
 
     response = client.post(
@@ -1389,7 +1409,10 @@ def test_complete_upload_duplicate_filename_returns_409(
     db.commit()
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(size_bytes=123),
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=123,
+            checksum_sha256=sha256_hex_to_base64("7" * 64),
+        ),
     )
 
     response = client.post(
@@ -1482,11 +1505,10 @@ def test_complete_upload_repository_duplicate_conflict_returns_409(
     )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
-        lambda *, object_key: ObjectStat(size_bytes=123),
-    )
-    monkeypatch.setattr(
-        "app.files.service.storage.calculate_object_sha256",
-        lambda *, object_key: blob_hash,
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=123,
+            checksum_sha256=sha256_hex_to_base64(blob_hash),
+        ),
     )
     monkeypatch.setattr(
         "app.files.service.storage.copy_object",
