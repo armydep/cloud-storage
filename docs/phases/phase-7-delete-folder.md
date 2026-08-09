@@ -96,7 +96,7 @@ GitHub issue: [#72](https://github.com/armydep/cloude-file-storage/issues/72)
 
 Depends on Slice 1.
 
-Status: Planned.
+Status: In progress on branch `feature/phase-7-mobile-delete-folder`.
 
 - Add repository/controller delete support.
 - Expose Delete for folder rows.

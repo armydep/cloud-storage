@@ -36,10 +36,7 @@ class FilesRepository {
       final json = await apiClient.postJson(
         '/api/v1/files/folders',
         authenticated: true,
-        body: {
-          'parent_path': parentPath,
-          'name': name,
-        },
+        body: {'parent_path': parentPath, 'name': name},
       );
 
       return FileContent.fromJson({...json, 'type': 'folder'});
@@ -171,15 +168,35 @@ class FilesRepository {
 
   Future<void> deleteFile({required String fileId}) async {
     try {
-      await apiClient.delete(
-        '/api/v1/files/$fileId',
-        authenticated: true,
-      );
+      await apiClient.delete('/api/v1/files/$fileId', authenticated: true);
     } on ApiException catch (e) {
       if (e.statusCode == 404) {
         throw FileNotFoundError('File not found or you do not have permission');
       } else if (e.statusCode != null && e.statusCode! >= 500) {
         throw ServerError('File delete failed. Please try again later.');
+      } else if (e.isNetworkError) {
+        throw NetworkError(
+          'Connection lost. Please check your network and try again.',
+        );
+      } else {
+        throw ApiError(e.message);
+      }
+    }
+  }
+
+  Future<void> deleteFolder({required String folderId}) async {
+    try {
+      await apiClient.delete(
+        '/api/v1/files/folders/$folderId',
+        authenticated: true,
+      );
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        throw FolderNotFoundError(
+          'Folder not found or you do not have permission',
+        );
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError('Folder delete failed. Please try again later.');
       } else if (e.isNetworkError) {
         throw NetworkError(
           'Connection lost. Please check your network and try again.',
@@ -251,10 +268,7 @@ class DownloadUrlResponse {
   final String url;
   final int expiresInSeconds;
 
-  DownloadUrlResponse({
-    required this.url,
-    required this.expiresInSeconds,
-  });
+  DownloadUrlResponse({required this.url, required this.expiresInSeconds});
 
   factory DownloadUrlResponse.fromJson(Map<String, dynamic> json) {
     return DownloadUrlResponse(

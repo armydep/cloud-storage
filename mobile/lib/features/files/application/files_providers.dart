@@ -20,9 +20,9 @@ final currentFolderPathProvider = StateProvider<String>((ref) => 'root');
 
 final folderContentsProvider =
     FutureProvider.family<FolderWithContents, String>((ref, path) async {
-  final repository = ref.watch(filesRepositoryProvider);
-  return repository.getFolder(path: path);
-});
+      final repository = ref.watch(filesRepositoryProvider);
+      return repository.getFolder(path: path);
+    });
 
 final currentFolderContentsProvider = FutureProvider<FolderWithContents>((ref) {
   final currentPath = ref.watch(currentFolderPathProvider);
@@ -31,11 +31,8 @@ final currentFolderContentsProvider = FutureProvider<FolderWithContents>((ref) {
 
 final filesControllerProvider =
     StateNotifierProvider<FilesController, FilesState>((ref) {
-  return FilesController(
-    ref.watch(filesRepositoryProvider),
-    ref,
-  );
-});
+      return FilesController(ref.watch(filesRepositoryProvider), ref);
+    });
 
 class FilesController extends StateNotifier<FilesState> {
   final FilesRepository _repository;
@@ -134,7 +131,10 @@ class FilesController extends StateNotifier<FilesState> {
     } catch (e) {
       // Log the actual error for debugging
       print('Download error for $fileId: $e');
-      state = state.setDownloadError(fileId, 'Download failed. Please try again.');
+      state = state.setDownloadError(
+        fileId,
+        'Download failed. Please try again.',
+      );
     }
   }
 
@@ -192,10 +192,7 @@ class FilesController extends StateNotifier<FilesState> {
     print('selectAndUploadFile: Opening file picker');
     final result = await openFile(
       acceptedTypeGroups: <XTypeGroup>[
-        XTypeGroup(
-          label: 'All files',
-          extensions: <String>['*'],
-        ),
+        XTypeGroup(label: 'All files', extensions: <String>['*']),
       ],
     );
     print('selectAndUploadFile: File picker result = $result');
@@ -284,7 +281,10 @@ class FilesController extends StateNotifier<FilesState> {
       );
     } catch (e) {
       print('Upload error for $fileName: $e');
-      state = state.setUploadError(fileName, 'Upload failed. Please try again.');
+      state = state.setUploadError(
+        fileName,
+        'Upload failed. Please try again.',
+      );
     }
   }
 
@@ -305,9 +305,7 @@ class FilesController extends StateNotifier<FilesState> {
       await dio.put(
         url,
         data: fileBytes,
-        options: Options(
-          contentType: mimeType,
-        ),
+        options: Options(contentType: mimeType),
         onSendProgress: (count, total) {
           if (total > 0) {
             state = state.updateUploadProgress(fileName, count / total);
@@ -318,7 +316,9 @@ class FilesController extends StateNotifier<FilesState> {
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.unknown) {
-        throw NetworkError('Connection lost. Please check your network and try again.');
+        throw NetworkError(
+          'Connection lost. Please check your network and try again.',
+        );
       }
       rethrow;
     }
@@ -410,10 +410,7 @@ class FilesController extends StateNotifier<FilesState> {
 
     try {
       final currentPath = _ref.read(currentFolderPathProvider);
-      await _repository.createFolder(
-        parentPath: currentPath,
-        name: name,
-      );
+      await _repository.createFolder(parentPath: currentPath, name: name);
       await refresh();
       state = state.copyWith(isCreatingFolder: false, clearCreateError: true);
     } on DuplicateFolderNameError catch (e) {
@@ -439,7 +436,8 @@ class FilesController extends StateNotifier<FilesState> {
     } on NetworkError catch (e) {
       state = state.copyWith(
         isCreatingFolder: false,
-        createError: 'Connection lost. Please check your network and try again.',
+        createError:
+            'Connection lost. Please check your network and try again.',
       );
     } catch (e) {
       state = state.copyWith(
@@ -478,6 +476,43 @@ class FilesController extends StateNotifier<FilesState> {
       );
     } catch (e) {
       state = state.setDeleteError(fileId, 'Delete failed. Please try again.');
+    }
+
+    return false;
+  }
+
+  Future<bool> deleteFolder(String folderId) async {
+    if (state.isDeleting(folderId)) {
+      return false;
+    }
+
+    state = state.startDeleting(folderId);
+
+    try {
+      await _repository.deleteFolder(folderId: folderId);
+      await refresh();
+      state = state.finishDeleting(folderId);
+      return true;
+    } on FolderNotFoundError {
+      state = state.setDeleteError(
+        folderId,
+        'Folder not found or you do not have permission',
+      );
+    } on ServerError {
+      state = state.setDeleteError(
+        folderId,
+        'Folder delete failed. Please try again later.',
+      );
+    } on NetworkError {
+      state = state.setDeleteError(
+        folderId,
+        'Connection lost. Please check your network and try again.',
+      );
+    } catch (e) {
+      state = state.setDeleteError(
+        folderId,
+        'Delete failed. Please try again.',
+      );
     }
 
     return false;

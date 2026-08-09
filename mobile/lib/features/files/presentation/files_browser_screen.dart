@@ -39,12 +39,15 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
     final controller = ref.read(filesControllerProvider.notifier);
 
     ref.listen(filesControllerProvider, (previous, next) {
-      if (previous?.isCreatingFolder == true && next.isCreatingFolder == false) {
+      if (previous?.isCreatingFolder == true &&
+          next.isCreatingFolder == false) {
         if (next.createError == null) {
           _dialogKey?.currentState?.closeDialog();
         } else {
-          _dialogKey?.currentState
-              ?.updateState(error: next.createError, isLoading: false);
+          _dialogKey?.currentState?.updateState(
+            error: next.createError,
+            isLoading: false,
+          );
         }
       }
     });
@@ -87,10 +90,7 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
     );
   }
 
-  void _handleUploadFile(
-    BuildContext context,
-    FilesController controller,
-  ) {
+  void _handleUploadFile(BuildContext context, FilesController controller) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -108,9 +108,9 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
                 if (context.mounted) Navigator.pop(context);
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Upload error: $e')),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text('Upload error: $e')));
                 }
               }
             },
@@ -138,10 +138,7 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
     );
   }
 
-  Widget _buildBody(
-    FilesState state,
-    FilesController controller,
-  ) {
+  Widget _buildBody(FilesState state, FilesController controller) {
     if (state.isLoading && state.folder == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -174,17 +171,13 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.folder_open,
-                size: 64,
-                color: Colors.grey[400],
-              ),
+              Icon(Icons.folder_open, size: 64, color: Colors.grey[400]),
               const SizedBox(height: 16),
               Text(
                 'This folder is empty',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(color: Colors.grey[600]),
               ),
             ],
           ),
@@ -198,11 +191,7 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Colors.red[300],
-          ),
+          Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
           const SizedBox(height: 16),
           Text(
             error,
@@ -257,14 +246,18 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
                   : null,
               onDelete: item.isFile
                   ? () => _confirmDeleteFile(context, controller, item)
+                  : () => _confirmDeleteFolder(context, controller, item),
+              downloadProgress: item.isFile
+                  ? state.getDownloadProgress(item.id)
                   : null,
-              downloadProgress:
-                  item.isFile ? state.getDownloadProgress(item.id) : null,
-              downloadError: item.isFile ? state.getDownloadError(item.id) : null,
-              uploadProgress:
-                  item.isFile ? state.getUploadProgress(item.name) : null,
+              downloadError: item.isFile
+                  ? state.getDownloadError(item.id)
+                  : null,
+              uploadProgress: item.isFile
+                  ? state.getUploadProgress(item.name)
+                  : null,
               uploadError: item.isFile ? state.getUploadError(item.name) : null,
-              isDeleting: item.isFile && state.isDeleting(item.id),
+              isDeleting: state.isDeleting(item.id),
             ),
           );
         },
@@ -275,9 +268,7 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
   void _showFileDetail(BuildContext context, FileContent file) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => FileDetailScreen(file: file),
-      ),
+      MaterialPageRoute(builder: (context) => FileDetailScreen(file: file)),
     );
   }
 
@@ -323,11 +314,63 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
         const SnackBar(content: Text('File deleted successfully')),
       );
     } else {
-      final error = ref.read(filesControllerProvider).getDeleteError(file.id) ??
+      final error =
+          ref.read(filesControllerProvider).getDeleteError(file.id) ??
           'Delete failed. Please try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
+  Future<void> _confirmDeleteFolder(
+    BuildContext context,
+    FilesController controller,
+    FileContent folder,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete folder'),
+        content: Text(
+          '${folder.name} and all files and folders inside it will be permanently deleted. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    final deleted = await controller.deleteFolder(folder.id);
+    if (!context.mounted) {
+      return;
+    }
+    if (deleted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error)),
+        const SnackBar(content: Text('Folder deleted successfully')),
       );
+    } else {
+      final error =
+          ref.read(filesControllerProvider).getDeleteError(folder.id) ??
+          'Delete failed. Please try again.';
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
     }
   }
 }
@@ -335,14 +378,11 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
 class _CreateFolderDialogWidget extends StatefulWidget {
   final void Function(String name) onCreateFolder;
 
-  const _CreateFolderDialogWidget({
-    Key? key,
-    required this.onCreateFolder,
-  }) : super(key: key);
+  const _CreateFolderDialogWidget({Key? key, required this.onCreateFolder})
+    : super(key: key);
 
   @override
-  State<_CreateFolderDialogWidget> createState() =>
-      _CreateFolderDialogState();
+  State<_CreateFolderDialogWidget> createState() => _CreateFolderDialogState();
 }
 
 class _CreateFolderDialogState extends State<_CreateFolderDialogWidget> {

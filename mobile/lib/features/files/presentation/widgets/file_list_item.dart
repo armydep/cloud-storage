@@ -91,14 +91,25 @@ class FileListItem extends StatelessWidget {
   }
 
   Widget? _buildTrailing() {
-    if (item.isFolder) {
-      return const Icon(Icons.chevron_right);
-    }
     if (isDeleting) {
       return const SizedBox(
         width: 24,
         height: 24,
         child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    if (item.isFolder) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            key: Key('delete-folder-${item.id}'),
+            icon: const Icon(Icons.delete_outline, color: Colors.red),
+            onPressed: onDelete,
+            tooltip: 'Delete folder',
+          ),
+          const Icon(Icons.chevron_right),
+        ],
       );
     }
 
