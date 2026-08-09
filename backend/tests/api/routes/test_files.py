@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +9,7 @@ from app import crud
 from app.core.config import settings
 from app.core.db import engine
 from app.core.storage import ObjectNotFoundError, ObjectStat
-from app.files.models import FileBlob, Folder, StoredFile
+from app.files.models import FileBlob, FileBlobClaim, Folder, PendingUpload, StoredFile
 from app.models import UserCreate
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import random_email
@@ -373,6 +374,41 @@ def _create_unique_folder(
     return folder
 
 
+def _create_blob_claim(
+    *, db: Session, owner_id: uuid.UUID, blob_hash: str
+) -> FileBlobClaim:
+    claim = FileBlobClaim(owner_id=owner_id, blob_hash=blob_hash)
+    db.add(claim)
+    db.commit()
+    db.refresh(claim)
+    return claim
+
+
+def _create_pending_upload(
+    *,
+    db: Session,
+    owner_id: uuid.UUID,
+    blob_hash: str,
+    object_key: str | None = None,
+    size_bytes: int = 123,
+    mime_type: str = "application/pdf",
+) -> PendingUpload:
+    upload_id = uuid.uuid4()
+    pending_upload = PendingUpload(
+        id=upload_id,
+        owner_id=owner_id,
+        blob_hash=blob_hash,
+        object_key=object_key or f"uploads/{owner_id}/{upload_id}",
+        size_bytes=size_bytes,
+        mime_type=mime_type,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+    )
+    db.add(pending_upload)
+    db.commit()
+    db.refresh(pending_upload)
+    return pending_upload
+
+
 def test_presign_upload_succeeds_for_owned_folder(
     client: TestClient,
     normal_user_token_headers: dict[str, str],
@@ -410,23 +446,23 @@ def test_presign_upload_succeeds_for_owned_folder(
 
     assert response.status_code == 200
     content = response.json()
-    assert content == {
-        "upload_required": True,
-        "upload_url": "http://localhost:9000/cloud-file-storage/sha256/upload?sig=1",
-        "method": "PUT",
-        "headers": {"Content-Type": "application/pdf"},
-        "object_key": f"sha256/{'a' * 64}",
-        "expires_in": settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
-    }
+    assert content["upload_required"] is True
+    assert content["upload_url"] == (
+        "http://localhost:9000/cloud-file-storage/sha256/upload?sig=1"
+    )
+    assert content["method"] == "PUT"
+    assert content["headers"] == {"Content-Type": "application/pdf"}
+    assert content["object_key"].startswith(f"uploads/{folder.owner_id}/")
+    assert content["expires_in"] == settings.S3_PRESIGNED_URL_EXPIRES_SECONDS
     assert calls == [
         {
-            "object_key": f"sha256/{'a' * 64}",
+            "object_key": content["object_key"],
             "mime_type": "application/pdf",
         }
     ]
 
 
-def test_presign_upload_existing_blob_skips_upload(
+def test_presign_upload_existing_blob_with_claim_skips_upload(
     client: TestClient,
     normal_user_token_headers: dict[str, str],
     db: Session,
@@ -447,6 +483,7 @@ def test_presign_upload_existing_blob_skips_upload(
         )
     )
     db.commit()
+    _create_blob_claim(db=db, owner_id=folder.owner_id, blob_hash=blob_hash)
 
     def fail_create_presigned_upload_url(*, object_key: str, mime_type: str) -> str:
         del object_key, mime_type
@@ -479,6 +516,62 @@ def test_presign_upload_existing_blob_skips_upload(
         "object_key": f"sha256/{blob_hash}",
         "expires_in": 0,
     }
+
+
+def test_presign_upload_existing_blob_without_claim_requires_upload(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    owner_folder = _create_unique_folder(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="ExistingBlobOwner",
+    )
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="ExistingBlobNoClaim",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=123,
+            ref_count=1,
+        )
+    )
+    db.commit()
+    _create_blob_claim(db=db, owner_id=owner_folder.owner_id, blob_hash=blob_hash)
+
+    monkeypatch.setattr(
+        "app.files.service.storage.create_presigned_upload_url",
+        lambda *, object_key, mime_type: "http://localhost:9000/upload",
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/presign-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    content = response.json()
+    assert content["upload_required"] is True
+    assert content["object_key"].startswith(f"uploads/{folder.owner_id}/")
+    assert content["object_key"] != f"sha256/{blob_hash}"
 
 
 def test_presign_upload_does_not_insert_file(
@@ -613,12 +706,37 @@ def test_complete_upload_succeeds_for_owned_folder(
         db=db,
         name_prefix="CompleteUpload",
     )
+    blob_hash = "f" * 64
+    pending_upload = _create_pending_upload(
+        db=db,
+        owner_id=folder.owner_id,
+        blob_hash=blob_hash,
+    )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
         lambda *, object_key: ObjectStat(
             size_bytes=123,
             content_type="application/pdf",
         ),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.calculate_object_sha256",
+        lambda *, object_key: blob_hash,
+    )
+    copy_calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.copy_object",
+        lambda *, source_object_key, destination_object_key: copy_calls.append(
+            {
+                "source_object_key": source_object_key,
+                "destination_object_key": destination_object_key,
+            }
+        ),
+    )
+    delete_calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: delete_calls.append(object_key),
     )
 
     response = client.post(
@@ -629,7 +747,7 @@ def test_complete_upload_succeeds_for_owned_folder(
             "name": "completed-report.pdf",
             "mime_type": "application/pdf",
             "category": "document",
-            "blob_hash": "f" * 64,
+            "blob_hash": blob_hash,
             "size_bytes": 123,
         },
     )
@@ -641,18 +759,32 @@ def test_complete_upload_succeeds_for_owned_folder(
     assert content["owner_id"] == str(folder.owner_id)
     assert content["mime_type"] == "application/pdf"
     assert content["category"] == "document"
-    assert content["blob_hash"] == "f" * 64
+    assert content["blob_hash"] == blob_hash
     assert content["size_bytes"] == 123
 
     stored_file = db.exec(
         select(StoredFile).where(StoredFile.id == content["id"])
     ).first()
     assert stored_file is not None
-    stored_blob = db.get(FileBlob, "f" * 64)
+    stored_blob = db.get(FileBlob, blob_hash)
     assert stored_blob is not None
-    assert stored_blob.object_key == f"sha256/{'f' * 64}"
+    assert stored_blob.object_key == f"sha256/{blob_hash}"
     assert stored_blob.size_bytes == 123
     assert stored_blob.ref_count == 1
+    stored_claim = db.exec(
+        select(FileBlobClaim).where(
+            FileBlobClaim.owner_id == folder.owner_id,
+            FileBlobClaim.blob_hash == blob_hash,
+        )
+    ).first()
+    assert stored_claim is not None
+    assert copy_calls == [
+        {
+            "source_object_key": pending_upload.object_key,
+            "destination_object_key": f"sha256/{blob_hash}",
+        }
+    ]
+    assert delete_calls == [pending_upload.object_key]
 
 
 def test_complete_upload_existing_blob_increments_ref_count(
@@ -677,6 +809,7 @@ def test_complete_upload_existing_blob_increments_ref_count(
         )
     )
     db.commit()
+    _create_blob_claim(db=db, owner_id=folder.owner_id, blob_hash=blob_hash)
 
     def fail_stat_object(*, object_key: str) -> ObjectStat:
         del object_key
@@ -704,6 +837,142 @@ def test_complete_upload_existing_blob_increments_ref_count(
     assert stored_blob.ref_count == 2
 
 
+def test_complete_upload_existing_blob_without_claim_requires_pending_upload(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    owner_folder = _create_unique_folder(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="ExistingBlobClaimOwner",
+    )
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="ExistingBlobClaimAttacker",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=123,
+            ref_count=1,
+        )
+    )
+    db.commit()
+    _create_blob_claim(db=db, owner_id=owner_folder.owner_id, blob_hash=blob_hash)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "stolen-blob.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Uploaded object not found"
+    db.expire_all()
+    stored_blob = db.get(FileBlob, blob_hash)
+    assert stored_blob is not None
+    assert stored_blob.ref_count == 1
+
+
+def test_complete_upload_existing_blob_without_claim_accepts_verified_pending_upload(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    owner_folder = _create_unique_folder(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="ExistingBlobProofOwner",
+    )
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="ExistingBlobProof",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=123,
+            ref_count=1,
+        )
+    )
+    db.commit()
+    _create_blob_claim(db=db, owner_id=owner_folder.owner_id, blob_hash=blob_hash)
+    pending_upload = _create_pending_upload(
+        db=db,
+        owner_id=folder.owner_id,
+        blob_hash=blob_hash,
+    )
+    pending_upload_id = pending_upload.id
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key: ObjectStat(size_bytes=123, content_type="application/pdf"),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.calculate_object_sha256",
+        lambda *, object_key: blob_hash,
+    )
+    copy_calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.copy_object",
+        lambda *, source_object_key, destination_object_key: copy_calls.append(
+            (source_object_key, destination_object_key)
+        ),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "verified-existing-blob.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    db.expire_all()
+    stored_blob = db.get(FileBlob, blob_hash)
+    assert stored_blob is not None
+    assert stored_blob.ref_count == 2
+    claim = db.exec(
+        select(FileBlobClaim).where(
+            FileBlobClaim.owner_id == folder.owner_id,
+            FileBlobClaim.blob_hash == blob_hash,
+        )
+    ).first()
+    assert claim is not None
+    assert db.get(PendingUpload, pending_upload_id) is None
+    assert copy_calls == []
+
+
 def test_complete_upload_recovers_when_concurrent_request_creates_blob(
     client: TestClient,
     normal_user_token_headers: dict[str, str],
@@ -717,9 +986,26 @@ def test_complete_upload_recovers_when_concurrent_request_creates_blob(
         name_prefix="CompleteConcurrentBlob",
     )
     blob_hash = uuid.uuid4().hex * 2
+    _create_pending_upload(
+        db=db,
+        owner_id=folder.owner_id,
+        blob_hash=blob_hash,
+    )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
         lambda *, object_key: ObjectStat(size_bytes=123),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.calculate_object_sha256",
+        lambda *, object_key: blob_hash,
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.copy_object",
+        lambda *, source_object_key, destination_object_key: None,
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
     )
 
     def concurrent_create_blob(
@@ -737,7 +1023,7 @@ def test_complete_upload_recovers_when_concurrent_request_creates_blob(
                     blob_hash=blob_hash,
                     object_key=object_key,
                     size_bytes=size_bytes,
-                    ref_count=1,
+                    ref_count=0,
                 )
             )
             concurrent_session.commit()
@@ -765,7 +1051,7 @@ def test_complete_upload_recovers_when_concurrent_request_creates_blob(
     db.expire_all()
     stored_blob = db.get(FileBlob, blob_hash)
     assert stored_blob is not None
-    assert stored_blob.ref_count == 2
+    assert stored_blob.ref_count == 1
     stored_file = db.exec(
         select(StoredFile).where(StoredFile.id == uuid.UUID(response.json()["id"]))
     ).first()
@@ -823,9 +1109,28 @@ def test_complete_upload_file_appears_in_folder_listing(
         db=db,
         name_prefix="CompleteUploadList",
     )
+    blob_hash = "1" * 64
+    _create_pending_upload(
+        db=db,
+        owner_id=folder.owner_id,
+        blob_hash=blob_hash,
+        size_bytes=456,
+    )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
         lambda *, object_key: ObjectStat(size_bytes=456),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.calculate_object_sha256",
+        lambda *, object_key: blob_hash,
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.copy_object",
+        lambda *, source_object_key, destination_object_key: None,
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
     )
 
     complete_response = client.post(
@@ -836,7 +1141,7 @@ def test_complete_upload_file_appears_in_folder_listing(
             "name": "listed-report.pdf",
             "mime_type": "application/pdf",
             "category": "document",
-            "blob_hash": "1" * 64,
+            "blob_hash": blob_hash,
             "size_bytes": 456,
         },
     )
@@ -885,6 +1190,11 @@ def test_complete_upload_missing_object_returns_400(
         db=db,
         name_prefix="CompleteUploadMissingObject",
     )
+    _create_pending_upload(
+        db=db,
+        owner_id=folder.owner_id,
+        blob_hash="3" * 64,
+    )
 
     def mock_stat_object(*, object_key: str) -> ObjectStat:
         del object_key
@@ -921,6 +1231,11 @@ def test_complete_upload_size_mismatch_returns_400(
         db=db,
         name_prefix="CompleteUploadSizeMismatch",
     )
+    _create_pending_upload(
+        db=db,
+        owner_id=folder.owner_id,
+        blob_hash="4" * 64,
+    )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
         lambda *, object_key: ObjectStat(size_bytes=999),
@@ -955,6 +1270,11 @@ def test_complete_upload_content_type_mismatch_returns_400(
         db=db,
         name_prefix="CompleteUploadContentTypeMismatch",
     )
+    _create_pending_upload(
+        db=db,
+        owner_id=folder.owner_id,
+        blob_hash="5" * 64,
+    )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
         lambda *, object_key: ObjectStat(size_bytes=123, content_type="text/plain"),
@@ -975,6 +1295,50 @@ def test_complete_upload_content_type_mismatch_returns_400(
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Uploaded object content type mismatch"
+
+
+def test_complete_upload_hash_mismatch_returns_400(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteUploadHashMismatch",
+    )
+    blob_hash = "6" * 64
+    _create_pending_upload(
+        db=db,
+        owner_id=folder.owner_id,
+        blob_hash=blob_hash,
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key: ObjectStat(size_bytes=123, content_type="application/pdf"),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.calculate_object_sha256",
+        lambda *, object_key: "a" * 64,
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "hash-mismatch.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Uploaded object hash mismatch"
 
 
 def test_complete_upload_duplicate_filename_returns_409(
@@ -1096,9 +1460,23 @@ def test_complete_upload_repository_duplicate_conflict_returns_409(
         db=db,
         name_prefix="CompleteUploadRepositoryDuplicate",
     )
+    blob_hash = "0" * 64
+    _create_pending_upload(
+        db=db,
+        owner_id=folder.owner_id,
+        blob_hash=blob_hash,
+    )
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
         lambda *, object_key: ObjectStat(size_bytes=123),
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.calculate_object_sha256",
+        lambda *, object_key: blob_hash,
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.copy_object",
+        lambda *, source_object_key, destination_object_key: None,
     )
     monkeypatch.setattr(
         "app.files.service.repository.get_file_by_folder_and_name",
@@ -1121,7 +1499,7 @@ def test_complete_upload_repository_duplicate_conflict_returns_409(
             "name": "repository-duplicate.pdf",
             "mime_type": "application/pdf",
             "category": "document",
-            "blob_hash": "0" * 64,
+            "blob_hash": blob_hash,
             "size_bytes": 123,
         },
     )
@@ -1325,6 +1703,369 @@ def test_presign_download_requires_authentication(client: TestClient) -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_delete_file_succeeds_for_owner(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="Delete",
+    )
+    calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: calls.append(object_key),
+    )
+    file_id = file.id
+    blob_hash = file.blob_hash
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+    db.expire_all()
+    assert db.get(StoredFile, file_id) is None
+    assert db.get(FileBlob, blob_hash) is None
+    assert calls == [f"sha256/{blob_hash}"]
+
+
+def test_delete_file_removes_file_from_folder_listing(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteListing",
+    )
+    folder = db.get(Folder, file.folder_id)
+    assert folder is not None
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+    assert response.status_code == 204
+
+    listing_response = client.get(
+        f"{settings.API_V1_STR}/files",
+        headers=normal_user_token_headers,
+        params={"path": folder.path},
+    )
+    assert listing_response.status_code == 200
+    assert all(
+        item["id"] != str(file.id)
+        for item in listing_response.json()["contents"]
+    )
+
+
+def test_delete_file_prevents_later_download(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteDownload",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+    assert delete_response.status_code == 204
+
+    download_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/presign-download",
+        headers=normal_user_token_headers,
+    )
+    assert download_response.status_code == 404
+    assert download_response.json()["detail"] == "File not found"
+
+
+def test_delete_file_removes_shares(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteShared",
+    )
+    share_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/shares",
+        headers=normal_user_token_headers,
+        json={"recipient_email": settings.FIRST_SUPERUSER},
+    )
+    assert share_response.status_code == 201
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    delete_response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+    assert delete_response.status_code == 204
+
+    recipient_listing = client.get(
+        f"{settings.API_V1_STR}/files/shared-with-me",
+        headers=superuser_token_headers,
+    )
+    assert recipient_listing.status_code == 200
+    assert all(item["id"] != str(file.id) for item in recipient_listing.json()["data"])
+
+    download_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/presign-download",
+        headers=superuser_token_headers,
+    )
+    assert download_response.status_code == 404
+
+
+def test_delete_file_rejects_another_users_file(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=superuser_token_headers,
+        db=db,
+        name_prefix="DeleteOtherUser",
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "File not found"
+    assert db.get(StoredFile, file.id) is not None
+
+
+def test_delete_file_rejects_shared_recipient(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteRecipient",
+    )
+    share_response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/shares",
+        headers=normal_user_token_headers,
+        json={"recipient_email": settings.FIRST_SUPERUSER},
+    )
+    assert share_response.status_code == 201
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=superuser_token_headers,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "File not found"
+    assert db.get(StoredFile, file.id) is not None
+
+
+def test_delete_file_repeated_delete_returns_404(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteRepeated",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: None,
+    )
+
+    first_response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+    second_response = client.delete(
+        f"{settings.API_V1_STR}/files/{file.id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert first_response.status_code == 204
+    assert second_response.status_code == 404
+    assert second_response.json()["detail"] == "File not found"
+
+
+def test_delete_file_requires_authentication(client: TestClient) -> None:
+    response = client.delete(f"{settings.API_V1_STR}/files/{uuid.uuid4()}")
+
+    assert response.status_code == 401
+
+
+def test_delete_file_invalid_uuid_returns_422(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+) -> None:
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/not-a-uuid",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 422
+
+
+def test_delete_file_shared_blob_decrements_ref_count_without_s3_delete(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    blob_hash = uuid.uuid4().hex * 2
+    first_file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteSharedBlobA",
+        blob_hash=blob_hash,
+    )
+    second_file = StoredFile(
+        owner_id=first_file.owner_id,
+        folder_id=first_file.folder_id,
+        name=f"shared-blob-{uuid.uuid4().hex}.pdf",
+        mime_type="application/pdf",
+        category="document",
+        blob_hash=blob_hash,
+        size_bytes=123,
+    )
+    blob = db.get(FileBlob, blob_hash)
+    assert blob is not None
+    blob.ref_count = 2
+    db.add(second_file)
+    db.add(blob)
+    db.commit()
+    db.refresh(second_file)
+
+    def fail_delete_object(*, object_key: str) -> None:
+        del object_key
+        raise AssertionError("shared blob object must not be deleted")
+
+    monkeypatch.setattr("app.files.service.storage.delete_object", fail_delete_object)
+    first_file_id = first_file.id
+    second_file_id = second_file.id
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{first_file_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    db.expire_all()
+    assert db.get(StoredFile, first_file_id) is None
+    assert db.get(StoredFile, second_file_id) is not None
+    stored_blob = db.get(FileBlob, blob_hash)
+    assert stored_blob is not None
+    assert stored_blob.ref_count == 1
+
+
+def test_delete_file_final_blob_reference_deletes_blob_and_s3_object(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteFinalBlob",
+    )
+    calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: calls.append(object_key),
+    )
+    file_id = file.id
+    blob_hash = file.blob_hash
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    db.expire_all()
+    assert db.get(StoredFile, file_id) is None
+    assert db.get(FileBlob, blob_hash) is None
+    assert calls == [f"sha256/{blob_hash}"]
+
+
+def test_delete_file_s3_delete_failure_does_not_restore_file(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="DeleteS3Failure",
+    )
+
+    def fail_delete_object(*, object_key: str) -> None:
+        del object_key
+        raise RuntimeError("S3 unavailable")
+
+    monkeypatch.setattr("app.files.service.storage.delete_object", fail_delete_object)
+    file_id = file.id
+    blob_hash = file.blob_hash
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    db.expire_all()
+    assert db.get(StoredFile, file_id) is None
+    assert db.get(FileBlob, blob_hash) is None
 
 
 def test_share_file_lists_for_recipient_and_allows_download(

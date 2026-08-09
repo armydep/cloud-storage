@@ -29,6 +29,7 @@ from app.files.service import (
     FolderNotFoundError,
     InvalidFolderNameError,
     ObjectContentTypeMismatchError,
+    ObjectHashMismatchError,
     ObjectNotUploadedError,
     ObjectSizeMismatchError,
     ShareRecipientInactiveError,
@@ -38,6 +39,7 @@ from app.files.service import (
     create_folder,
     create_presigned_download,
     create_presigned_upload,
+    delete_file,
     get_file_shares,
     get_files_shared_with_user,
     get_folder_contents,
@@ -120,6 +122,22 @@ def presign_download(
         return create_presigned_download(
             session=session,
             user_id=current_user.id,
+            file_id=file_id,
+        )
+    except StoredFileNotFoundError:
+        raise HTTPException(status_code=404, detail="File not found")
+
+
+@router.delete("/{file_id}", status_code=204)
+def delete_owned_file(
+    session: SessionDep,
+    current_user: CurrentUser,
+    file_id: uuid.UUID,
+) -> None:
+    try:
+        delete_file(
+            session=session,
+            owner_id=current_user.id,
             file_id=file_id,
         )
     except StoredFileNotFoundError:
@@ -216,6 +234,8 @@ def complete_file_upload(
         raise HTTPException(
             status_code=400, detail="Uploaded object content type mismatch"
         )
+    except ObjectHashMismatchError:
+        raise HTTPException(status_code=400, detail="Uploaded object hash mismatch")
     except DuplicateFileNameError:
         raise HTTPException(status_code=409, detail="File name already exists")
 

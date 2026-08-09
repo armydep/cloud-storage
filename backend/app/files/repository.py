@@ -1,11 +1,19 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
+from sqlalchemy import delete as sql_delete
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
-from app.files.models import FileBlob, FileShare, Folder, StoredFile
+from app.files.models import (
+    FileBlob,
+    FileBlobClaim,
+    FileShare,
+    Folder,
+    PendingUpload,
+    StoredFile,
+)
 from app.files.schemas import CompleteUploadRequest
 from app.models import User
 
@@ -25,6 +33,14 @@ class DuplicateFileShareRepositoryError(Exception):
 
 
 class DuplicateFileBlobRepositoryError(Exception):
+    pass
+
+
+class DuplicateFileBlobClaimRepositoryError(Exception):
+    pass
+
+
+class DuplicatePendingUploadRepositoryError(Exception):
     pass
 
 
@@ -218,6 +234,107 @@ def get_blob_for_update(*, session: Session, blob_hash: str) -> FileBlob | None:
     return session.exec(statement).first()
 
 
+def get_blob_claim(
+    *, session: Session, owner_id: uuid.UUID, blob_hash: str
+) -> FileBlobClaim | None:
+    statement = select(FileBlobClaim).where(
+        FileBlobClaim.owner_id == owner_id,
+        FileBlobClaim.blob_hash == blob_hash,
+    )
+    return session.exec(statement).first()
+
+
+def create_blob_claim(
+    *, session: Session, owner_id: uuid.UUID, blob_hash: str
+) -> FileBlobClaim:
+    claim = FileBlobClaim(owner_id=owner_id, blob_hash=blob_hash)
+    try:
+        session.add(claim)
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        raise DuplicateFileBlobClaimRepositoryError
+    return claim
+
+
+def ensure_blob_claim(
+    *, session: Session, owner_id: uuid.UUID, blob_hash: str
+) -> FileBlobClaim:
+    existing_claim = get_blob_claim(
+        session=session,
+        owner_id=owner_id,
+        blob_hash=blob_hash,
+    )
+    if existing_claim:
+        return existing_claim
+
+    try:
+        return create_blob_claim(
+            session=session,
+            owner_id=owner_id,
+            blob_hash=blob_hash,
+        )
+    except DuplicateFileBlobClaimRepositoryError:
+        existing_claim = get_blob_claim(
+            session=session,
+            owner_id=owner_id,
+            blob_hash=blob_hash,
+        )
+        if existing_claim is None:
+            raise
+        return existing_claim
+
+
+def create_pending_upload(
+    *,
+    session: Session,
+    upload_id: uuid.UUID,
+    owner_id: uuid.UUID,
+    blob_hash: str,
+    object_key: str,
+    size_bytes: int,
+    mime_type: str,
+    expires_at: datetime,
+) -> PendingUpload:
+    pending_upload = PendingUpload(
+        id=upload_id,
+        owner_id=owner_id,
+        blob_hash=blob_hash,
+        object_key=object_key,
+        size_bytes=size_bytes,
+        mime_type=mime_type,
+        expires_at=expires_at,
+    )
+    try:
+        session.add(pending_upload)
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        raise DuplicatePendingUploadRepositoryError
+    return pending_upload
+
+
+def get_latest_pending_upload(
+    *, session: Session, owner_id: uuid.UUID, blob_hash: str
+) -> PendingUpload | None:
+    statement = (
+        select(PendingUpload)
+        .where(
+            PendingUpload.owner_id == owner_id,
+            PendingUpload.blob_hash == blob_hash,
+            PendingUpload.expires_at > datetime.now(timezone.utc),
+        )
+        .order_by(col(PendingUpload.created_at).desc())
+    )
+    return session.exec(statement).first()
+
+
+def delete_pending_upload(
+    *, session: Session, pending_upload: PendingUpload
+) -> None:
+    session.delete(pending_upload)
+
+
 def create_blob(
     *,
     session: Session,
@@ -247,6 +364,10 @@ def increment_blob_ref_count(*, blob: FileBlob) -> None:
 
 def decrement_blob_ref_count(*, blob: FileBlob) -> None:
     blob.ref_count -= 1
+
+
+def delete_blob(*, session: Session, blob: FileBlob) -> None:
+    session.delete(blob)
 
 
 def get_file_by_folder_and_name(
@@ -288,3 +409,9 @@ def create_file(
     if commit:
         session.refresh(file)
     return file
+
+
+def delete_file(*, session: Session, file: StoredFile) -> None:
+    session.execute(sql_delete(StoredFile).where(StoredFile.id == file.id))
+    if file in session:
+        session.expunge(file)

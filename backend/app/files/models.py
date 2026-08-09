@@ -111,6 +111,57 @@ class FileBlob(SQLModel, table=True):
     )
 
 
+class FileBlobClaim(SQLModel, table=True):
+    __tablename__ = "file_blob_claims"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "blob_hash", name="uq_file_blob_claims_owner_blob"),
+        Index("ix_file_blob_claims_owner_id", "owner_id"),
+        Index("ix_file_blob_claims_blob_hash", "blob_hash"),
+    )
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, ondelete="CASCADE"
+    )
+    blob_hash: str = Field(
+        min_length=1,
+        max_length=128,
+        foreign_key="file_blobs.blob_hash",
+        nullable=False,
+        ondelete="CASCADE",
+    )
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        nullable=False,
+    )
+
+
+class PendingUpload(SQLModel, table=True):
+    __tablename__ = "pending_uploads"
+    __table_args__ = (
+        UniqueConstraint("object_key", name="uq_pending_uploads_object_key"),
+        Index("ix_pending_uploads_owner_blob", "owner_id", "blob_hash"),
+        Index("ix_pending_uploads_expires_at", "expires_at"),
+    )
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, ondelete="CASCADE"
+    )
+    blob_hash: str = Field(min_length=1, max_length=128, nullable=False)
+    object_key: str = Field(min_length=1, max_length=512, nullable=False)
+    size_bytes: int = Field(ge=0, sa_type=BigInteger)  # type: ignore
+    mime_type: str = Field(min_length=1, max_length=255)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        nullable=False,
+    )
+    expires_at: datetime = Field(
+        sa_type=DateTime(timezone=True),  # type: ignore
+        nullable=False,
+    )
+
+
 class FileShare(SQLModel, table=True):
     __tablename__ = "file_shares"
     __table_args__ = (

@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from app.files import repository
-from app.files.models import FileBlob, Folder
+from app.files.models import FileBlob, Folder, StoredFile
 from tests.utils.user import create_random_user
 
 
@@ -100,3 +100,48 @@ def test_duplicate_blob_hash_is_rejected_at_the_database(db: Session) -> None:
             object_key=f"sha256/{blob_hash}-duplicate",
             size_bytes=123,
         )
+
+
+def test_delete_blob_marks_blob_for_deletion(db: Session) -> None:
+    blob_hash = uuid.uuid4().hex * 2
+    blob = repository.create_blob(
+        session=db,
+        blob_hash=blob_hash,
+        object_key=f"sha256/{blob_hash}",
+        size_bytes=123,
+    )
+
+    repository.delete_blob(session=db, blob=blob)
+    db.commit()
+
+    assert db.get(FileBlob, blob_hash) is None
+
+
+def test_delete_file_marks_file_for_deletion(db: Session) -> None:
+    user = create_random_user(db)
+    folder = repository.create_root_folder(session=db, owner_id=user.id)
+    blob_hash = uuid.uuid4().hex * 2
+    repository.create_blob(
+        session=db,
+        blob_hash=blob_hash,
+        object_key=f"sha256/{blob_hash}",
+        size_bytes=123,
+        ref_count=1,
+    )
+    file = StoredFile(
+        owner_id=user.id,
+        folder_id=folder.id,
+        name=f"{uuid.uuid4().hex}.pdf",
+        mime_type="application/pdf",
+        category="document",
+        blob_hash=blob_hash,
+        size_bytes=123,
+    )
+    db.add(file)
+    db.commit()
+    db.refresh(file)
+
+    repository.delete_file(session=db, file=file)
+    db.commit()
+
+    assert db.get(StoredFile, file.id) is None

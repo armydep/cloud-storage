@@ -47,10 +47,11 @@ physical S3 object only when the last logical file reference is deleted.
    decrements `file_blobs.ref_count`. If it reaches zero, the blob row is
    removed and the S3 object is deleted.
 
-9. **Existing blobs are not overwritten.** If a client requests upload for a
-   `blob_hash` already present in `file_blobs`, the backend must not issue a new
-   presigned PUT URL for that object key. The client can skip the direct S3
-   upload and call complete-upload to create another logical file reference.
+9. **Existing blobs are not overwritten and reuse is claim-gated.** If a client
+   requests upload for a `blob_hash` already present in `file_blobs`, the
+   backend skips upload only when the current user already has a blob claim. A
+   user without a claim must complete a verified temp upload before the backend
+   creates a logical file reference to that blob.
 
 10. **S3 delete happens after the DB commit.** The database remains the source of
    truth. If the DB delete succeeds but S3 delete fails, the object may be
@@ -64,6 +65,10 @@ physical S3 object only when the last logical file reference is deleted.
 12. **Clients confirm destructive action.** Web and mobile must show a
     confirmation step before calling the delete API.
 
+13. **Blob ownership is a delete prerequisite.** Delete must not ship while a
+    user can claim another user's blob by knowing its hash. Slice 2 therefore
+    adds per-user blob claims and pending upload proof before enabling delete.
+
 ## Slice breakdown
 
 ### Slice 1: Backend blob ref-count schema migration
@@ -72,6 +77,8 @@ Detailed spec:
 [01-backend-blob-ref-count-migration.md](phase-6-delete-file/slices/01-backend-blob-ref-count-migration.md)
 
 GitHub issue: [#65](https://github.com/armydep/cloude-file-storage/issues/65)
+
+Status: Completed in PR [#66](https://github.com/armydep/cloude-file-storage/pull/66).
 
 - Add `file_blobs` table.
 - Backfill one blob row per existing `files.blob_hash`.
@@ -91,7 +98,10 @@ GitHub issue: [#62](https://github.com/armydep/cloude-file-storage/issues/62)
 
 Depends on Slice 1.
 
+Status: Next slice.
+
 - Add `DELETE /api/v1/files/{file_id}`.
+- Add per-user blob claims and pending upload proof for SCALE 8.1.
 - Authorize by owner only.
 - Delete the logical file row.
 - Decrement the referenced blob's `ref_count`.
