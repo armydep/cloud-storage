@@ -60,6 +60,17 @@ Client generation, from the repo root: `bash scripts/generate-client.sh`.
   CRITICAL finding.
 - One item in progress at a time; see `docs/project-management.md`.
 
+## Handling reviewer output
+Applies to code-reviewer-backend and code-reviewer-flutter alike.
+
+Print the report verbatim. Never summarise or omit findings. Then:
+- CRITICAL — fix immediately, state what changed for each.
+- WARNING — list numbered, wait for one batched decision.
+- NOTE — log only.
+
+If a finding looks wrong, say so and don't fix it. Re-run the matching test-runner subagent after
+any fixes.
+
 ## Test-runner subagents
 Both test-runner agents follow the same contract: report failures only, cap output at 40 lines,
 never modify files, never include raw tool output.
