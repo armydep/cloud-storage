@@ -21,6 +21,7 @@ from app.files.schemas import (
     StoredFilePublic,
 )
 from app.files.service import (
+    BlobIntegrityError,
     CannotShareWithOwnerError,
     DuplicateFileNameError,
     DuplicateFileShareError,
@@ -96,6 +97,10 @@ def delete_owned_folder(
         )
     except FolderNotFoundError:
         raise HTTPException(status_code=404, detail="Folder not found")
+    except BlobIntegrityError:
+        raise HTTPException(
+            status_code=409, detail="File blob metadata is inconsistent"
+        )
 
 
 @router.get("", response_model=FolderWithContentsPublic)
@@ -159,6 +164,10 @@ def delete_owned_file(
         )
     except StoredFileNotFoundError:
         raise HTTPException(status_code=404, detail="File not found")
+    except BlobIntegrityError:
+        raise HTTPException(
+            status_code=409, detail="File blob metadata is inconsistent"
+        )
 
 
 @router.post("/{file_id}/shares", response_model=FileSharePublic, status_code=201)

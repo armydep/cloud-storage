@@ -17,6 +17,7 @@ from app.files.models import (
     PendingUpload,
     StoredFile,
 )
+from app.files.service import BlobIntegrityError
 from app.models import UserCreate
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import random_email
@@ -1892,6 +1893,29 @@ def test_delete_folder_invalid_uuid_returns_422(
     )
 
     assert response.status_code == 422
+
+
+def test_delete_folder_blob_integrity_error_returns_409(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    def raise_blob_integrity_error(**kwargs) -> None:
+        del kwargs
+        raise BlobIntegrityError("File blob metadata is missing")
+
+    monkeypatch.setattr(
+        "app.api.routes.files.delete_folder",
+        raise_blob_integrity_error,
+    )
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{uuid.uuid4()}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "File blob metadata is inconsistent"
 
 
 def test_delete_folder_shared_blob_decrements_ref_count_without_s3_delete(

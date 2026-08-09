@@ -57,7 +57,8 @@ backend/tests/files/test_repository.py
 - Add a service function such as `delete_folder(...)`.
 - Add repository helpers to:
   - get a folder by owner and id;
-  - list descendant folders by owner and `ltree` path prefix;
+  - list descendant folders by owner and `ltree` path prefix with row locks for
+    delete operations;
   - list all files in a set of folder ids;
   - aggregate deleted file counts by `blob_hash`;
   - lock affected `file_blobs` rows before decrementing counts;
@@ -66,6 +67,9 @@ backend/tests/files/test_repository.py
   `parent_id is null`.
 - Use one database transaction for:
   - resolving the subtree;
+  - locking the subtree folder rows before listing files, so concurrent file or
+    child-folder inserts into the subtree block on the folder FK until the
+    delete commits;
   - locking affected blob rows;
   - deleting file rows;
   - decrementing/deleting blob rows;
@@ -74,6 +78,10 @@ backend/tests/files/test_repository.py
   The existing folder self-reference uses database cascade for descendant
   folders, so the service only needs to explicitly delete the selected folder
   row.
+- Keep `files.blob_hash -> file_blobs.blob_hash` configured with
+  `ON DELETE CASCADE` as a database safety net. The service still deletes file
+  rows before deleting blob rows so ref-count changes remain explicit and
+  auditable.
 - Continue relying on `file_shares.file_id ON DELETE CASCADE` for share cleanup.
 - Commit database changes before deleting S3 objects.
 - If S3 deletion fails after commit, log it and leave orphan cleanup to a later
@@ -95,6 +103,7 @@ def delete_folder(session, owner_id, folder_id) -> None:
         session=session,
         owner_id=owner_id,
         path=folder.path,
+        for_update=True,
     )
     folder_ids = [item.id for item in subtree_folders]
 

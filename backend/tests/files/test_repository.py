@@ -184,6 +184,27 @@ def test_list_folder_subtree_returns_target_and_descendants_deepest_first(
     assert sibling.id not in {folder.id for folder in subtree}
 
 
+def test_list_folder_subtree_supports_row_locks(db: Session) -> None:
+    user = create_random_user(db)
+    root = repository.create_root_folder(session=db, owner_id=user.id)
+    parent = repository.create_folder(
+        session=db,
+        owner_id=user.id,
+        parent_id=root.id,
+        name=f"Lock Parent {uuid.uuid4().hex}",
+        path=f"root.lock_parent_{uuid.uuid4().hex}",
+    )
+
+    subtree = repository.list_folder_subtree(
+        session=db,
+        owner_id=user.id,
+        path=parent.path,
+        for_update=True,
+    )
+
+    assert [folder.id for folder in subtree] == [parent.id]
+
+
 def test_list_files_in_folders_returns_only_owned_files_in_requested_folders(
     db: Session,
 ) -> None:

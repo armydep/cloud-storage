@@ -86,6 +86,10 @@ class FileShareNotFoundError(Exception):
     pass
 
 
+class BlobIntegrityError(Exception):
+    pass
+
+
 def _folder_path_segment(name: str) -> str:
     segment = re.sub(r"[^a-z0-9_]+", "_", name.lower()).strip("_")
     if not segment:
@@ -385,7 +389,7 @@ def delete_file(*, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID) ->
         blob_hash=file.blob_hash,
     )
     if blob is None:
-        raise RuntimeError("File blob metadata is missing")
+        raise BlobIntegrityError("File blob metadata is missing")
 
     object_key = blob.object_key
     repository.delete_file(session=session, file=file)
@@ -420,9 +424,8 @@ def delete_folder(
         session=session,
         owner_id=owner_id,
         path=folder.path,
+        for_update=True,
     )
-    if not subtree_folders:
-        raise FolderNotFoundError
 
     folder_ids = [subtree_folder.id for subtree_folder in subtree_folders]
     files = repository.list_files_in_folders(
@@ -438,7 +441,7 @@ def delete_folder(
     blobs_by_hash = {blob.blob_hash: blob for blob in blobs}
     missing_blob_hashes = set(delete_counts) - set(blobs_by_hash)
     if missing_blob_hashes:
-        raise RuntimeError("File blob metadata is missing")
+        raise BlobIntegrityError("File blob metadata is missing")
 
     object_keys_to_delete: list[str] = []
     repository.delete_files(session=session, files=files)
@@ -448,7 +451,7 @@ def delete_folder(
         blob = blobs_by_hash[blob_hash]
         blob.ref_count -= delete_count
         if blob.ref_count < 0:
-            raise RuntimeError("File blob ref_count would become negative")
+            raise BlobIntegrityError("File blob ref_count would become negative")
         if blob.ref_count == 0:
             object_keys_to_delete.append(blob.object_key)
             repository.delete_blob(session=session, blob=blob)

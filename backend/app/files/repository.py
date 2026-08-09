@@ -100,12 +100,14 @@ def list_child_folders(
 
 
 def list_folder_subtree(
-    *, session: Session, owner_id: uuid.UUID, path: str
+    *, session: Session, owner_id: uuid.UUID, path: str, for_update: bool = False
 ) -> list[Folder]:
     statement = select(Folder).where(
         Folder.owner_id == owner_id,
         Folder.path.op("<@")(path),
     )
+    if for_update:
+        statement = statement.with_for_update()
     folders = list(session.exec(statement).all())
     return sorted(
         folders,

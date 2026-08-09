@@ -5,8 +5,8 @@ Revises: d7g8h9i0j1k2
 Create Date: 2026-08-09 00:00:00.000000
 
 """
-from alembic import op
 
+from alembic import op
 
 revision = "e8c9d0a1b2c3"
 down_revision = "d7g8h9i0j1k2"
@@ -76,7 +76,8 @@ def upgrade():
                 ADD CONSTRAINT fk_files_blob_hash_file_blobs
                 FOREIGN KEY (blob_hash)
                 REFERENCES file_blobs(blob_hash)
-                ON UPDATE CASCADE;
+                ON UPDATE CASCADE
+                ON DELETE CASCADE;
             END IF;
         END $$;
         """
