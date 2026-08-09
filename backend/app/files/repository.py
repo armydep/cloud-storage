@@ -271,7 +271,7 @@ def get_blob_by_hash(*, session: Session, blob_hash: str) -> FileBlob | None:
 def get_blob_for_update(*, session: Session, blob_hash: str) -> FileBlob | None:
     statement = (
         select(FileBlob).where(FileBlob.blob_hash == blob_hash).with_for_update()
-    )
+    ).execution_options(populate_existing=True)
     return session.exec(statement).first()
 
 

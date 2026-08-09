@@ -9,6 +9,7 @@ from sqlmodel import Session
 from app.core import storage
 from app.core.config import settings
 from app.files import repository
+from app.files.models import FileBlob
 from app.files.repository import ROOT_FOLDER_PATH
 from app.files.schemas import (
     CompleteUploadRequest,
@@ -266,7 +267,7 @@ def complete_upload(
         raise DuplicateFileNameError
 
     canonical_object_key = storage.get_object_key(request.blob_hash)
-    blob = repository.get_blob_for_update(
+    blob = repository.get_blob_by_hash(
         session=session,
         blob_hash=request.blob_hash,
     )
@@ -325,28 +326,28 @@ def complete_upload(
             raise ObjectHashMismatchError
 
     if blob is None:
-        if pending_object_key is None:
-            raise ObjectNotUploadedError
-        storage.copy_object(
-            source_object_key=pending_object_key,
-            destination_object_key=canonical_object_key,
+        blob = _copy_pending_upload_to_canonical_blob(
+            session=session,
+            blob_hash=request.blob_hash,
+            pending_object_key=pending_object_key,
+            canonical_object_key=canonical_object_key,
+            size_bytes=request.size_bytes,
         )
-        try:
-            blob = repository.create_blob(
+    else:
+        blob = repository.get_blob_for_update(
+            session=session,
+            blob_hash=request.blob_hash,
+        )
+        if blob is None:
+            blob = _copy_pending_upload_to_canonical_blob(
                 session=session,
                 blob_hash=request.blob_hash,
-                object_key=canonical_object_key,
+                pending_object_key=pending_object_key,
+                canonical_object_key=canonical_object_key,
                 size_bytes=request.size_bytes,
             )
-        except repository.DuplicateFileBlobRepositoryError:
-            blob = repository.get_blob_for_update(
-                session=session,
-                blob_hash=request.blob_hash,
-            )
-            if blob is None:
-                raise
-            if blob.size_bytes != request.size_bytes:
-                raise ObjectSizeMismatchError
+        elif blob.size_bytes != request.size_bytes:
+            raise ObjectSizeMismatchError
 
     try:
         repository.ensure_blob_claim(
@@ -380,6 +381,42 @@ def complete_upload(
     return StoredFilePublic.model_validate(file)
 
 
+def _copy_pending_upload_to_canonical_blob(
+    *,
+    session: Session,
+    blob_hash: str,
+    pending_object_key: str | None,
+    canonical_object_key: str,
+    size_bytes: int,
+) -> FileBlob:
+    if pending_object_key is None:
+        raise ObjectNotUploadedError
+
+    storage.copy_object(
+        source_object_key=pending_object_key,
+        destination_object_key=canonical_object_key,
+    )
+    try:
+        repository.create_blob(
+            session=session,
+            blob_hash=blob_hash,
+            object_key=canonical_object_key,
+            size_bytes=size_bytes,
+        )
+    except repository.DuplicateFileBlobRepositoryError:
+        pass
+
+    blob = repository.get_blob_for_update(
+        session=session,
+        blob_hash=blob_hash,
+    )
+    if blob is None:
+        raise ObjectNotUploadedError
+    if blob.size_bytes != size_bytes:
+        raise ObjectSizeMismatchError
+    return blob
+
+
 def delete_file(*, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID) -> None:
     file = repository.get_file_by_id(
         session=session,
@@ -404,14 +441,12 @@ def delete_file(*, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID) ->
     if should_delete_object:
         session.flush()
         repository.delete_blob(session=session, blob=blob)
-
-    session.commit()
-
-    if should_delete_object:
         try:
             storage.delete_object(object_key=object_key)
         except Exception:
             logger.exception("Failed to delete unreferenced file blob object")
+
+    session.commit()
 
 
 def delete_folder(
@@ -463,13 +498,13 @@ def delete_folder(
 
     session.flush()
     repository.delete_folder(session=session, folder=folder)
-    session.commit()
-
     for object_key in object_keys_to_delete:
         try:
             storage.delete_object(object_key=object_key)
         except Exception:
             logger.exception("Failed to delete unreferenced folder blob object")
+
+    session.commit()
 
 
 def create_presigned_download(

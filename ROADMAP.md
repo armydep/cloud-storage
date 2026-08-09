@@ -34,6 +34,8 @@ Keep development and delivery reliable while product capabilities expand.
 - [ ] **2.5** Enable TLS for all production-facing endpoints
 - [ ] **2.6** Verify upload hashes with S3-side checksums
       ([#91](https://github.com/armydep/cloude-file-storage/issues/91))
+- [ ] **2.7** Delay file blob row locks until upload metadata mutation
+      ([#92](https://github.com/armydep/cloude-file-storage/issues/92))
 
 ## 3. Next phase: File experience
 
