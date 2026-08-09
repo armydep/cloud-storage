@@ -29,11 +29,19 @@ dev = [
     "ruff>=0.16.1,<1.0.0",
     "prek>=0.4.11,<1.0.0",
     "coverage>=7.15.2,<8.0.0",
+    "testcontainers[postgres]>=4.0,<5.0",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `tests.container` starts the throwaway PostgreSQL container. It has to load
+# as a plugin rather than a conftest so that it runs before anything imports
+# `app` — see the module docstring.
+addopts = "-p tests.container"
 
 [tool.mypy]
 strict = true
@@ -68,6 +76,11 @@ keep-runtime-typing = true
 
 [tool.coverage.run]
 source = ["app"]
+# Migrations now run in-process against the test container, so without this
+# they would count toward the gate. Their `downgrade()` bodies never execute,
+# which drags the total down and makes the 90% gate depend on how many
+# migrations exist rather than on how well the application is tested.
+omit = ["app/alembic/*"]
 dynamic_context = "test_function"
 
 [tool.coverage.report]

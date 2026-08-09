@@ -25,7 +25,7 @@ Complete the core operations needed to manage a cloud-style file hierarchy.
 
 Keep development and delivery reliable while product capabilities expand.
 
-- [ ] **2.1** Run backend integration tests in isolated Testcontainers environments
+- [x] **2.1** Run backend integration tests in isolated Testcontainers environments
       ([#43](https://github.com/armydep/cloude-file-storage/issues/43))
 - [ ] **2.2** Fix and stabilize CI workflows
       ([#42](https://github.com/armydep/cloude-file-storage/issues/42))

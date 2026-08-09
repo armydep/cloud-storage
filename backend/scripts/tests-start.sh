@@ -2,6 +2,6 @@
 set -e
 set -x
 
-python app/tests_pre_start.py
-
+# No database readiness wait here: the tests start their own PostgreSQL
+# container (tests/container.py) and testcontainers blocks until it is ready.
 bash scripts/test.sh "$@"
