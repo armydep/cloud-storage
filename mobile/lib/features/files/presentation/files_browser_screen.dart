@@ -255,10 +255,16 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
               onOpen: (item.isFile && filePath != null)
                   ? () => controller.openDownloadedFile(filePath)
                   : null,
-              downloadProgress: item.isFile ? state.getDownloadProgress(item.id) : null,
+              onDelete: item.isFile
+                  ? () => _confirmDeleteFile(context, controller, item)
+                  : null,
+              downloadProgress:
+                  item.isFile ? state.getDownloadProgress(item.id) : null,
               downloadError: item.isFile ? state.getDownloadError(item.id) : null,
-              uploadProgress: item.isFile ? state.getUploadProgress(item.name) : null,
+              uploadProgress:
+                  item.isFile ? state.getUploadProgress(item.name) : null,
               uploadError: item.isFile ? state.getUploadError(item.name) : null,
+              isDeleting: item.isFile && state.isDeleting(item.id),
             ),
           );
         },
@@ -273,6 +279,56 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
         builder: (context) => FileDetailScreen(file: file),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteFile(
+    BuildContext context,
+    FilesController controller,
+    FileContent file,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete file'),
+        content: Text(
+          '${file.name} will be permanently deleted. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    final deleted = await controller.deleteFile(file.id);
+    if (!context.mounted) {
+      return;
+    }
+    if (deleted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('File deleted successfully')),
+      );
+    } else {
+      final error = ref.read(filesControllerProvider).getDeleteError(file.id) ??
+          'Delete failed. Please try again.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error)),
+      );
+    }
   }
 }
 

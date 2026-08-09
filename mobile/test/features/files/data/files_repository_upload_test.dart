@@ -45,7 +45,33 @@ void main() {
 
       expect(result.url, 'https://minio:9000/bucket/sha256/abc123');
       expect(result.method, 'PUT');
+      expect(result.uploadRequired, isTrue);
       expect(result.expiresInSeconds, 3600);
+    });
+
+    test('returns UploadUrlResponse for existing claimed blob', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextResponse = {
+        'upload_required': false,
+        'upload_url': null,
+        'method': null,
+        'expires_in': 0,
+      };
+
+      final repository = FilesRepository(mockApiClient);
+      final result = await repository.presignUpload(
+        folderPath: 'root',
+        name: 'document.pdf',
+        blobHash: 'abc123def456',
+        mimeType: 'application/pdf',
+        category: 'document',
+        sizeBytes: 102400,
+      );
+
+      expect(result.uploadRequired, isFalse);
+      expect(result.url, isNull);
+      expect(result.method, isNull);
+      expect(result.expiresInSeconds, 0);
     });
 
     test('throws FolderNotFoundError on 404', () async {
@@ -208,6 +234,14 @@ class _MockApiClient implements ApiClient {
   Map<String, dynamic>? nextResponse;
   ApiException? nextException;
   String? lastPostPath;
+
+  @override
+  Future<void> delete(
+    String path, {
+    bool authenticated = false,
+  }) async {
+    throw UnimplementedError();
+  }
 
   @override
   Future<Map<String, dynamic>> getJson(

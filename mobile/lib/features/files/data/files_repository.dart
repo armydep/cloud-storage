@@ -53,7 +53,9 @@ class FilesRepository {
       } else if (e.statusCode != null && e.statusCode! >= 500) {
         throw ServerError('Server error. Please try again.');
       } else if (e.isNetworkError) {
-        throw NetworkError('Connection lost. Please check your network and try again.');
+        throw NetworkError(
+          'Connection lost. Please check your network and try again.',
+        );
       } else {
         throw ApiError(e.message);
       }
@@ -74,7 +76,9 @@ class FilesRepository {
       } else if (e.statusCode != null && e.statusCode! >= 500) {
         throw ServerError('File download failed. Please try again later.');
       } else if (e.isNetworkError) {
-        throw NetworkError('Connection lost. Please check your network and try again.');
+        throw NetworkError(
+          'Connection lost. Please check your network and try again.',
+        );
       } else {
         throw ApiError(e.message);
       }
@@ -114,7 +118,9 @@ class FilesRepository {
       } else if (e.statusCode != null && e.statusCode! >= 500) {
         throw ServerError('Upload failed. Please try again later.');
       } else if (e.isNetworkError) {
-        throw NetworkError('Connection lost. Please check your network and try again.');
+        throw NetworkError(
+          'Connection lost. Please check your network and try again.',
+        );
       } else {
         throw ApiError(e.message);
       }
@@ -154,7 +160,30 @@ class FilesRepository {
       } else if (e.statusCode != null && e.statusCode! >= 500) {
         throw ServerError('Upload completion failed. Please try again later.');
       } else if (e.isNetworkError) {
-        throw NetworkError('Connection lost. Please check your network and try again.');
+        throw NetworkError(
+          'Connection lost. Please check your network and try again.',
+        );
+      } else {
+        throw ApiError(e.message);
+      }
+    }
+  }
+
+  Future<void> deleteFile({required String fileId}) async {
+    try {
+      await apiClient.delete(
+        '/api/v1/files/$fileId',
+        authenticated: true,
+      );
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        throw FileNotFoundError('File not found or you do not have permission');
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError('File delete failed. Please try again later.');
+      } else if (e.isNetworkError) {
+        throw NetworkError(
+          'Connection lost. Please check your network and try again.',
+        );
       } else {
         throw ApiError(e.message);
       }
@@ -236,20 +265,23 @@ class DownloadUrlResponse {
 }
 
 class UploadUrlResponse {
-  final String url;
-  final String method;
+  final bool uploadRequired;
+  final String? url;
+  final String? method;
   final int expiresInSeconds;
 
   UploadUrlResponse({
-    required this.url,
-    required this.method,
+    required this.uploadRequired,
+    this.url,
+    this.method,
     required this.expiresInSeconds,
   });
 
   factory UploadUrlResponse.fromJson(Map<String, dynamic> json) {
     return UploadUrlResponse(
-      url: json['upload_url'] as String,
-      method: json['method'] as String? ?? 'PUT',
+      uploadRequired: json['upload_required'] as bool? ?? true,
+      url: json['upload_url'] as String?,
+      method: json['method'] as String?,
       expiresInSeconds: json['expires_in'] as int? ?? 3600,
     );
   }
