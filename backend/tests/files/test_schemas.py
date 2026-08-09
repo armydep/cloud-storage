@@ -102,6 +102,22 @@ def test_presign_upload_response_defaults_method_to_put() -> None:
     )
 
     assert response.method == "PUT"
+    assert response.upload_required is True
+
+
+def test_presign_upload_response_supports_upload_skip() -> None:
+    response = PresignUploadResponse(
+        upload_required=False,
+        upload_url=None,
+        method=None,
+        headers={},
+        object_key="sha256/abc",
+        expires_in=0,
+    )
+
+    assert response.upload_required is False
+    assert response.upload_url is None
+    assert response.method is None
 
 
 def test_presign_download_response_defaults_method_to_get() -> None:

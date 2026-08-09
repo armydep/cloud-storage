@@ -6,8 +6,9 @@ from sqlmodel import Session, select
 
 from app import crud
 from app.core.config import settings
+from app.core.db import engine
 from app.core.storage import ObjectNotFoundError, ObjectStat
-from app.files.models import Folder, StoredFile
+from app.files.models import FileBlob, Folder, StoredFile
 from app.models import UserCreate
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import random_email
@@ -187,13 +188,23 @@ def test_read_root_returns_root_contents(
         headers=normal_user_token_headers,
     )
     root = root_response.json()
+    blob_hash = "abc123"
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=12345,
+            ref_count=1,
+        )
+    )
+    db.commit()
     child = StoredFile(
         name="report.pdf",
         owner_id=root["owner_id"],
         folder_id=root["id"],
         mime_type="application/pdf",
         category="document",
-        blob_hash="abc123",
+        blob_hash=blob_hash,
         size_bytes=12345,
     )
     db.add(child)
@@ -400,6 +411,7 @@ def test_presign_upload_succeeds_for_owned_folder(
     assert response.status_code == 200
     content = response.json()
     assert content == {
+        "upload_required": True,
         "upload_url": "http://localhost:9000/cloud-file-storage/sha256/upload?sig=1",
         "method": "PUT",
         "headers": {"Content-Type": "application/pdf"},
@@ -412,6 +424,61 @@ def test_presign_upload_succeeds_for_owned_folder(
             "mime_type": "application/pdf",
         }
     ]
+
+
+def test_presign_upload_existing_blob_skips_upload(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=123,
+            ref_count=1,
+        )
+    )
+    db.commit()
+
+    def fail_create_presigned_upload_url(*, object_key: str, mime_type: str) -> str:
+        del object_key, mime_type
+        raise AssertionError("existing blobs must not receive a PUT URL")
+
+    monkeypatch.setattr(
+        "app.files.service.storage.create_presigned_upload_url",
+        fail_create_presigned_upload_url,
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/presign-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "report.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "upload_required": False,
+        "upload_url": None,
+        "method": None,
+        "headers": {},
+        "object_key": f"sha256/{blob_hash}",
+        "expires_in": 0,
+    }
 
 
 def test_presign_upload_does_not_insert_file(
@@ -581,6 +648,167 @@ def test_complete_upload_succeeds_for_owned_folder(
         select(StoredFile).where(StoredFile.id == content["id"])
     ).first()
     assert stored_file is not None
+    stored_blob = db.get(FileBlob, "f" * 64)
+    assert stored_blob is not None
+    assert stored_blob.object_key == f"sha256/{'f' * 64}"
+    assert stored_blob.size_bytes == 123
+    assert stored_blob.ref_count == 1
+
+
+def test_complete_upload_existing_blob_increments_ref_count(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteExistingBlob",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=123,
+            ref_count=1,
+        )
+    )
+    db.commit()
+
+    def fail_stat_object(*, object_key: str) -> ObjectStat:
+        del object_key
+        raise AssertionError("existing blobs should not require object stat")
+
+    monkeypatch.setattr("app.files.service.storage.stat_object", fail_stat_object)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "existing-blob.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    db.expire_all()
+    stored_blob = db.get(FileBlob, blob_hash)
+    assert stored_blob is not None
+    assert stored_blob.ref_count == 2
+
+
+def test_complete_upload_recovers_when_concurrent_request_creates_blob(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteConcurrentBlob",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key: ObjectStat(size_bytes=123),
+    )
+
+    def concurrent_create_blob(
+        *,
+        session: Session,
+        blob_hash: str,
+        object_key: str,
+        size_bytes: int,
+        ref_count: int = 0,
+    ) -> FileBlob:
+        del session, ref_count
+        with Session(engine) as concurrent_session:
+            concurrent_session.add(
+                FileBlob(
+                    blob_hash=blob_hash,
+                    object_key=object_key,
+                    size_bytes=size_bytes,
+                    ref_count=1,
+                )
+            )
+            concurrent_session.commit()
+
+        from app.files.repository import DuplicateFileBlobRepositoryError
+
+        raise DuplicateFileBlobRepositoryError
+
+    monkeypatch.setattr("app.files.service.repository.create_blob", concurrent_create_blob)
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "concurrent-blob.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    db.expire_all()
+    stored_blob = db.get(FileBlob, blob_hash)
+    assert stored_blob is not None
+    assert stored_blob.ref_count == 2
+    stored_file = db.exec(
+        select(StoredFile).where(StoredFile.id == uuid.UUID(response.json()["id"]))
+    ).first()
+    assert stored_file is not None
+
+
+def test_complete_upload_existing_blob_size_mismatch_returns_400(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteExistingBlobSizeMismatch",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=456,
+            ref_count=1,
+        )
+    )
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "existing-blob-size-mismatch.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Uploaded object size mismatch"
 
 
 def test_complete_upload_file_appears_in_folder_listing(
@@ -761,14 +989,23 @@ def test_complete_upload_duplicate_filename_returns_409(
         db=db,
         name_prefix="CompleteUploadDuplicate",
     )
+    blob_hash = uuid.uuid4().hex * 2
     existing = StoredFile(
         owner_id=folder.owner_id,
         folder_id=folder.id,
         name="duplicate.pdf",
         mime_type="application/pdf",
         category="document",
-        blob_hash="6" * 64,
+        blob_hash=blob_hash,
         size_bytes=123,
+    )
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=123,
+            ref_count=1,
+        )
     )
     db.add(existing)
     db.commit()
@@ -792,6 +1029,59 @@ def test_complete_upload_duplicate_filename_returns_409(
 
     assert response.status_code == 409
     assert response.json()["detail"] == "File name already exists"
+
+
+def test_complete_upload_duplicate_filename_does_not_increment_existing_blob(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="CompleteUploadDuplicateExistingBlob",
+    )
+    blob_hash = uuid.uuid4().hex * 2
+    existing = StoredFile(
+        owner_id=folder.owner_id,
+        folder_id=folder.id,
+        name="duplicate.pdf",
+        mime_type="application/pdf",
+        category="document",
+        blob_hash=blob_hash,
+        size_bytes=123,
+    )
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=123,
+            ref_count=1,
+        )
+    )
+    db.add(existing)
+    db.commit()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "duplicate.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "File name already exists"
+    db.expire_all()
+    blob = db.get(FileBlob, blob_hash)
+    assert blob is not None
+    assert blob.ref_count == 1
 
 
 def test_complete_upload_repository_duplicate_conflict_returns_409(
@@ -911,14 +1201,25 @@ def _create_unique_file(
     headers: dict[str, str],
     db: Session,
     name_prefix: str = "Download",
-    blob_hash: str = "a" * 64,
+    blob_hash: str | None = None,
 ) -> StoredFile:
+    if blob_hash is None:
+        blob_hash = uuid.uuid4().hex * 2
     folder = _create_unique_folder(
         client=client,
         headers=headers,
         db=db,
         name_prefix=name_prefix,
     )
+    db.add(
+        FileBlob(
+            blob_hash=blob_hash,
+            object_key=f"sha256/{blob_hash}",
+            size_bytes=123,
+            ref_count=1,
+        )
+    )
+    db.commit()
     file = StoredFile(
         owner_id=folder.owner_id,
         folder_id=folder.id,

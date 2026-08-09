@@ -5,20 +5,32 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from app.files import repository
-from app.files.models import FileShare, StoredFile
+from app.files.models import FileBlob, FileShare, StoredFile
 from tests.utils.user import create_random_user
 
 
 def _create_file(db: Session) -> StoredFile:
     owner = create_random_user(db)
     folder = repository.create_root_folder(session=db, owner_id=owner.id)
+    blob_hash = "a" * 64
+    blob = db.get(FileBlob, blob_hash)
+    if blob is None:
+        db.add(
+            FileBlob(
+                blob_hash=blob_hash,
+                object_key=f"sha256/{blob_hash}",
+                size_bytes=123,
+                ref_count=0,
+            )
+        )
+        db.commit()
     file = StoredFile(
         owner_id=owner.id,
         folder_id=folder.id,
         name="shared.pdf",
         mime_type="application/pdf",
         category="document",
-        blob_hash="a" * 64,
+        blob_hash=blob_hash,
         size_bytes=123,
     )
     db.add(file)

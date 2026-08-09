@@ -2,7 +2,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Index, UniqueConstraint, cast
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    Index,
+    UniqueConstraint,
+    cast,
+)
 from sqlalchemy.types import UserDefinedType
 from sqlmodel import Field, SQLModel
 
@@ -49,7 +56,12 @@ class StoredFileBase(SQLModel):
     name: str = Field(min_length=1, max_length=255)
     mime_type: str = Field(min_length=1, max_length=255)
     category: str = Field(min_length=1, max_length=64)
-    blob_hash: str = Field(min_length=1, max_length=128)
+    blob_hash: str = Field(
+        min_length=1,
+        max_length=128,
+        foreign_key="file_blobs.blob_hash",
+        nullable=False,
+    )
     size_bytes: int = Field(ge=0, sa_type=BigInteger)  # type: ignore
 
 
@@ -74,6 +86,24 @@ class StoredFile(StoredFileBase, table=True):
     folder_id: uuid.UUID = Field(
         foreign_key="folders.id", nullable=False, ondelete="CASCADE"
     )
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+        nullable=False,
+    )
+
+
+class FileBlob(SQLModel, table=True):
+    __tablename__ = "file_blobs"
+    __table_args__ = (
+        UniqueConstraint("object_key", name="uq_file_blobs_object_key"),
+        CheckConstraint("ref_count >= 0", name="ck_file_blobs_ref_count_non_negative"),
+        Index("ix_file_blobs_object_key", "object_key"),
+    )
+    blob_hash: str = Field(min_length=1, max_length=128, primary_key=True)
+    object_key: str = Field(min_length=1, max_length=512, nullable=False)
+    size_bytes: int = Field(ge=0, sa_type=BigInteger)  # type: ignore
+    ref_count: int = Field(default=0, ge=0, nullable=False)
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
