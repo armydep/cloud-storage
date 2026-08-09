@@ -1,6 +1,7 @@
 import logging
 import re
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session
 
@@ -45,6 +46,10 @@ class ObjectSizeMismatchError(Exception):
 
 
 class ObjectContentTypeMismatchError(Exception):
+    pass
+
+
+class ObjectHashMismatchError(Exception):
     pass
 
 
@@ -182,12 +187,16 @@ def create_presigned_upload(
     if not folder:
         raise FolderNotFoundError
 
-    object_key = storage.get_object_key(request.blob_hash)
     existing_blob = repository.get_blob_by_hash(
         session=session,
         blob_hash=request.blob_hash,
     )
-    if existing_blob:
+    existing_claim = repository.get_blob_claim(
+        session=session,
+        owner_id=owner_id,
+        blob_hash=request.blob_hash,
+    )
+    if existing_blob and existing_claim:
         return PresignUploadResponse(
             upload_required=False,
             upload_url=None,
@@ -197,10 +206,27 @@ def create_presigned_upload(
             expires_in=0,
         )
 
+    upload_id = uuid.uuid4()
+    object_key = storage.get_pending_upload_object_key(
+        owner_id=owner_id,
+        upload_id=upload_id,
+    )
     upload_url = storage.create_presigned_upload_url(
         object_key=object_key,
         mime_type=request.mime_type,
     )
+    repository.create_pending_upload(
+        session=session,
+        upload_id=upload_id,
+        owner_id=owner_id,
+        blob_hash=request.blob_hash,
+        object_key=object_key,
+        size_bytes=request.size_bytes,
+        mime_type=request.mime_type,
+        expires_at=datetime.now(timezone.utc)
+        + timedelta(seconds=settings.S3_PRESIGNED_URL_EXPIRES_SECONDS),
+    )
+    session.commit()
 
     return PresignUploadResponse(
         upload_required=True,
@@ -230,17 +256,49 @@ def complete_upload(
     if existing_file:
         raise DuplicateFileNameError
 
-    object_key = storage.get_object_key(request.blob_hash)
+    canonical_object_key = storage.get_object_key(request.blob_hash)
     blob = repository.get_blob_for_update(
         session=session,
         blob_hash=request.blob_hash,
     )
+    existing_claim = repository.get_blob_claim(
+        session=session,
+        owner_id=owner_id,
+        blob_hash=request.blob_hash,
+    )
+    pending_upload = None
+    pending_object_key = None
+
     if blob:
         if blob.size_bytes != request.size_bytes:
             raise ObjectSizeMismatchError
+        if not existing_claim:
+            pending_upload = repository.get_latest_pending_upload(
+                session=session,
+                owner_id=owner_id,
+                blob_hash=request.blob_hash,
+            )
+            if pending_upload is None:
+                raise ObjectNotUploadedError
     else:
+        pending_upload = repository.get_latest_pending_upload(
+            session=session,
+            owner_id=owner_id,
+            blob_hash=request.blob_hash,
+        )
+        if pending_upload is None:
+            raise ObjectNotUploadedError
+
+    if pending_upload is not None:
+        pending_object_key = pending_upload.object_key
+        if pending_upload.size_bytes != request.size_bytes:
+            raise ObjectSizeMismatchError
+
+        if pending_upload.mime_type != request.mime_type:
+            raise ObjectContentTypeMismatchError
+
         try:
-            object_stat = storage.stat_object(object_key=object_key)
+            object_stat = storage.stat_object(object_key=pending_upload.object_key)
         except storage.ObjectNotFoundError:
             raise ObjectNotUploadedError
 
@@ -250,11 +308,24 @@ def complete_upload(
         if object_stat.content_type and object_stat.content_type != request.mime_type:
             raise ObjectContentTypeMismatchError
 
+        object_hash = storage.calculate_object_sha256(
+            object_key=pending_upload.object_key,
+        )
+        if object_hash != request.blob_hash:
+            raise ObjectHashMismatchError
+
+    if blob is None:
+        if pending_object_key is None:
+            raise ObjectNotUploadedError
+        storage.copy_object(
+            source_object_key=pending_object_key,
+            destination_object_key=canonical_object_key,
+        )
         try:
             blob = repository.create_blob(
                 session=session,
                 blob_hash=request.blob_hash,
-                object_key=object_key,
+                object_key=canonical_object_key,
                 size_bytes=request.size_bytes,
             )
         except repository.DuplicateFileBlobRepositoryError:
@@ -268,6 +339,11 @@ def complete_upload(
                 raise ObjectSizeMismatchError
 
     try:
+        repository.ensure_blob_claim(
+            session=session,
+            owner_id=owner_id,
+            blob_hash=request.blob_hash,
+        )
         repository.increment_blob_ref_count(blob=blob)
         file = repository.create_file(
             session=session,
@@ -276,11 +352,21 @@ def complete_upload(
             request=request,
             commit=False,
         )
+        if pending_upload is not None:
+            repository.delete_pending_upload(
+                session=session,
+                pending_upload=pending_upload,
+            )
         session.commit()
         session.refresh(file)
     except repository.DuplicateFileNameRepositoryError:
         session.rollback()
         raise DuplicateFileNameError
+    if pending_object_key is not None:
+        try:
+            storage.delete_object(object_key=pending_object_key)
+        except Exception:
+            logger.exception("Failed to delete completed pending upload object")
     return StoredFilePublic.model_validate(file)
 
 

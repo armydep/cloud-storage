@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
@@ -20,6 +21,10 @@ class ObjectStat:
 
 def get_object_key(blob_hash: str) -> str:
     return f"sha256/{blob_hash}"
+
+
+def get_pending_upload_object_key(*, owner_id: Any, upload_id: Any) -> str:
+    return f"uploads/{owner_id}/{upload_id}"
 
 
 def get_s3_client() -> Any:
@@ -102,6 +107,31 @@ def stat_object(*, object_key: str) -> ObjectStat:
     return ObjectStat(
         size_bytes=response["ContentLength"],
         content_type=response.get("ContentType"),
+    )
+
+
+def calculate_object_sha256(*, object_key: str) -> str:
+    response = get_s3_client().get_object(
+        Bucket=settings.S3_BUCKET,
+        Key=object_key,
+    )
+    digest = hashlib.sha256()
+    body = response["Body"]
+    try:
+        for chunk in iter(lambda: body.read(1024 * 1024), b""):
+            digest.update(chunk)
+    finally:
+        close = getattr(body, "close", None)
+        if close:
+            close()
+    return digest.hexdigest()
+
+
+def copy_object(*, source_object_key: str, destination_object_key: str) -> None:
+    get_s3_client().copy_object(
+        Bucket=settings.S3_BUCKET,
+        CopySource={"Bucket": settings.S3_BUCKET, "Key": source_object_key},
+        Key=destination_object_key,
     )
 
 

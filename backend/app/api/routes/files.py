@@ -29,6 +29,7 @@ from app.files.service import (
     FolderNotFoundError,
     InvalidFolderNameError,
     ObjectContentTypeMismatchError,
+    ObjectHashMismatchError,
     ObjectNotUploadedError,
     ObjectSizeMismatchError,
     ShareRecipientInactiveError,
@@ -233,6 +234,8 @@ def complete_file_upload(
         raise HTTPException(
             status_code=400, detail="Uploaded object content type mismatch"
         )
+    except ObjectHashMismatchError:
+        raise HTTPException(status_code=400, detail="Uploaded object hash mismatch")
     except DuplicateFileNameError:
         raise HTTPException(status_code=409, detail="File name already exists")
 
