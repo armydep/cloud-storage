@@ -57,8 +57,9 @@ class PresignUploadRequest(FileUploadMetadataBase):
 
 
 class PresignUploadResponse(SQLModel):
-    upload_url: str
-    method: str = "PUT"
+    upload_required: bool = True
+    upload_url: str | None = None
+    method: str | None = "PUT"
     headers: dict[str, str]
     object_key: str
     expires_in: int

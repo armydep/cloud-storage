@@ -180,12 +180,27 @@ def create_presigned_upload(
         raise FolderNotFoundError
 
     object_key = storage.get_object_key(request.blob_hash)
+    existing_blob = repository.get_blob_by_hash(
+        session=session,
+        blob_hash=request.blob_hash,
+    )
+    if existing_blob:
+        return PresignUploadResponse(
+            upload_required=False,
+            upload_url=None,
+            method=None,
+            headers={},
+            object_key=existing_blob.object_key,
+            expires_in=0,
+        )
+
     upload_url = storage.create_presigned_upload_url(
         object_key=object_key,
         mime_type=request.mime_type,
     )
 
     return PresignUploadResponse(
+        upload_required=True,
         upload_url=upload_url,
         headers={"Content-Type": request.mime_type},
         object_key=object_key,
@@ -213,25 +228,45 @@ def complete_upload(
         raise DuplicateFileNameError
 
     object_key = storage.get_object_key(request.blob_hash)
+    blob = repository.get_blob_for_update(
+        session=session,
+        blob_hash=request.blob_hash,
+    )
+    if blob:
+        if blob.size_bytes != request.size_bytes:
+            raise ObjectSizeMismatchError
+    else:
+        try:
+            object_stat = storage.stat_object(object_key=object_key)
+        except storage.ObjectNotFoundError:
+            raise ObjectNotUploadedError
+
+        if object_stat.size_bytes != request.size_bytes:
+            raise ObjectSizeMismatchError
+
+        if object_stat.content_type and object_stat.content_type != request.mime_type:
+            raise ObjectContentTypeMismatchError
+
+        blob = repository.create_blob(
+            session=session,
+            blob_hash=request.blob_hash,
+            object_key=object_key,
+            size_bytes=request.size_bytes,
+        )
+
     try:
-        object_stat = storage.stat_object(object_key=object_key)
-    except storage.ObjectNotFoundError:
-        raise ObjectNotUploadedError
-
-    if object_stat.size_bytes != request.size_bytes:
-        raise ObjectSizeMismatchError
-
-    if object_stat.content_type and object_stat.content_type != request.mime_type:
-        raise ObjectContentTypeMismatchError
-
-    try:
+        repository.increment_blob_ref_count(blob=blob)
         file = repository.create_file(
             session=session,
             owner_id=owner_id,
             folder_id=folder.id,
             request=request,
+            commit=False,
         )
+        session.commit()
+        session.refresh(file)
     except repository.DuplicateFileNameRepositoryError:
+        session.rollback()
         raise DuplicateFileNameError
     return StoredFilePublic.model_validate(file)
 

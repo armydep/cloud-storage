@@ -6,7 +6,7 @@ from sqlmodel import Session, delete
 
 from app.core.config import settings
 from app.core.db import engine, init_db
-from app.files.models import Folder, StoredFile
+from app.files.models import FileBlob, Folder, StoredFile
 from app.main import app
 from app.models import Item, User
 from tests.utils.user import authentication_token_from_email
@@ -28,6 +28,8 @@ def db() -> Generator[Session, None, None]:
         statement = delete(Item)
         session.execute(statement)
         statement = delete(StoredFile)
+        session.execute(statement)
+        statement = delete(FileBlob)
         session.execute(statement)
         statement = delete(Folder)
         session.execute(statement)

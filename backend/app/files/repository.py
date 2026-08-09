@@ -5,7 +5,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
-from app.files.models import FileShare, Folder, StoredFile
+from app.files.models import FileBlob, FileShare, Folder, StoredFile
 from app.files.schemas import CompleteUploadRequest
 from app.models import User
 
@@ -21,6 +21,10 @@ class DuplicateFolderRepositoryError(Exception):
 
 
 class DuplicateFileShareRepositoryError(Exception):
+    pass
+
+
+class DuplicateFileBlobRepositoryError(Exception):
     pass
 
 
@@ -201,6 +205,50 @@ def list_files_shared_with_user(
     return list(session.exec(statement).all())
 
 
+def get_blob_by_hash(*, session: Session, blob_hash: str) -> FileBlob | None:
+    return session.get(FileBlob, blob_hash)
+
+
+def get_blob_for_update(*, session: Session, blob_hash: str) -> FileBlob | None:
+    statement = (
+        select(FileBlob)
+        .where(FileBlob.blob_hash == blob_hash)
+        .with_for_update()
+    )
+    return session.exec(statement).first()
+
+
+def create_blob(
+    *,
+    session: Session,
+    blob_hash: str,
+    object_key: str,
+    size_bytes: int,
+    ref_count: int = 0,
+) -> FileBlob:
+    blob = FileBlob(
+        blob_hash=blob_hash,
+        object_key=object_key,
+        size_bytes=size_bytes,
+        ref_count=ref_count,
+    )
+    session.add(blob)
+    try:
+        session.flush()
+    except IntegrityError:
+        session.rollback()
+        raise DuplicateFileBlobRepositoryError
+    return blob
+
+
+def increment_blob_ref_count(*, blob: FileBlob) -> None:
+    blob.ref_count += 1
+
+
+def decrement_blob_ref_count(*, blob: FileBlob) -> None:
+    blob.ref_count -= 1
+
+
 def get_file_by_folder_and_name(
     *, session: Session, folder_id: uuid.UUID, name: str
 ) -> StoredFile | None:
@@ -217,6 +265,7 @@ def create_file(
     owner_id: uuid.UUID,
     folder_id: uuid.UUID,
     request: CompleteUploadRequest,
+    commit: bool = True,
 ) -> StoredFile:
     file = StoredFile(
         owner_id=owner_id,
@@ -229,9 +278,13 @@ def create_file(
     )
     try:
         session.add(file)
-        session.commit()
+        if commit:
+            session.commit()
+        else:
+            session.flush()
     except IntegrityError:
         session.rollback()
         raise DuplicateFileNameRepositoryError
-    session.refresh(file)
+    if commit:
+        session.refresh(file)
     return file
