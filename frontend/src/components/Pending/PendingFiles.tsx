@@ -14,7 +14,7 @@ const PendingFiles = () => (
       <TableRow>
         <TableHead>Name</TableHead>
         <TableHead>Type</TableHead>
-        <TableHead>Path / Hash</TableHead>
+        <TableHead>Created</TableHead>
         <TableHead>Size</TableHead>
         <TableHead>ID</TableHead>
       </TableRow>
@@ -29,7 +29,7 @@ const PendingFiles = () => (
             <Skeleton className="h-4 w-20" />
           </TableCell>
           <TableCell>
-            <Skeleton className="h-4 w-48 font-mono" />
+            <Skeleton className="h-4 w-28" />
           </TableCell>
           <TableCell>
             <Skeleton className="h-4 w-36" />
