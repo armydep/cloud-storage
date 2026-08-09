@@ -231,6 +231,12 @@ export type FilesCreateChildFolderData = {
 
 export type FilesCreateChildFolderResponse = (FolderPublic);
 
+export type FilesDeleteOwnedFolderData = {
+    folderId: string;
+};
+
+export type FilesDeleteOwnedFolderResponse = (void);
+
 export type FilesReadFilesData = {
     path?: string;
 };

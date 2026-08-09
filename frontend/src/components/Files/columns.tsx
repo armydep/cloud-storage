@@ -3,6 +3,7 @@ import { Check, Copy, File, Folder } from "lucide-react"
 
 import type { FolderContentPublic } from "@/client"
 import FileActionsMenu from "@/components/Files/FileActionsMenu"
+import FolderActionsMenu from "@/components/Files/FolderActionsMenu"
 import { Button } from "@/components/ui/button"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 
@@ -122,13 +123,16 @@ export function getColumns({
       id: "actions",
       header: () => <span className="sr-only">Actions</span>,
       cell: ({ row }) => {
-        if (row.original.type !== "file") {
-          return null
-        }
-
         return (
           <div className="flex justify-end">
-            <FileActionsMenu currentPath={currentPath} file={row.original} />
+            {row.original.type === "folder" ? (
+              <FolderActionsMenu
+                currentPath={currentPath}
+                folder={row.original}
+              />
+            ) : (
+              <FileActionsMenu currentPath={currentPath} file={row.original} />
+            )}
           </div>
         )
       },

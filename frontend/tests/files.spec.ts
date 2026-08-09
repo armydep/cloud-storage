@@ -194,7 +194,7 @@ test("Empty folder shows empty state", async ({ page }) => {
   ).toBeVisible()
 })
 
-test("File rows show download action and folder rows do not", async ({
+test("File rows show file actions and folder rows show folder actions", async ({
   page,
 }) => {
   await page.goto("/files")
@@ -206,11 +206,19 @@ test("File rows show download action and folder rows do not", async ({
     fileRow.getByRole("button", { name: "Open file actions" }),
   ).toBeVisible()
   await expect(
-    folderRow.getByRole("button", { name: "Open file actions" }),
-  ).toHaveCount(0)
+    folderRow.getByRole("button", { name: "Open folder actions" }),
+  ).toBeVisible()
 
   await fileRow.getByRole("button", { name: "Open file actions" }).click()
+  await expect(page.getByRole("menuitem", { name: "Download" })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "Share" })).toBeVisible()
   await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible()
+  await page.keyboard.press("Escape")
+
+  await folderRow.getByRole("button", { name: "Open folder actions" }).click()
+  await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "Download" })).toHaveCount(0)
+  await expect(page.getByRole("menuitem", { name: "Share" })).toHaveCount(0)
 })
 
 test("Download action calls presign-download", async ({ page }) => {
@@ -433,6 +441,111 @@ test("Failed file delete keeps the file visible", async ({ page }) => {
   await page.getByRole("button", { name: "Cancel" }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expect(page.locator("table").getByText("welcome.txt")).toBeVisible()
+})
+
+test("Canceling folder delete does not call the delete endpoint", async ({
+  page,
+}) => {
+  let deleteCount = 0
+  await page.route("**/api/v1/files/folders/*", async (route) => {
+    if (route.request().method() === "DELETE") {
+      deleteCount += 1
+      await route.fulfill({ status: 204 })
+      return
+    }
+    await route.fallback()
+  })
+
+  await page.goto("/files")
+  const folderRow = page.getByRole("row").filter({ hasText: "Documents" })
+  await folderRow.getByRole("button", { name: "Open folder actions" }).click()
+  await page.getByRole("menuitem", { name: "Delete" }).click()
+
+  await expect(page.getByRole("dialog")).toBeVisible()
+  await expect(
+    page.getByRole("heading", { name: "Delete folder" }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole("dialog").getByText("Documents", { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByText(
+      "and all files and folders inside it will be permanently deleted",
+    ),
+  ).toBeVisible()
+
+  await page.getByRole("button", { name: "Cancel" }).click()
+
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(
+    folderRow.getByRole("button", { name: "Open folder actions" }),
+  ).toBeVisible()
+  expect(deleteCount).toBe(0)
+})
+
+test("Confirming folder delete calls the endpoint and refreshes the listing", async ({
+  page,
+}) => {
+  let deleted = false
+  let deleteRequestUrl: string | undefined
+
+  await page.route("**/api/v1/files?**", async (route) => {
+    await route.fulfill({
+      json: deleted
+        ? {
+            ...rootFolder,
+            contents: rootFolder.contents.filter(
+              (item) => item.id !== "00000000-0000-0000-0000-000000000002",
+            ),
+          }
+        : rootFolder,
+    })
+  })
+  await page.route("**/api/v1/files/folders/*", async (route) => {
+    if (route.request().method() === "DELETE") {
+      deleteRequestUrl = route.request().url()
+      deleted = true
+      await route.fulfill({ status: 204 })
+      return
+    }
+    await route.fallback()
+  })
+
+  await page.goto("/files")
+  const folderRow = page.getByRole("row").filter({ hasText: "Documents" })
+  await folderRow.getByRole("button", { name: "Open folder actions" }).click()
+  await page.getByRole("menuitem", { name: "Delete" }).click()
+  await page.getByRole("button", { name: "Delete", exact: true }).click()
+
+  await expect(page.getByText("Folder deleted successfully")).toBeVisible()
+  await expect(page.getByText("Documents")).toHaveCount(0)
+  expect(deleteRequestUrl).toContain(
+    "/api/v1/files/folders/00000000-0000-0000-0000-000000000002",
+  )
+})
+
+test("Failed folder delete keeps the folder visible", async ({ page }) => {
+  await page.route("**/api/v1/files/folders/*", async (route) => {
+    if (route.request().method() === "DELETE") {
+      await route.fulfill({ status: 500, json: { detail: "Delete failed" } })
+      return
+    }
+    await route.fallback()
+  })
+
+  await page.goto("/files")
+  const folderRow = page.getByRole("row").filter({ hasText: "Documents" })
+  await folderRow.getByRole("button", { name: "Open folder actions" }).click()
+  await page.getByRole("menuitem", { name: "Delete" }).click()
+  await page.getByRole("button", { name: "Delete", exact: true }).click()
+
+  await expect(page.getByText("Delete failed")).toBeVisible()
+  await expect(page.getByRole("dialog")).toBeVisible()
+  await page.getByRole("button", { name: "Cancel" }).click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(
+    folderRow.getByRole("button", { name: "Open folder actions" }),
+  ).toBeVisible()
 })
 
 test("Share action submits recipient email and closes the dialog", async ({
