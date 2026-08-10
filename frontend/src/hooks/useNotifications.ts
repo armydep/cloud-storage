@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query"
 
 import { NotificationsService } from "@/client"
+import useCustomToast from "./useCustomToast"
 import { useDocumentVisibility } from "./useDocumentVisibility"
 
 // Within the 15-30s window from phase-9-in-app-notifications.md decision 5.
@@ -42,6 +43,7 @@ export function useNotificationsList(enabled: boolean) {
 
 export function useMarkNotificationRead() {
   const queryClient = useQueryClient()
+  const { showErrorToast } = useCustomToast()
 
   return useMutation({
     mutationFn: (notificationId: string) =>
@@ -50,11 +52,14 @@ export function useMarkNotificationRead() {
       void queryClient.invalidateQueries({ queryKey: listKey })
       void queryClient.invalidateQueries({ queryKey: unreadCountKey })
     },
+    onError: () =>
+      showErrorToast("Could not mark this notification read. Try again."),
   })
 }
 
 export function useMarkAllNotificationsRead() {
   const queryClient = useQueryClient()
+  const { showErrorToast } = useCustomToast()
 
   return useMutation({
     mutationFn: () => NotificationsService.readAllNotifications(),
@@ -62,5 +67,7 @@ export function useMarkAllNotificationsRead() {
       void queryClient.invalidateQueries({ queryKey: listKey })
       void queryClient.invalidateQueries({ queryKey: unreadCountKey })
     },
+    onError: () =>
+      showErrorToast("Could not mark all notifications read. Try again."),
   })
 }
