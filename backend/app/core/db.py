@@ -2,10 +2,20 @@ from sqlmodel import Session, create_engine, select
 
 from app import crud
 from app.core.config import settings
+from app.core.metrics import InstrumentedQueuePool, instrument_sqlalchemy_pool
 from app.files import models as file_models  # noqa: F401
 from app.models import User, UserCreate
+from app.notifications import models as notification_models  # noqa: F401
 
-engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+engine = create_engine(
+    str(settings.SQLALCHEMY_DATABASE_URI),
+    poolclass=InstrumentedQueuePool,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_pre_ping=settings.DB_POOL_PRE_PING,
+    pool_recycle=settings.DB_POOL_RECYCLE_SECONDS,
+)
+instrument_sqlalchemy_pool(engine)
 
 
 # make sure all SQLModel models are imported before initializing DB

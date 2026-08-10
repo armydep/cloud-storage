@@ -1,3 +1,4 @@
+name: cfs
 services:
 
   db:
@@ -18,6 +19,22 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_DB=${POSTGRES_DB?Variable not set}
+
+  rabbitmq:
+    image: rabbitmq:4.3-management
+    hostname: rabbitmq
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD?Variable not set}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
 
   adminer:
     image: adminer
@@ -43,7 +60,7 @@ services:
       - traefik.http.services.${STACK_NAME?Variable not set}-adminer.loadbalancer.server.port=8080
 
   prestart:
-    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    image: '${DOCKER_IMAGE_BACKEND:?Variable not set}:${TAG:-latest}'
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -65,6 +82,13 @@ services:
       - SECRET_KEY=${SECRET_KEY?Variable not set}
       - FIRST_SUPERUSER=${FIRST_SUPERUSER?Variable not set}
       - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD?Variable not set}
+      - BACKEND_WORKERS=${BACKEND_WORKERS:-4}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-3}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-2}
+      - DB_POOL_RECYCLE_SECONDS=${DB_POOL_RECYCLE_SECONDS:-1800}
+      - DB_POOL_PRE_PING=${DB_POOL_PRE_PING:-true}
+      - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
@@ -74,10 +98,13 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+      - S3_CONNECT_TIMEOUT_SECONDS=${S3_CONNECT_TIMEOUT_SECONDS:-3}
+      - S3_READ_TIMEOUT_SECONDS=${S3_READ_TIMEOUT_SECONDS:-30}
+      - S3_MAX_ATTEMPTS=${S3_MAX_ATTEMPTS:-3}
       - SENTRY_DSN=${SENTRY_DSN}
 
   backend:
-    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    image: '${DOCKER_IMAGE_BACKEND:?Variable not set}:${TAG:-latest}'
     restart: always
     networks:
       - traefik-public
@@ -98,6 +125,13 @@ services:
       - SECRET_KEY=${SECRET_KEY?Variable not set}
       - FIRST_SUPERUSER=${FIRST_SUPERUSER?Variable not set}
       - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD?Variable not set}
+      - BACKEND_WORKERS=${BACKEND_WORKERS:-4}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-3}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-2}
+      - DB_POOL_RECYCLE_SECONDS=${DB_POOL_RECYCLE_SECONDS:-1800}
+      - DB_POOL_PRE_PING=${DB_POOL_PRE_PING:-true}
+      - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
@@ -107,6 +141,9 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+      - S3_CONNECT_TIMEOUT_SECONDS=${S3_CONNECT_TIMEOUT_SECONDS:-3}
+      - S3_READ_TIMEOUT_SECONDS=${S3_READ_TIMEOUT_SECONDS:-30}
+      - S3_MAX_ATTEMPTS=${S3_MAX_ATTEMPTS:-3}
       - SENTRY_DSN=${SENTRY_DSN}
 
     healthcheck:
@@ -136,8 +173,65 @@ services:
       # Enable redirection for HTTP and HTTPS
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.middlewares=https-redirect
 
+  notification-relay:
+    image: '${DOCKER_IMAGE_BACKEND:?Variable not set}:${TAG:-latest}'
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+      prestart:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+        restart: true
+    command: python -m app.notifications.relay
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT}
+      - SECRET_KEY=${SECRET_KEY?Variable not set}
+      - FIRST_SUPERUSER=${FIRST_SUPERUSER?Variable not set}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD?Variable not set}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-3}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-2}
+      - DB_POOL_RECYCLE_SECONDS=${DB_POOL_RECYCLE_SECONDS:-1800}
+      - DB_POOL_PRE_PING=${DB_POOL_PRE_PING:-true}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
+      - POSTGRES_SERVER=db
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER?Variable not set}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+
+  notification-consumer:
+    image: '${DOCKER_IMAGE_BACKEND:?Variable not set}:${TAG:-latest}'
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+        restart: true
+    command: python -m app.notifications.consumer
+    env_file:
+      - .env
+    environment:
+      - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - SECRET_KEY=${SECRET_KEY?Variable not set}
+      - FIRST_SUPERUSER=${FIRST_SUPERUSER?Variable not set}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD?Variable not set}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
+
   frontend:
-    image: '${DOCKER_IMAGE_FRONTEND?Variable not set}:${TAG-latest}'
+    image: '${DOCKER_IMAGE_FRONTEND:?Variable not set}:${TAG:-latest}'
     restart: always
     networks:
       - traefik-public
@@ -167,6 +261,7 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
 volumes:
   app-db-data:
+  rabbitmq-data:
 
 networks:
   traefik-public:

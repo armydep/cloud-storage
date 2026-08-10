@@ -6,6 +6,7 @@ from pydantic import (
     AnyUrl,
     BeforeValidator,
     EmailStr,
+    Field,
     HttpUrl,
     PostgresDsn,
     computed_field,
@@ -50,11 +51,22 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str
     SENTRY_DSN: HttpUrl | None = None
+    METRICS_BEARER_TOKEN: str | None = None
+    BACKEND_WORKERS: int = Field(default=4, ge=1)
     POSTGRES_SERVER: str
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = ""
+    DB_POOL_SIZE: int = Field(default=3, ge=1)
+    DB_MAX_OVERFLOW: int = Field(default=2, ge=0)
+    DB_POOL_RECYCLE_SECONDS: int = Field(default=1800, ge=1)
+    DB_POOL_PRE_PING: bool = True
+
+    RABBITMQ_HOST: str = "localhost"
+    RABBITMQ_PORT: int = 5672
+    RABBITMQ_USER: str
+    RABBITMQ_PASSWORD: str
 
     S3_ENDPOINT_URL: str = "http://minio:9000"
     S3_PUBLIC_ENDPOINT_URL: str = "http://localhost:9000"
@@ -63,6 +75,9 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = "minioadmin"
     S3_REGION: str = "us-east-1"
     S3_PRESIGNED_URL_EXPIRES_SECONDS: int = 900
+    S3_CONNECT_TIMEOUT_SECONDS: int = Field(default=3, ge=1)
+    S3_READ_TIMEOUT_SECONDS: int = Field(default=30, ge=1)
+    S3_MAX_ATTEMPTS: int = Field(default=3, ge=1)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -117,9 +132,11 @@ class Settings(BaseSettings):
     def _enforce_non_default_secrets(self) -> Self:
         self._check_default_secret("SECRET_KEY", self.SECRET_KEY)
         self._check_default_secret("POSTGRES_PASSWORD", self.POSTGRES_PASSWORD)
+        self._check_default_secret("RABBITMQ_PASSWORD", self.RABBITMQ_PASSWORD)
         self._check_default_secret(
             "FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD
         )
+        self._check_default_secret("METRICS_BEARER_TOKEN", self.METRICS_BEARER_TOKEN)
 
         return self
 

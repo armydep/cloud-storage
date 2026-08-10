@@ -14,8 +14,8 @@ by any remaining logical file.
 
 ## Tracking
 
-- GitHub issue: [#70](https://github.com/armydep/cloude-file-storage/issues/70)
-- Status: Completed in PR [#73](https://github.com/armydep/cloude-file-storage/pull/73).
+- GitHub issue: [#70](https://github.com/armydep/cloud-storage/issues/70)
+- Status: Completed in PR [#73](https://github.com/armydep/cloud-storage/pull/73).
 
 ## API contract
 

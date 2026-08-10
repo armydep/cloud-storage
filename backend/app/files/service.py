@@ -9,6 +9,7 @@ from sqlmodel import Session
 from app.core import storage
 from app.core.config import settings
 from app.files import repository
+from app.files.models import FileBlob
 from app.files.repository import ROOT_FOLDER_PATH
 from app.files.schemas import (
     CompleteUploadRequest,
@@ -219,6 +220,7 @@ def create_presigned_upload(
     upload_url = storage.create_presigned_upload_url(
         object_key=object_key,
         mime_type=request.mime_type,
+        checksum_sha256=storage.sha256_hex_to_base64(request.blob_hash),
     )
     repository.create_pending_upload(
         session=session,
@@ -236,7 +238,10 @@ def create_presigned_upload(
     return PresignUploadResponse(
         upload_required=True,
         upload_url=upload_url,
-        headers={"Content-Type": request.mime_type},
+        headers={
+            "Content-Type": request.mime_type,
+            "x-amz-checksum-sha256": storage.sha256_hex_to_base64(request.blob_hash),
+        },
         object_key=object_key,
         expires_in=settings.S3_PRESIGNED_URL_EXPIRES_SECONDS,
     )
@@ -262,7 +267,7 @@ def complete_upload(
         raise DuplicateFileNameError
 
     canonical_object_key = storage.get_object_key(request.blob_hash)
-    blob = repository.get_blob_for_update(
+    blob = repository.get_blob_by_hash(
         session=session,
         blob_hash=request.blob_hash,
     )
@@ -303,7 +308,10 @@ def complete_upload(
             raise ObjectContentTypeMismatchError
 
         try:
-            object_stat = storage.stat_object(object_key=pending_upload.object_key)
+            object_stat = storage.stat_object(
+                object_key=pending_upload.object_key,
+                include_checksum=True,
+            )
         except storage.ObjectNotFoundError:
             raise ObjectNotUploadedError
 
@@ -313,35 +321,33 @@ def complete_upload(
         if object_stat.content_type and object_stat.content_type != request.mime_type:
             raise ObjectContentTypeMismatchError
 
-        object_hash = storage.calculate_object_sha256(
-            object_key=pending_upload.object_key,
-        )
-        if object_hash != request.blob_hash:
+        expected_checksum = storage.sha256_hex_to_base64(request.blob_hash)
+        if object_stat.checksum_sha256 != expected_checksum:
             raise ObjectHashMismatchError
 
     if blob is None:
-        if pending_object_key is None:
-            raise ObjectNotUploadedError
-        storage.copy_object(
-            source_object_key=pending_object_key,
-            destination_object_key=canonical_object_key,
+        blob = _copy_pending_upload_to_canonical_blob(
+            session=session,
+            blob_hash=request.blob_hash,
+            pending_object_key=pending_object_key,
+            canonical_object_key=canonical_object_key,
+            size_bytes=request.size_bytes,
         )
-        try:
-            blob = repository.create_blob(
+    else:
+        blob = repository.get_blob_for_update(
+            session=session,
+            blob_hash=request.blob_hash,
+        )
+        if blob is None:
+            blob = _copy_pending_upload_to_canonical_blob(
                 session=session,
                 blob_hash=request.blob_hash,
-                object_key=canonical_object_key,
+                pending_object_key=pending_object_key,
+                canonical_object_key=canonical_object_key,
                 size_bytes=request.size_bytes,
             )
-        except repository.DuplicateFileBlobRepositoryError:
-            blob = repository.get_blob_for_update(
-                session=session,
-                blob_hash=request.blob_hash,
-            )
-            if blob is None:
-                raise
-            if blob.size_bytes != request.size_bytes:
-                raise ObjectSizeMismatchError
+        elif blob.size_bytes != request.size_bytes:
+            raise ObjectSizeMismatchError
 
     try:
         repository.ensure_blob_claim(
@@ -375,6 +381,42 @@ def complete_upload(
     return StoredFilePublic.model_validate(file)
 
 
+def _copy_pending_upload_to_canonical_blob(
+    *,
+    session: Session,
+    blob_hash: str,
+    pending_object_key: str | None,
+    canonical_object_key: str,
+    size_bytes: int,
+) -> FileBlob:
+    if pending_object_key is None:
+        raise ObjectNotUploadedError
+
+    storage.copy_object(
+        source_object_key=pending_object_key,
+        destination_object_key=canonical_object_key,
+    )
+    try:
+        repository.create_blob(
+            session=session,
+            blob_hash=blob_hash,
+            object_key=canonical_object_key,
+            size_bytes=size_bytes,
+        )
+    except repository.DuplicateFileBlobRepositoryError:
+        pass
+
+    blob = repository.get_blob_for_update(
+        session=session,
+        blob_hash=blob_hash,
+    )
+    if blob is None:
+        raise ObjectNotUploadedError
+    if blob.size_bytes != size_bytes:
+        raise ObjectSizeMismatchError
+    return blob
+
+
 def delete_file(*, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID) -> None:
     file = repository.get_file_by_id(
         session=session,
@@ -399,14 +441,12 @@ def delete_file(*, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID) ->
     if should_delete_object:
         session.flush()
         repository.delete_blob(session=session, blob=blob)
-
-    session.commit()
-
-    if should_delete_object:
         try:
             storage.delete_object(object_key=object_key)
         except Exception:
             logger.exception("Failed to delete unreferenced file blob object")
+
+    session.commit()
 
 
 def delete_folder(
@@ -458,13 +498,13 @@ def delete_folder(
 
     session.flush()
     repository.delete_folder(session=session, folder=folder)
-    session.commit()
-
     for object_key in object_keys_to_delete:
         try:
             storage.delete_object(object_key=object_key)
         except Exception:
             logger.exception("Failed to delete unreferenced folder blob object")
+
+    session.commit()
 
 
 def create_presigned_download(

@@ -104,7 +104,7 @@ Response:
 
 ```json
 {
-  "upload_url": "http://localhost:9000/cloud-file-storage/sha256/...",
+  "upload_url": "http://localhost:9000/cloud-storage/sha256/...",
   "method": "PUT",
   "headers": {
     "Content-Type": "application/pdf"
@@ -134,7 +134,7 @@ Response:
 
 ```json
 {
-  "download_url": "http://localhost:9000/cloud-file-storage/sha256/...",
+  "download_url": "http://localhost:9000/cloud-storage/sha256/...",
   "method": "GET",
   "expires_in": 900
 }

@@ -23,6 +23,7 @@ if config.config_file_name is not None:
 # target_metadata = None
 
 from app.files import models as file_models  # noqa
+from app.notifications import models as notification_models  # noqa
 from app.models import SQLModel  # noqa
 from app.core.config import settings # noqa
 

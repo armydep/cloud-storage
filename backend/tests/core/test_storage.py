@@ -1,7 +1,7 @@
-from io import BytesIO
 from typing import Any
 
 import pytest
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from app.core import storage
@@ -26,7 +26,6 @@ class MockS3Client:
         self.head_calls: list[dict[str, Any]] = []
         self.delete_calls: list[dict[str, Any]] = []
         self.copy_calls: list[dict[str, Any]] = []
-        self.get_calls: list[dict[str, Any]] = []
 
     def generate_presigned_url(self, **kwargs: Any) -> str:
         self.presigned_calls.append(kwargs)
@@ -37,10 +36,6 @@ class MockS3Client:
         if self.head_error:
             raise self.head_error
         return self.head_response
-
-    def get_object(self, **kwargs: Any) -> dict[str, Any]:
-        self.get_calls.append(kwargs)
-        return {"Body": BytesIO(b"hello")}
 
     def copy_object(self, **kwargs: Any) -> None:
         self.copy_calls.append(kwargs)
@@ -60,6 +55,54 @@ def test_get_pending_upload_object_key_is_user_scoped() -> None:
     )
 
 
+def test_sha256_hex_to_base64_encodes_digest_bytes() -> None:
+    assert (
+        storage.sha256_hex_to_base64(
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
+        == "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ="
+    )
+
+
+def test_get_s3_client_reuses_configured_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
+    client = object()
+
+    def fake_boto3_client(*args: Any, **kwargs: Any) -> object:
+        calls.append((args, kwargs))
+        return client
+
+    storage.clear_s3_client_cache()
+    monkeypatch.setattr(storage.boto3, "client", fake_boto3_client)
+
+    try:
+        first_client = storage.get_s3_client()
+        second_client = storage.get_s3_client()
+    finally:
+        storage.clear_s3_client_cache()
+
+    assert first_client is client
+    assert second_client is client
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert args == ("s3",)
+    assert kwargs["endpoint_url"] == settings.S3_ENDPOINT_URL
+    assert kwargs["aws_access_key_id"] == settings.S3_ACCESS_KEY
+    assert kwargs["aws_secret_access_key"] == settings.S3_SECRET_KEY
+    assert kwargs["region_name"] == settings.S3_REGION
+
+    config = kwargs["config"]
+    assert isinstance(config, Config)
+    assert config.connect_timeout == settings.S3_CONNECT_TIMEOUT_SECONDS
+    assert config.read_timeout == settings.S3_READ_TIMEOUT_SECONDS
+    assert config.retries == {
+        "max_attempts": settings.S3_MAX_ATTEMPTS,
+        "mode": "standard",
+    }
+
+
 def test_create_presigned_upload_url_uses_put_object_params(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -69,10 +112,13 @@ def test_create_presigned_upload_url_uses_put_object_params(
     url = storage.create_presigned_upload_url(
         object_key="sha256/abc",
         mime_type="text/plain",
+        checksum_sha256="checksum-base64",
         expires_in=60,
     )
 
-    assert url == "http://localhost:9000/cloud-file-storage/sha256/abc?sig=1"
+    assert (
+        url == f"{settings.S3_PUBLIC_ENDPOINT_URL}/cloud-file-storage/sha256/abc?sig=1"
+    )
     assert client.presigned_calls == [
         {
             "ClientMethod": "put_object",
@@ -80,6 +126,7 @@ def test_create_presigned_upload_url_uses_put_object_params(
                 "Bucket": settings.S3_BUCKET,
                 "Key": "sha256/abc",
                 "ContentType": "text/plain",
+                "ChecksumSHA256": "checksum-base64",
             },
             "ExpiresIn": 60,
         }
@@ -98,7 +145,9 @@ def test_create_presigned_download_url_uses_get_object_params(
         expires_in=120,
     )
 
-    assert url == "http://localhost:9000/cloud-file-storage/sha256/abc?sig=1"
+    assert (
+        url == f"{settings.S3_PUBLIC_ENDPOINT_URL}/cloud-file-storage/sha256/abc?sig=1"
+    )
     assert client.presigned_calls == [
         {
             "ClientMethod": "get_object",
@@ -140,9 +189,9 @@ def test_presigned_url_rewrite_keeps_query_string(
         filename='quote"file.txt',
     )
 
-    assert (
-        url
-        == "http://localhost:9000/cloud-file-storage/sha256/abc?X-Amz-Signature=keep"
+    assert url == (
+        f"{settings.S3_PUBLIC_ENDPOINT_URL}/cloud-file-storage/sha256/abc?"
+        "X-Amz-Signature=keep"
     )
 
 
@@ -162,6 +211,34 @@ def test_stat_object_maps_head_response(monkeypatch: pytest.MonkeyPatch) -> None
         {
             "Bucket": settings.S3_BUCKET,
             "Key": "sha256/abc",
+        }
+    ]
+
+
+def test_stat_object_can_request_checksum_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = MockS3Client(
+        head_response={
+            "ContentLength": 456,
+            "ContentType": "application/pdf",
+            "ChecksumSHA256": "checksum-base64",
+        }
+    )
+    monkeypatch.setattr(storage, "get_s3_client", lambda: client)
+
+    result = storage.stat_object(object_key="sha256/abc", include_checksum=True)
+
+    assert result == storage.ObjectStat(
+        size_bytes=456,
+        content_type="application/pdf",
+        checksum_sha256="checksum-base64",
+    )
+    assert client.head_calls == [
+        {
+            "Bucket": settings.S3_BUCKET,
+            "Key": "sha256/abc",
+            "ChecksumMode": "ENABLED",
         }
     ]
 
@@ -189,23 +266,6 @@ def test_delete_object_uses_bucket_and_key(monkeypatch: pytest.MonkeyPatch) -> N
         {
             "Bucket": settings.S3_BUCKET,
             "Key": "sha256/abc",
-        }
-    ]
-
-
-def test_calculate_object_sha256_streams_object(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = MockS3Client()
-    monkeypatch.setattr(storage, "get_s3_client", lambda: client)
-
-    digest = storage.calculate_object_sha256(object_key="uploads/user/upload")
-
-    assert digest == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
-    assert client.get_calls == [
-        {
-            "Bucket": settings.S3_BUCKET,
-            "Key": "uploads/user/upload",
         }
     ]
 

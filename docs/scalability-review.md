@@ -67,8 +67,8 @@ groundwork that did not exist yet:
 
 | Roadmap item | Depends on | Consequence if shipped first |
 | --- | --- | --- |
-| [#40 Delete files](https://github.com/armydep/cloude-file-storage/issues/40), [#41 Delete folders](https://github.com/armydep/cloude-file-storage/issues/41) | Items 8.2, 8.3 | Deleting one user's file destroys bytes still referenced by other users |
-| [#38 Rename folders](https://github.com/armydep/cloude-file-storage/issues/38) | Item 6.1 | Renaming a folder near the root rewrites every descendant row under lock |
+| [#40 Delete files](https://github.com/armydep/cloud-storage/issues/40), [#41 Delete folders](https://github.com/armydep/cloud-storage/issues/41) | Items 8.2, 8.3 | Deleting one user's file destroys bytes still referenced by other users |
+| [#38 Rename folders](https://github.com/armydep/cloud-storage/issues/38) | Item 6.1 | Renaming a folder near the root rewrites every descendant row under lock |
 
 ---
 
@@ -102,8 +102,8 @@ cover pagination.
 
 | # | Finding | Evidence | Roadmap |
 | --- | --- | --- | --- |
-| 2.1 | `create_engine` passes no pool arguments, so SQLAlchemy defaults apply: `pool_size=5`, `max_overflow=10` — 15 connections per process | `app/core/db.py:8` | Gap |
-| 2.2 | The container runs 4 workers, so one container consumes up to 60 connections against a PostgreSQL default `max_connections` of 100 | `backend/Dockerfile:45` | Gap |
+| 2.1 | `create_engine` passes explicit pool arguments from settings instead of SQLAlchemy defaults | `app/core/db.py` | Resolved by #94 |
+| 2.2 | Worker count and pool size are configurable; default worst-case is 20 connections per container instead of 60 | `backend/Dockerfile`, `app/core/config.py` | Resolved by #94 |
 | 2.3 | Route handlers are synchronous `def`, so FastAPI runs them in a 40-thread pool that contends for 15 connections | one `async def` in all of `app/api/routes/` | Gap |
 | 2.4 | No connection proxy (for example PgBouncer in transaction mode) | — | Gap |
 
@@ -112,19 +112,40 @@ saturates PostgreSQL and the third begins failing to acquire connections — wel
 before CPU becomes the limiting factor. Horizontal scaling is capped by
 connection math, not by compute.
 
+Update 2026-08-10: #94 sets explicit defaults:
+`BACKEND_WORKERS=4`, `DB_POOL_SIZE=3`, and `DB_MAX_OVERFLOW=2`. Worst-case
+connection usage is now
+`replicas * BACKEND_WORKERS * (DB_POOL_SIZE + DB_MAX_OVERFLOW)`, or 20
+connections per backend container with the defaults. Keep that total below
+PostgreSQL `max_connections` with headroom for migrations, prestart, admin
+sessions, monitoring, and reserved superuser connections.
+
 ## Section 3 — Storage client overhead
 
 | # | Finding | Evidence | Roadmap |
 | --- | --- | --- | --- |
-| 3.1 | A new boto3 client is constructed on every storage call; client construction parses service models from disk and builds signers | `app/core/storage.py:25` | Gap |
-| 3.2 | `stat_object` performs a network round trip to object storage on every upload completion, serialized with the database work | `app/files/service.py:140` | Gap |
-| 3.3 | No explicit botocore timeout or retry configuration | `app/core/storage.py:25-32` | Gap |
+| 3.1 | A boto3 S3 client is cached and reused per backend worker process | `app/core/storage.py` | Resolved by #94 |
+| 3.2 | `stat_object` performs a network round trip to object storage on every upload completion, serialized with the database work | `app/files/service.py:140` | Resolved by #92 |
+| 3.3 | Botocore connect/read timeouts and retry attempts are explicit settings | `app/core/storage.py`, `app/core/config.py` | Resolved by #94 |
 
 `get_s3_client()` is called from every presign and every stat, so 3.1 sits on the
 hot path of every upload and download.
 
 Presigned URL *generation* is local HMAC work and requires no network call, so
 that part is already efficient; 3.2 concerns the separate existence check.
+
+Update 2026-08-09: #91 removes the larger upload-completion asymmetry that was
+found after this review. `complete_upload` no longer streams the object back
+through the API to recompute SHA-256; object storage enforces the checksum on
+PUT and completion reads checksum metadata with a constant-time HEAD request.
+
+Update 2026-08-10: #92 narrows the remaining upload-completion lock scope.
+`complete_upload` now performs S3 metadata verification and canonical object
+copy before taking the `file_blobs` row lock, then re-reads the blob under
+`FOR UPDATE` only for the claim/ref-count/file mutation block.
+
+Update 2026-08-10: #94 caches the boto3 S3 client per worker process and sets
+explicit botocore `connect_timeout`, `read_timeout`, and retry attempts.
 
 ---
 
@@ -160,7 +181,7 @@ that 5.2 has to clean up.
 
 | # | Finding | Evidence | Roadmap |
 | --- | --- | --- | --- |
-| 6.1 | Folder rename or move must rewrite `path` on every descendant, plus each descendant's entry in `uq_folders_owner_path` — a write burst proportional to subtree size | ltree materialized path, `app/files/models.py` | Partial — [#38 Rename folders](https://github.com/armydep/cloude-file-storage/issues/38) will encounter this |
+| 6.1 | Folder rename or move must rewrite `path` on every descendant, plus each descendant's entry in `uq_folders_owner_path` — a write burst proportional to subtree size | ltree materialized path, `app/files/models.py` | Partial — [#38 Rename folders](https://github.com/armydep/cloud-storage/issues/38) will encounter this |
 | 6.2 | The GiST index accelerates subtree reads; there is no corresponding strategy for the write side | `b4c7d8e9f012` | Gap |
 
 Materialized paths trade write cost for read speed. The read side is indexed;
@@ -171,13 +192,14 @@ exercise it.
 
 | # | Finding | Evidence | Roadmap |
 | --- | --- | --- | --- |
-| 7.1 | `await file.arrayBuffer()` loads the entire file into browser memory before hashing | `frontend/src/features/files/fileHash.ts:2` | Gap |
+| 7.1 | `await file.arrayBuffer()` loads the entire file into browser memory before hashing | `frontend/src/features/files/fileHash.ts:2` | Resolved by #90 |
 | 7.2 | Hashing is fully serial: it must complete before the upload begins | `frontend/src/features/files/fileTransfer.ts:26` and `:34` | Gap |
 | 7.3 | A single `PUT` means no resumability, no parallel parts, and a hard single-request size ceiling | `frontend/src/features/files/fileTransfer.ts:34` | Tracked — *"Support resumable uploads"*, *"Support resumable downloads"* |
 | 7.4 | No server-side maximum file size; the schema only requires `size_bytes > 0` | `app/files/schemas.py:30` | Tracked — *"Enforce a maximum file size"* |
 
-7.1 and 7.2 are the reason large uploads fail in the browser before they ever
-reach object storage, and they are not covered by the resumable-upload entries.
+7.1 was resolved by chunked browser hashing in #90. 7.2 remains: hashing still
+completes before upload begins, and that is not covered by the resumable-upload
+entries.
 
 ---
 
@@ -204,8 +226,8 @@ per-user blob claims before file and folder delete shipped. The historical risk
 described below is retained as context for why those pieces exist.
 
 On 8.2 at the time of this review: nothing broke because no delete endpoint
-existed. Once [#40](https://github.com/armydep/cloude-file-storage/issues/40)
-and [#41](https://github.com/armydep/cloude-file-storage/issues/41) shipped,
+existed. Once [#40](https://github.com/armydep/cloud-storage/issues/40)
+and [#41](https://github.com/armydep/cloud-storage/issues/41) shipped,
 deleting one user's file would have removed bytes that other users' metadata
 still pointed to.
 
@@ -222,12 +244,18 @@ user only to a blob that user demonstrably uploaded.
 | 9.1 | No rate limiting; presign endpoints issue object-storage write credentials on demand | — | Gap |
 | 9.2 | No storage quota enforcement | — | Tracked — *"Set per-user storage quotas"* |
 | 9.3 | One additional database query on every authenticated request (`session.get(User, ...)`) | `app/api/deps.py` | Gap |
-| 9.4 | No metrics or tracing; Sentry covers errors only, with no Prometheus or OpenTelemetry | — | Gap |
+| 9.4 | No metrics or tracing; Sentry covers errors only, with no Prometheus or OpenTelemetry | — | Resolved by #93 for metrics; tracing remains future work |
 | 9.5 | A single PostgreSQL instance serves both browse reads and upload writes; no read replica | `compose.yml` | Partial — *"Split the application into independently deployable services"* |
 | 9.6 | No resource limits or replica counts defined for services | `compose.yml` | Gap |
 
 9.4 is a force multiplier on everything above: without instrumentation, each of
 these limits is diagnosed only after it has already caused an outage.
+
+Update 2026-08-10: #93 adds Prometheus metrics for HTTP request rate/latency,
+database pool utilisation and checkout wait, and object-storage operation
+duration. Check `db_pool_checked_out_connections`,
+`db_pool_overflow_connections`, and `db_pool_checkout_wait_seconds` before
+acting on SCALE 2.1 / 2.2 connection-pool limits.
 
 ---
 
@@ -257,13 +285,13 @@ these limits is diagnosed only after it has already caused an outage.
 
 | ROADMAP.md item | Blocked by | Reason |
 | --- | --- | --- |
-| [#38 Rename folders](https://github.com/armydep/cloude-file-storage/issues/38) | 6.1 | Subtree path rewrite is unbounded |
+| [#38 Rename folders](https://github.com/armydep/cloud-storage/issues/38) | 6.1 | Subtree path rewrite is unbounded |
 
 Resolved 2026-08-09:
 
-- [#40 Delete files](https://github.com/armydep/cloude-file-storage/issues/40)
+- [#40 Delete files](https://github.com/armydep/cloud-storage/issues/40)
   was unblocked by Phase 6.
-- [#41 Delete folders](https://github.com/armydep/cloude-file-storage/issues/41)
+- [#41 Delete folders](https://github.com/armydep/cloud-storage/issues/41)
   was unblocked by Phase 7.
 
 ## Findings with no roadmap representation

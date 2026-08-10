@@ -12,7 +12,7 @@ blob claim or complete a verified pending upload.
 ## Dependencies
 
 - Slice 1: Backend blob ref-count schema migration, completed in PR
-  [#66](https://github.com/armydep/cloude-file-storage/pull/66).
+  [#66](https://github.com/armydep/cloud-storage/pull/66).
 - SCALE 8.1: Blob ownership/claim enforcement is implemented in this slice
   because safe deletion depends on preventing unauthorized blob claims.
 
@@ -270,5 +270,5 @@ None. Resolved decisions:
 6. S3 deletion failure is logged and does not rollback logical deletion.
 7. Successful API response is `204 No Content`.
 8. Blob ownership/claims are required before delete can ship.
-9. Pending uploads use user-scoped temp object keys and backend SHA-256
-   verification rather than trusting a client-provided hash alone.
+9. Pending uploads use user-scoped temp object keys and S3-side SHA-256
+   checksum verification rather than trusting a client-provided hash alone.

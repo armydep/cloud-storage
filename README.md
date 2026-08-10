@@ -8,6 +8,7 @@ Feature designs:
 - [File sharing with specific users](docs/phases/phase-4-file-sharing.md)
 - [Delete files with deduplicated blob storage](docs/phases/phase-6-delete-file.md)
 - [Delete folders recursively](docs/phases/phase-7-delete-folder.md)
+- [Backend scaling configuration](docs/backend-scaling.md)
 
 ## Phase 1 scope
 
@@ -80,6 +81,7 @@ Frontend:       http://localhost:5173
 Backend API:    http://localhost:8000
 Swagger UI:     http://localhost:8000/docs
 OpenAPI JSON:   http://localhost:8000/api/v1/openapi.json
+Metrics:        http://localhost:8000/metrics
 Adminer:        http://localhost:8080
 Mailcatcher:    http://localhost:1080
 Traefik:        http://localhost:8090
@@ -107,6 +109,12 @@ Run backend tests:
 ```bash
 docker compose exec backend bash scripts/test.sh
 ```
+
+Backend metrics are available in Prometheus format when
+`METRICS_BEARER_TOKEN` is configured. See
+[`docs/observability.md`](docs/observability.md) for the endpoint, scrape
+configuration, and the database pool signals to inspect before changing
+connection limits.
 
 ## Environment files
 

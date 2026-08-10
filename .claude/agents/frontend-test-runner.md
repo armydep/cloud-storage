@@ -69,7 +69,7 @@ Steps:
    ```
    docker build --secret id=sandbox_ca,src=/root/.ccr/ca-bundle.crt -f backend/Dockerfile -t backend:latest .
    docker build --secret id=sandbox_ca,src=/root/.ccr/ca-bundle.crt -f frontend/Dockerfile --build-arg VITE_API_URL=http://localhost:8000 --build-arg NODE_ENV=development -t frontend:latest .
-   docker build --secret id=sandbox_ca,src=/root/.ccr/ca-bundle.crt -f frontend/Dockerfile.playwright --build-arg VITE_API_URL=http://backend:8000 --build-arg NODE_ENV=production -t cloude-file-storage-playwright:latest .
+   docker build --secret id=sandbox_ca,src=/root/.ccr/ca-bundle.crt -f frontend/Dockerfile.playwright --build-arg VITE_API_URL=http://backend:8000 --build-arg NODE_ENV=production -t cloud-storage-playwright:latest .
    docker compose up -d --wait backend frontend
    docker compose run --rm playwright bunx playwright test
    ```

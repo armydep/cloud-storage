@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import { expect, test } from "@playwright/test"
 
 const rootFolder = {
@@ -54,6 +56,18 @@ const formatTestDate = (value: string) =>
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value))
+
+const multiChunkUploadBuffer = Buffer.alloc(70 * 1024)
+for (let index = 0; index < multiChunkUploadBuffer.length; index += 1) {
+  multiChunkUploadBuffer[index] = index % 251
+}
+const multiChunkUploadHash = createHash("sha256")
+  .update(multiChunkUploadBuffer)
+  .digest("hex")
+const multiChunkUploadChecksum = Buffer.from(
+  multiChunkUploadHash,
+  "hex",
+).toString("base64")
 
 const emptyFolder = {
   id: "00000000-0000-0000-0000-000000000005",
@@ -297,8 +311,10 @@ test("Upload skips direct object upload when presign says upload is not required
 }) => {
   let putCount = 0
   let completeUploadCalled = false
+  let presignRequestBody: unknown
 
   await page.route("**/api/v1/files/presign-upload", async (route) => {
+    presignRequestBody = route.request().postDataJSON()
     await route.fulfill({
       json: {
         upload_required: false,
@@ -341,6 +357,10 @@ test("Upload skips direct object upload when presign says upload is not required
 
   await expect(page.getByText("File uploaded successfully")).toBeVisible()
   await expect.poll(() => completeUploadCalled).toBe(true)
+  expect(presignRequestBody).toMatchObject({
+    blob_hash:
+      "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+  })
   expect(putCount).toBe(0)
 })
 
@@ -349,8 +369,10 @@ test("Upload performs direct object upload when presign requires it", async ({
 }) => {
   let putCount = 0
   let completeUploadCalled = false
+  let presignRequestBody: unknown
 
   await page.route("**/api/v1/files/presign-upload", async (route) => {
+    presignRequestBody = route.request().postDataJSON()
     await route.fulfill({
       json: {
         upload_required: true,
@@ -366,6 +388,9 @@ test("Upload performs direct object upload when presign requires it", async ({
   await page.route("**/object-upload-target", async (route) => {
     putCount += 1
     expect(route.request().method()).toBe("PUT")
+    expect(route.request().headers()["x-amz-checksum-sha256"]).toBe(
+      multiChunkUploadChecksum,
+    )
     await route.fulfill({ status: 200 })
   })
   await page.route("**/api/v1/files/complete-upload", async (route) => {
@@ -375,25 +400,27 @@ test("Upload performs direct object upload when presign requires it", async ({
         id: "00000000-0000-0000-0000-000000000041",
         owner_id: rootFolder.owner_id,
         folder_id: rootFolder.id,
-        name: "hello.txt",
+        name: "large.txt",
         mime_type: "text/plain",
         category: "document",
-        blob_hash:
-          "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
-        size_bytes: 5,
+        blob_hash: multiChunkUploadHash,
+        size_bytes: multiChunkUploadBuffer.byteLength,
       },
     })
   })
 
   await page.goto("/files")
   await page.setInputFiles("input[type='file']", {
-    name: "hello.txt",
+    name: "large.txt",
     mimeType: "text/plain",
-    buffer: Buffer.from("hello"),
+    buffer: multiChunkUploadBuffer,
   })
 
   await expect(page.getByText("File uploaded successfully")).toBeVisible()
   await expect.poll(() => completeUploadCalled).toBe(true)
+  expect(presignRequestBody).toMatchObject({
+    blob_hash: multiChunkUploadHash,
+  })
   expect(putCount).toBe(1)
 })
 
