@@ -11,8 +11,8 @@ explicit confirmation step.
 
 ## Tracking
 
-- GitHub issue: [#71](https://github.com/armydep/cloude-file-storage/issues/71)
-- Status: Completed in PR [#74](https://github.com/armydep/cloude-file-storage/pull/74).
+- GitHub issue: [#71](https://github.com/armydep/cloud-storage/issues/71)
+- Status: Completed in PR [#74](https://github.com/armydep/cloud-storage/pull/74).
 
 ## Implementation notes
 

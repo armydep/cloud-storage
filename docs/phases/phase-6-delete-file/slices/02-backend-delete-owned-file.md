@@ -12,7 +12,7 @@ blob claim or complete a verified pending upload.
 ## Dependencies
 
 - Slice 1: Backend blob ref-count schema migration, completed in PR
-  [#66](https://github.com/armydep/cloude-file-storage/pull/66).
+  [#66](https://github.com/armydep/cloud-storage/pull/66).
 - SCALE 8.1: Blob ownership/claim enforcement is implemented in this slice
   because safe deletion depends on preventing unauthorized blob claims.
 

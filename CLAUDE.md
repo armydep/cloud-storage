@@ -1,4 +1,4 @@
-# cloude-file-storage
+# cloud-storage
 
 Cloud File Storage: a FastAPI backend plus a React SPA, giving each authenticated user a private,
 folder-structured workspace for files. Folder hierarchy is stored in Postgres as ltree materialized

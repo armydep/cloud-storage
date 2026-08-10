@@ -1,13 +1,13 @@
 ---
 name: react-frontend
 description: >
-  Structure and conventions for the cloude-file-storage React SPA. Use whenever
+  Structure and conventions for the cloud-storage React SPA. Use whenever
   creating or modifying frontend code under frontend/ — adding a route, component,
   data hook, feature module, or Playwright test — so new code follows the project's
   routing, data-fetching, generated-client, styling, and testing conventions.
 ---
 
-# cloude-file-storage frontend conventions
+# cloud-storage frontend conventions
 
 React 19, Vite, TypeScript, TanStack Router (file-based) and TanStack Query,
 shadcn/ui on Tailwind v4, Biome, Playwright. Module root: `frontend/`.

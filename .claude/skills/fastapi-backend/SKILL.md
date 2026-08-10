@@ -1,14 +1,14 @@
 ---
 name: fastapi-backend
 description: >
-  Structure and conventions for the cloude-file-storage FastAPI backend. Use whenever
+  Structure and conventions for the cloud-storage FastAPI backend. Use whenever
   creating or modifying backend code under backend/ — adding a route, service,
   repository, model, schema, Alembic migration, config, or test — so new code follows
   the project's feature-first layering, ownership scoping, storage rules, migration
   discipline, and testing conventions.
 ---
 
-# cloude-file-storage backend conventions
+# cloud-storage backend conventions
 
 FastAPI, SQLModel, Alembic, PostgreSQL 18 (with `ltree`), psycopg 3, boto3 against
 S3-compatible storage (MinIO locally), JWT auth, pytest. Module root: `backend/`.

@@ -23,7 +23,7 @@ Then scrape the backend from another Compose service, for example Prometheus:
 
 ```yaml
 scrape_configs:
-  - job_name: cloud-file-storage-backend
+  - job_name: cloud-storage-backend
     metrics_path: /metrics
     scheme: http
     bearer_token: replace-with-a-long-random-token

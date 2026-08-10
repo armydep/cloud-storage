@@ -1,3 +1,4 @@
+name: cfs
 services:
 
   db:

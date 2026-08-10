@@ -11,12 +11,12 @@ are not necessarily listed in implementation order.
 
 Complete the core operations needed to manage a cloud-style file hierarchy.
 
-- [ ] **1.1** Create folders ([#37](https://github.com/armydep/cloude-file-storage/issues/37))
-- [ ] **1.2** Rename folders ([#38](https://github.com/armydep/cloude-file-storage/issues/38))
-- [ ] **1.3** Rename files ([#39](https://github.com/armydep/cloude-file-storage/issues/39))
-- [x] **1.4** Delete files ([#40](https://github.com/armydep/cloude-file-storage/issues/40),
+- [ ] **1.1** Create folders ([#37](https://github.com/armydep/cloud-storage/issues/37))
+- [ ] **1.2** Rename folders ([#38](https://github.com/armydep/cloud-storage/issues/38))
+- [ ] **1.3** Rename files ([#39](https://github.com/armydep/cloud-storage/issues/39))
+- [x] **1.4** Delete files ([#40](https://github.com/armydep/cloud-storage/issues/40),
       [design](docs/phases/phase-6-delete-file.md))
-- [x] **1.5** Delete folders ([#41](https://github.com/armydep/cloude-file-storage/issues/41),
+- [x] **1.5** Delete folders ([#41](https://github.com/armydep/cloud-storage/issues/41),
       [design](docs/phases/phase-7-delete-folder.md))
 - [ ] **1.6** Define and enforce file and folder name validation, including
       allowed characters and maximum name length
@@ -26,20 +26,20 @@ Complete the core operations needed to manage a cloud-style file hierarchy.
 Keep development and delivery reliable while product capabilities expand.
 
 - [x] **2.1** Run backend integration tests in isolated Testcontainers environments
-      ([#43](https://github.com/armydep/cloude-file-storage/issues/43))
+      ([#43](https://github.com/armydep/cloud-storage/issues/43))
 - [ ] **2.2** Fix and stabilize CI workflows
-      ([#42](https://github.com/armydep/cloude-file-storage/issues/42))
+      ([#42](https://github.com/armydep/cloud-storage/issues/42))
 - [ ] **2.3** Add automated coverage for new file and folder operations
 - [ ] **2.4** Define validation, conflict, and error-handling conventions
 - [ ] **2.5** Enable TLS for all production-facing endpoints
 - [ ] **2.6** Verify upload hashes with S3-side checksums
-      ([#91](https://github.com/armydep/cloude-file-storage/issues/91))
+      ([#91](https://github.com/armydep/cloud-storage/issues/91))
 - [ ] **2.7** Delay file blob row locks until upload metadata mutation
-      ([#92](https://github.com/armydep/cloude-file-storage/issues/92))
+      ([#92](https://github.com/armydep/cloud-storage/issues/92))
 - [ ] **2.8** Add backend metrics for scaling decisions
-      ([#93](https://github.com/armydep/cloude-file-storage/issues/93))
+      ([#93](https://github.com/armydep/cloud-storage/issues/93))
 - [ ] **2.9** Configure database pool limits and cached storage client
-      ([#94](https://github.com/armydep/cloude-file-storage/issues/94))
+      ([#94](https://github.com/armydep/cloud-storage/issues/94))
 
 ## 3. Next phase: File experience
 
@@ -65,13 +65,13 @@ Improve the main file-management workflow after the core operations are stable.
 ## 5. Later phase: Mobile and synchronization
 
 - [ ] **5.1** Build an Android client
-      ([#47](https://github.com/armydep/cloude-file-storage/issues/47))
+      ([#47](https://github.com/armydep/cloud-storage/issues/47))
 - [ ] **5.2** Synchronize files between the Android client and cloud storage
 
 ## 6. Later phase: Sharing and collaboration
 
 - [x] **6.1** Share files with specific users
-      ([#48](https://github.com/armydep/cloude-file-storage/issues/48),
+      ([#48](https://github.com/armydep/cloud-storage/issues/48),
       [design](docs/phases/phase-4-file-sharing.md))
 - [ ] **6.2** Share folders with specific users
 - [ ] **6.3** Share files and folders publicly with anyone

@@ -67,8 +67,8 @@ groundwork that did not exist yet:
 
 | Roadmap item | Depends on | Consequence if shipped first |
 | --- | --- | --- |
-| [#40 Delete files](https://github.com/armydep/cloude-file-storage/issues/40), [#41 Delete folders](https://github.com/armydep/cloude-file-storage/issues/41) | Items 8.2, 8.3 | Deleting one user's file destroys bytes still referenced by other users |
-| [#38 Rename folders](https://github.com/armydep/cloude-file-storage/issues/38) | Item 6.1 | Renaming a folder near the root rewrites every descendant row under lock |
+| [#40 Delete files](https://github.com/armydep/cloud-storage/issues/40), [#41 Delete folders](https://github.com/armydep/cloud-storage/issues/41) | Items 8.2, 8.3 | Deleting one user's file destroys bytes still referenced by other users |
+| [#38 Rename folders](https://github.com/armydep/cloud-storage/issues/38) | Item 6.1 | Renaming a folder near the root rewrites every descendant row under lock |
 
 ---
 
@@ -181,7 +181,7 @@ that 5.2 has to clean up.
 
 | # | Finding | Evidence | Roadmap |
 | --- | --- | --- | --- |
-| 6.1 | Folder rename or move must rewrite `path` on every descendant, plus each descendant's entry in `uq_folders_owner_path` — a write burst proportional to subtree size | ltree materialized path, `app/files/models.py` | Partial — [#38 Rename folders](https://github.com/armydep/cloude-file-storage/issues/38) will encounter this |
+| 6.1 | Folder rename or move must rewrite `path` on every descendant, plus each descendant's entry in `uq_folders_owner_path` — a write burst proportional to subtree size | ltree materialized path, `app/files/models.py` | Partial — [#38 Rename folders](https://github.com/armydep/cloud-storage/issues/38) will encounter this |
 | 6.2 | The GiST index accelerates subtree reads; there is no corresponding strategy for the write side | `b4c7d8e9f012` | Gap |
 
 Materialized paths trade write cost for read speed. The read side is indexed;
@@ -226,8 +226,8 @@ per-user blob claims before file and folder delete shipped. The historical risk
 described below is retained as context for why those pieces exist.
 
 On 8.2 at the time of this review: nothing broke because no delete endpoint
-existed. Once [#40](https://github.com/armydep/cloude-file-storage/issues/40)
-and [#41](https://github.com/armydep/cloude-file-storage/issues/41) shipped,
+existed. Once [#40](https://github.com/armydep/cloud-storage/issues/40)
+and [#41](https://github.com/armydep/cloud-storage/issues/41) shipped,
 deleting one user's file would have removed bytes that other users' metadata
 still pointed to.
 
@@ -285,13 +285,13 @@ acting on SCALE 2.1 / 2.2 connection-pool limits.
 
 | ROADMAP.md item | Blocked by | Reason |
 | --- | --- | --- |
-| [#38 Rename folders](https://github.com/armydep/cloude-file-storage/issues/38) | 6.1 | Subtree path rewrite is unbounded |
+| [#38 Rename folders](https://github.com/armydep/cloud-storage/issues/38) | 6.1 | Subtree path rewrite is unbounded |
 
 Resolved 2026-08-09:
 
-- [#40 Delete files](https://github.com/armydep/cloude-file-storage/issues/40)
+- [#40 Delete files](https://github.com/armydep/cloud-storage/issues/40)
   was unblocked by Phase 6.
-- [#41 Delete folders](https://github.com/armydep/cloude-file-storage/issues/41)
+- [#41 Delete folders](https://github.com/armydep/cloud-storage/issues/41)
   was unblocked by Phase 7.
 
 ## Findings with no roadmap representation

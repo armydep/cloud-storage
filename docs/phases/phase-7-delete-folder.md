@@ -53,9 +53,9 @@ Root folder deletion is not supported.
 Detailed spec:
 [01-backend-delete-owned-folder.md](phase-7-delete-folder/slices/01-backend-delete-owned-folder.md)
 
-GitHub issue: [#70](https://github.com/armydep/cloude-file-storage/issues/70)
+GitHub issue: [#70](https://github.com/armydep/cloud-storage/issues/70)
 
-Status: Completed in PR [#73](https://github.com/armydep/cloude-file-storage/pull/73).
+Status: Completed in PR [#73](https://github.com/armydep/cloud-storage/pull/73).
 
 - Add `DELETE /api/v1/files/folders/{folder_id}`.
 - Reject root folder deletion.
@@ -73,11 +73,11 @@ Status: Completed in PR [#73](https://github.com/armydep/cloude-file-storage/pul
 Detailed spec:
 [02-frontend-delete-folder.md](phase-7-delete-folder/slices/02-frontend-delete-folder.md)
 
-GitHub issue: [#71](https://github.com/armydep/cloude-file-storage/issues/71)
+GitHub issue: [#71](https://github.com/armydep/cloud-storage/issues/71)
 
 Depends on Slice 1.
 
-Status: Completed in PR [#74](https://github.com/armydep/cloude-file-storage/pull/74).
+Status: Completed in PR [#74](https://github.com/armydep/cloud-storage/pull/74).
 
 - Regenerate the generated OpenAPI frontend client.
 - Add a Delete action for folder rows.
@@ -92,11 +92,11 @@ Status: Completed in PR [#74](https://github.com/armydep/cloude-file-storage/pul
 Detailed spec:
 [03-mobile-delete-folder.md](phase-7-delete-folder/slices/03-mobile-delete-folder.md)
 
-GitHub issue: [#72](https://github.com/armydep/cloude-file-storage/issues/72)
+GitHub issue: [#72](https://github.com/armydep/cloud-storage/issues/72)
 
 Depends on Slice 1.
 
-Status: Completed in PR [#75](https://github.com/armydep/cloude-file-storage/pull/75).
+Status: Completed in PR [#75](https://github.com/armydep/cloud-storage/pull/75).
 
 - Add repository/controller delete support.
 - Expose Delete for folder rows.

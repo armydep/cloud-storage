@@ -86,7 +86,7 @@ minio-create-bucket:
   entrypoint: >
     /bin/sh -c "
     mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
-    mc mb -p local/${S3_BUCKET:-cloud-file-storage};
+    mc mb -p local/${S3_BUCKET:-cloud-storage};
     exit 0;
     "
 ```
@@ -112,7 +112,7 @@ Add backend settings:
 ```env
 S3_ENDPOINT_URL=http://minio:9000
 S3_PUBLIC_ENDPOINT_URL=http://localhost:9000
-S3_BUCKET=cloud-file-storage
+S3_BUCKET=cloud-storage
 S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin
 S3_REGION=us-east-1
@@ -547,8 +547,8 @@ URL rewrite rule:
 - do not parse or rebuild the query string, because that can break the signature;
 - example:
   ```text
-  http://minio:9000/cloud-file-storage/sha256/abc?...
-  -> http://localhost:9000/cloud-file-storage/sha256/abc?...
+  http://minio:9000/cloud-storage/sha256/abc?...
+  -> http://localhost:9000/cloud-storage/sha256/abc?...
   ```
 
 Error behavior:
@@ -1498,7 +1498,7 @@ docker compose logs minio-create-bucket
 Expected bucket:
 
 ```text
-cloud-file-storage
+cloud-storage
 ```
 
 Authentication setup:
@@ -1527,14 +1527,14 @@ TOKEN=<access-token>
 Create a local test file:
 
 ```bash
-printf "hello cloud file storage\n" > /tmp/cloud-file-storage-e2e.txt
+printf "hello cloud file storage\n" > /tmp/cloud-storage-e2e.txt
 ```
 
 Compute metadata:
 
 ```bash
-HASH=$(sha256sum /tmp/cloud-file-storage-e2e.txt | awk '{print $1}')
-SIZE=$(wc -c < /tmp/cloud-file-storage-e2e.txt)
+HASH=$(sha256sum /tmp/cloud-storage-e2e.txt | awk '{print $1}')
+SIZE=$(wc -c < /tmp/cloud-storage-e2e.txt)
 ```
 
 Request upload URL:
@@ -1545,7 +1545,7 @@ curl -s -X POST "http://localhost:8000/api/v1/files/presign-upload" \
   -H "Content-Type: application/json" \
   -d "{
     \"folder_path\": \"root\",
-    \"name\": \"cloud-file-storage-e2e.txt\",
+    \"name\": \"cloud-storage-e2e.txt\",
     \"mime_type\": \"text/plain\",
     \"category\": \"document\",
     \"blob_hash\": \"$HASH\",
@@ -1572,7 +1572,7 @@ Upload bytes directly to MinIO:
 ```bash
 curl -X PUT "$UPLOAD_URL" \
   -H "Content-Type: text/plain" \
-  --data-binary @/tmp/cloud-file-storage-e2e.txt
+  --data-binary @/tmp/cloud-storage-e2e.txt
 ```
 
 Complete upload:
@@ -1583,7 +1583,7 @@ curl -s -X POST "http://localhost:8000/api/v1/files/complete-upload" \
   -H "Content-Type: application/json" \
   -d "{
     \"folder_path\": \"root\",
-    \"name\": \"cloud-file-storage-e2e.txt\",
+    \"name\": \"cloud-storage-e2e.txt\",
     \"mime_type\": \"text/plain\",
     \"category\": \"document\",
     \"blob_hash\": \"$HASH\",
@@ -1596,7 +1596,7 @@ Expected response:
 ```json
 {
   "id": "<file-id>",
-  "name": "cloud-file-storage-e2e.txt",
+  "name": "cloud-storage-e2e.txt",
   "mime_type": "text/plain",
   "category": "document",
   "blob_hash": "<hash>",
@@ -1614,7 +1614,7 @@ curl -s "http://localhost:8000/api/v1/files?path=root" \
 Expected:
 
 ```text
-cloud-file-storage-e2e.txt appears in contents
+cloud-storage-e2e.txt appears in contents
 ```
 
 Request download URL:
@@ -1627,13 +1627,13 @@ curl -s -X POST "http://localhost:8000/api/v1/files/<file-id>/presign-download" 
 Download bytes directly from MinIO:
 
 ```bash
-curl -s "$DOWNLOAD_URL" -o /tmp/cloud-file-storage-e2e-downloaded.txt
+curl -s "$DOWNLOAD_URL" -o /tmp/cloud-storage-e2e-downloaded.txt
 ```
 
 Verify downloaded bytes:
 
 ```bash
-cmp /tmp/cloud-file-storage-e2e.txt /tmp/cloud-file-storage-e2e-downloaded.txt
+cmp /tmp/cloud-storage-e2e.txt /tmp/cloud-storage-e2e-downloaded.txt
 ```
 
 Expected:
@@ -1686,7 +1686,7 @@ Response:
 
 ```json
 {
-  "upload_url": "http://localhost:9000/cloud-file-storage/sha256/5f70bf18...?X-Amz-Signature=...",
+  "upload_url": "http://localhost:9000/cloud-storage/sha256/5f70bf18...?X-Amz-Signature=...",
   "method": "PUT",
   "headers": {
     "Content-Type": "application/pdf"
@@ -1764,7 +1764,7 @@ Response:
 
 ```json
 {
-  "download_url": "http://localhost:9000/cloud-file-storage/sha256/5f70bf18...?X-Amz-Signature=...",
+  "download_url": "http://localhost:9000/cloud-storage/sha256/5f70bf18...?X-Amz-Signature=...",
   "method": "GET",
   "expires_in": 900
 }

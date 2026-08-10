@@ -1,7 +1,7 @@
 # Phase 6: Delete file with deduplicated blob storage
 
 This design implements GitHub issue
-[#40](https://github.com/armydep/cloude-file-storage/issues/40): support file
+[#40](https://github.com/armydep/cloud-storage/issues/40): support file
 deletion.
 
 ## Goal
@@ -76,9 +76,9 @@ physical S3 object only when the last logical file reference is deleted.
 Detailed spec:
 [01-backend-blob-ref-count-migration.md](phase-6-delete-file/slices/01-backend-blob-ref-count-migration.md)
 
-GitHub issue: [#65](https://github.com/armydep/cloude-file-storage/issues/65)
+GitHub issue: [#65](https://github.com/armydep/cloud-storage/issues/65)
 
-Status: Completed in PR [#66](https://github.com/armydep/cloude-file-storage/pull/66).
+Status: Completed in PR [#66](https://github.com/armydep/cloud-storage/pull/66).
 
 - Add `file_blobs` table.
 - Backfill one blob row per existing `files.blob_hash`.
@@ -94,11 +94,11 @@ Status: Completed in PR [#66](https://github.com/armydep/cloude-file-storage/pul
 Detailed spec:
 [02-backend-delete-owned-file.md](phase-6-delete-file/slices/02-backend-delete-owned-file.md)
 
-GitHub issue: [#62](https://github.com/armydep/cloude-file-storage/issues/62)
+GitHub issue: [#62](https://github.com/armydep/cloud-storage/issues/62)
 
 Depends on Slice 1.
 
-Status: Completed in PR [#67](https://github.com/armydep/cloude-file-storage/pull/67).
+Status: Completed in PR [#67](https://github.com/armydep/cloud-storage/pull/67).
 
 - Add `DELETE /api/v1/files/{file_id}`.
 - Add per-user blob claims and pending upload proof for SCALE 8.1.
@@ -113,11 +113,11 @@ Status: Completed in PR [#67](https://github.com/armydep/cloude-file-storage/pul
 Detailed spec:
 [03-frontend-delete-file.md](phase-6-delete-file/slices/03-frontend-delete-file.md)
 
-GitHub issue: [#63](https://github.com/armydep/cloude-file-storage/issues/63)
+GitHub issue: [#63](https://github.com/armydep/cloud-storage/issues/63)
 
 Depends on Slice 2.
 
-Status: Completed in PR [#68](https://github.com/armydep/cloude-file-storage/pull/68).
+Status: Completed in PR [#68](https://github.com/armydep/cloud-storage/pull/68).
 
 - Regenerate the generated OpenAPI frontend client.
 - Update upload handling so it skips direct S3 upload when the backend says the
@@ -132,11 +132,11 @@ Status: Completed in PR [#68](https://github.com/armydep/cloude-file-storage/pul
 Detailed spec:
 [04-mobile-delete-file.md](phase-6-delete-file/slices/04-mobile-delete-file.md)
 
-GitHub issue: [#64](https://github.com/armydep/cloude-file-storage/issues/64)
+GitHub issue: [#64](https://github.com/armydep/cloud-storage/issues/64)
 
 Depends on Slice 2.
 
-Status: Completed in PR [#69](https://github.com/armydep/cloude-file-storage/pull/69).
+Status: Completed in PR [#69](https://github.com/armydep/cloud-storage/pull/69).
 
 - Add repository/controller delete support.
 - Update upload handling so it skips direct S3 upload when the backend says the
