@@ -9,6 +9,26 @@ from app.models import User
 from app.notifications import repository
 from app.notifications.events import USER_REGISTERED
 from app.notifications.models import Notification
+from tests.utils.user import authentication_token_from_email
+from tests.utils.utils import random_email
+
+
+def _create_recipient(
+    *, client: TestClient, db: Session
+) -> tuple[User, dict[str, str]]:
+    """A user isolated to a single test.
+
+    `normal_user_token_headers` is module-scoped and shared across every test
+    in this file, but `reset_database` only truncates between modules (see
+    conftest.py), so notifications seeded against that shared user would leak
+    across tests and make count/list assertions order-dependent. A fresh user
+    per test sidesteps that entirely.
+    """
+    email = random_email()
+    headers = authentication_token_from_email(client=client, email=email, db=db)
+    user = crud.get_user_by_email(session=db, email=email)
+    assert user is not None
+    return user, headers
 
 
 def _seed_notification(
@@ -42,21 +62,15 @@ def test_notifications_require_authentication(client: TestClient) -> None:
 
 
 def test_read_notifications_returns_only_callers_notifications(
-    client: TestClient,
-    normal_user_token_headers: dict[str, str],
-    db: Session,
+    client: TestClient, db: Session
 ) -> None:
-    normal_user = crud.get_user_by_email(session=db, email=settings.EMAIL_TEST_USER)
-    superuser = crud.get_user_by_email(session=db, email=settings.FIRST_SUPERUSER)
-    assert normal_user is not None
-    assert superuser is not None
+    owner, owner_headers = _create_recipient(client=client, db=db)
+    other, _ = _create_recipient(client=client, db=db)
 
-    mine = _seed_notification(db, recipient=normal_user)
-    _seed_notification(db, recipient=superuser)
+    mine = _seed_notification(db, recipient=owner)
+    _seed_notification(db, recipient=other)
 
-    response = client.get(
-        f"{settings.API_V1_STR}/notifications", headers=normal_user_token_headers
-    )
+    response = client.get(f"{settings.API_V1_STR}/notifications", headers=owner_headers)
 
     assert response.status_code == 200
     body = response.json()
@@ -64,24 +78,21 @@ def test_read_notifications_returns_only_callers_notifications(
 
 
 def test_read_notifications_paginates_with_keyset_cursor(
-    client: TestClient,
-    normal_user_token_headers: dict[str, str],
-    db: Session,
+    client: TestClient, db: Session
 ) -> None:
-    normal_user = crud.get_user_by_email(session=db, email=settings.EMAIL_TEST_USER)
-    assert normal_user is not None
+    recipient, headers = _create_recipient(client=client, db=db)
     base = datetime.now(timezone.utc)
-    first = _seed_notification(db, recipient=normal_user, created_at=base)
+    first = _seed_notification(db, recipient=recipient, created_at=base)
     second = _seed_notification(
-        db, recipient=normal_user, created_at=base + timedelta(seconds=1)
+        db, recipient=recipient, created_at=base + timedelta(seconds=1)
     )
     third = _seed_notification(
-        db, recipient=normal_user, created_at=base + timedelta(seconds=2)
+        db, recipient=recipient, created_at=base + timedelta(seconds=2)
     )
 
     first_page = client.get(
         f"{settings.API_V1_STR}/notifications",
-        headers=normal_user_token_headers,
+        headers=headers,
         params={"limit": 2},
     ).json()
     assert [item["id"] for item in first_page["data"]] == [
@@ -92,7 +103,7 @@ def test_read_notifications_paginates_with_keyset_cursor(
 
     second_page = client.get(
         f"{settings.API_V1_STR}/notifications",
-        headers=normal_user_token_headers,
+        headers=headers,
         params={"limit": 2, "cursor": first_page["next_cursor"]},
     ).json()
     assert [item["id"] for item in second_page["data"]] == [str(first.id)]
@@ -111,20 +122,15 @@ def test_read_notifications_rejects_invalid_cursor(
     assert response.status_code == 422
 
 
-def test_read_notifications_unread_only_filter(
-    client: TestClient,
-    normal_user_token_headers: dict[str, str],
-    db: Session,
-) -> None:
-    normal_user = crud.get_user_by_email(session=db, email=settings.EMAIL_TEST_USER)
-    assert normal_user is not None
-    unread = _seed_notification(db, recipient=normal_user)
-    read = _seed_notification(db, recipient=normal_user)
+def test_read_notifications_unread_only_filter(client: TestClient, db: Session) -> None:
+    recipient, headers = _create_recipient(client=client, db=db)
+    unread = _seed_notification(db, recipient=recipient)
+    read = _seed_notification(db, recipient=recipient)
     repository.mark_notification_read(session=db, notification=read)
 
     response = client.get(
         f"{settings.API_V1_STR}/notifications",
-        headers=normal_user_token_headers,
+        headers=headers,
         params={"unread_only": True},
     )
 
@@ -132,19 +138,14 @@ def test_read_notifications_unread_only_filter(
     assert [item["id"] for item in response.json()["data"]] == [str(unread.id)]
 
 
-def test_read_unread_count(
-    client: TestClient,
-    normal_user_token_headers: dict[str, str],
-    db: Session,
-) -> None:
-    normal_user = crud.get_user_by_email(session=db, email=settings.EMAIL_TEST_USER)
-    assert normal_user is not None
-    _seed_notification(db, recipient=normal_user)
-    _seed_notification(db, recipient=normal_user)
+def test_read_unread_count(client: TestClient, db: Session) -> None:
+    recipient, headers = _create_recipient(client=client, db=db)
+    _seed_notification(db, recipient=recipient)
+    _seed_notification(db, recipient=recipient)
 
     response = client.get(
         f"{settings.API_V1_STR}/notifications/unread-count",
-        headers=normal_user_token_headers,
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -152,18 +153,15 @@ def test_read_unread_count(
 
 
 def test_mark_notification_read_marks_only_target(
-    client: TestClient,
-    normal_user_token_headers: dict[str, str],
-    db: Session,
+    client: TestClient, db: Session
 ) -> None:
-    normal_user = crud.get_user_by_email(session=db, email=settings.EMAIL_TEST_USER)
-    assert normal_user is not None
-    target = _seed_notification(db, recipient=normal_user)
-    sibling = _seed_notification(db, recipient=normal_user)
+    recipient, headers = _create_recipient(client=client, db=db)
+    target = _seed_notification(db, recipient=recipient)
+    sibling = _seed_notification(db, recipient=recipient)
 
     response = client.post(
         f"{settings.API_V1_STR}/notifications/{target.id}/read",
-        headers=normal_user_token_headers,
+        headers=headers,
     )
 
     assert response.status_code == 200
@@ -174,35 +172,28 @@ def test_mark_notification_read_marks_only_target(
 
 
 def test_mark_notification_read_cross_user_returns_404(
-    client: TestClient,
-    normal_user_token_headers: dict[str, str],
-    db: Session,
+    client: TestClient, db: Session
 ) -> None:
-    superuser = crud.get_user_by_email(session=db, email=settings.FIRST_SUPERUSER)
-    assert superuser is not None
-    others_notification = _seed_notification(db, recipient=superuser)
+    owner, _ = _create_recipient(client=client, db=db)
+    _, other_headers = _create_recipient(client=client, db=db)
+    others_notification = _seed_notification(db, recipient=owner)
 
     response = client.post(
         f"{settings.API_V1_STR}/notifications/{others_notification.id}/read",
-        headers=normal_user_token_headers,
+        headers=other_headers,
     )
 
     assert response.status_code == 404
 
 
-def test_mark_all_notifications_read(
-    client: TestClient,
-    normal_user_token_headers: dict[str, str],
-    db: Session,
-) -> None:
-    normal_user = crud.get_user_by_email(session=db, email=settings.EMAIL_TEST_USER)
-    assert normal_user is not None
-    first = _seed_notification(db, recipient=normal_user)
-    second = _seed_notification(db, recipient=normal_user)
+def test_mark_all_notifications_read(client: TestClient, db: Session) -> None:
+    recipient, headers = _create_recipient(client=client, db=db)
+    first = _seed_notification(db, recipient=recipient)
+    second = _seed_notification(db, recipient=recipient)
 
     response = client.post(
         f"{settings.API_V1_STR}/notifications/read-all",
-        headers=normal_user_token_headers,
+        headers=headers,
     )
 
     assert response.status_code == 204
