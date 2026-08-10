@@ -58,7 +58,9 @@ Improve the main file-management workflow after the core operations are stable.
 
 ## 4. Next phase: User experience and notifications
 
-- [ ] **4.1** Send a welcome email after registration
+- [x] **4.1** Send a welcome email after registration
+      ([#102](https://github.com/armydep/cloud-storage/issues/102),
+      [design](docs/phases/phase-8-notifications.md))
 - [ ] **4.2** Set per-user storage quotas
 - [ ] **4.3** Notify users when they reach or approach their quota
 

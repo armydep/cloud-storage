@@ -24,6 +24,7 @@ from app.models import (
     UserUpdate,
     UserUpdateMe,
 )
+from app.notifications import repository as notification_repository
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -154,7 +155,10 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
             detail="The user with this email already exists in the system",
         )
     user_create = UserCreate.model_validate(user_in)
-    user = crud.create_user(session=session, user_create=user_create)
+    user = crud.create_user(session=session, user_create=user_create, commit=False)
+    notification_repository.enqueue_user_registered(session=session, user=user)
+    session.commit()
+    session.refresh(user)
     return user
 
 
