@@ -53,6 +53,21 @@ The first event shown in the feed is `file_shared`, which advances ROADMAP 6.7.
 8. **`user_registered` is not shown in the feed.** The user is present when it
    happens. Only events that are useful after the fact are bound to `q.inapp`.
 
+9. **`file_shared` is delivered on both channels.** It binds to `q.email` and
+   `q.inapp`, so a recipient gets an email *and* a feed entry. The event is
+   emitted once; the two bindings are independent. This requires a `file_shared`
+   email template and builder alongside the feed row.
+
+10. **Feed rows are kept indefinitely.** There is no retention or archival job.
+    Accepted deliberately: the partial unread index keeps the badge query cheap
+    regardless of table size, and the feed query is keyset-paginated on
+    `(user_id, created_at DESC)`, so read performance does not degrade with row
+    count. Revisit if table size itself becomes an operational problem.
+
+11. **Read state is per notification.** Opening the feed does not mark everything
+    read; each notification is marked individually. A mark-all-read action
+    remains available as an explicit user choice.
+
 ## Architecture
 
 ```
@@ -115,13 +130,14 @@ Mirrors the backend / frontend / mobile split already used by Phase 7.
 
 `commit=False` on `create_file_share`; emit a `file_shared` outbox row inside the
 share transaction; migration and model for `notifications`; `q.inapp` queue bound
-to `file_shared`; the in-app consumer; the four endpoints above.
+to `file_shared` and the existing `q.email` bound to it as well; a `file_shared`
+email template and builder; the in-app consumer; the four endpoints above.
 
 ### Slice 2 — web: notification bell and feed in the React SPA
 
-Bell with unread count, dropdown or page listing notifications, mark-read on
-open, mark-all-read, polling every 15–30 seconds with backoff when the tab is
-hidden. Client-side rendering of `file_shared`.
+Bell with unread count, dropdown or page listing notifications, per-notification
+mark-read, mark-all-read, polling every 15–30 seconds with backoff when the tab
+is hidden. Client-side rendering of `file_shared`.
 
 ### Slice 3 — mobile: notification feed in the Flutter client
 
@@ -131,12 +147,15 @@ The same feed and read behaviour in the Android app, using the same endpoints.
 
 1. Alice shares a file with Bob.
 2. The `file_shares` row and one `notification_outbox` row commit together.
-3. The relay publishes; the exchange routes to `q.inapp`.
-4. The in-app consumer inserts a `notifications` row for Bob, unread.
+3. The relay publishes; the exchange routes the event to **both** `q.email` and
+   `q.inapp`.
+4. The email consumer sends Bob a "file shared with you" email. Independently,
+   the in-app consumer inserts a `notifications` row for Bob, unread.
 5. Bob's client polls, sees an unread count of 1, and displays "Alice shared
    `report.pdf` with you".
-6. Bob opens the feed; the notification is marked read and the badge clears.
-7. Redelivery of the same event inserts nothing new.
+6. Bob opens that notification; it is marked read individually and the badge
+   decrements. Other unread notifications are unaffected.
+7. Redelivery of the same event inserts no second feed row.
 
 ## Out of scope
 
@@ -150,14 +169,16 @@ The same feed and read behaviour in the Android app, using the same endpoints.
 
 ## Open questions
 
-1. **Should `file_shared` also bind to `q.email`?** The event is emitted once and
-   the binding is configuration. Sending both an email and a feed entry for every
-   share may be too noisy without preferences to turn it off.
+None currently open. The three questions raised when this phase was drafted are
+resolved as decisions 9, 10 and 11.
 
-2. **Retention for `notifications` rows.** They are durable and user-facing, but
-   unbounded growth is not acceptable. A cap of the last N per user, or an age
-   limit, needs choosing.
+Two consequences were accepted knowingly and are worth revisiting if they bite:
 
-3. **Does marking read happen per notification or on feed open?** Per
-   notification is more precise; marking everything read on open is simpler and
-   is what most feeds do.
+- **Share notifications cannot be turned off.** Decision 9 sends both an email
+  and a feed entry for every share, and there are no preferences (out of scope).
+  A user sharing many files with the same person will generate one email each
+  time. Per-user notification preferences are the mitigation when it becomes a
+  complaint.
+- **The `notifications` table grows without bound.** Decision 10 accepts this.
+  Query performance is protected by the indexes, so the first symptom would be
+  storage or backup size rather than latency.
