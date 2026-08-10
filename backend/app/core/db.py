@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.core.metrics import InstrumentedQueuePool, instrument_sqlalchemy_pool
 from app.files import models as file_models  # noqa: F401
 from app.models import User, UserCreate
+from app.notifications import models as notification_models  # noqa: F401
 
 engine = create_engine(
     str(settings.SQLALCHEMY_DATABASE_URI),

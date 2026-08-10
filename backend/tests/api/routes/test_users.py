@@ -1,6 +1,7 @@
 import uuid
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -8,6 +9,7 @@ from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
 from app.models import User, UserCreate
+from app.notifications.models import NotificationOutbox
 from tests.utils.user import create_random_user
 from tests.utils.utils import random_email, random_lower_string
 
@@ -337,6 +339,35 @@ def test_register_user(client: TestClient, db: Session) -> None:
     assert user_db.full_name == full_name
     verified, _ = verify_password(password, user_db.hashed_password)
     assert verified
+    notifications = db.exec(
+        select(NotificationOutbox).where(
+            NotificationOutbox.event_type == "user_registered"
+        )
+    ).all()
+    assert len(notifications) == 1
+    assert notifications[0].payload == {
+        "user_id": str(user_db.id),
+        "email": username,
+    }
+
+
+def test_register_user_rolls_back_when_enqueue_fails(
+    client: TestClient, db: Session
+) -> None:
+    username = random_email()
+    data = {"email": username, "password": random_lower_string()}
+
+    with (
+        patch(
+            "app.api.routes.users.notification_repository.enqueue_user_registered",
+            side_effect=RuntimeError("outbox unavailable"),
+        ),
+        pytest.raises(RuntimeError, match="outbox unavailable"),
+    ):
+        client.post(f"{settings.API_V1_STR}/users/signup", json=data)
+
+    db.rollback()
+    assert crud.get_user_by_email(session=db, email=username) is None
 
 
 def test_register_user_already_exists_error(client: TestClient) -> None:
