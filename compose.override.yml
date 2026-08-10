@@ -50,6 +50,12 @@ services:
     ports:
       - "5432:5432"
 
+  rabbitmq:
+    restart: "no"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
   adminer:
     restart: "no"
     ports:
@@ -87,7 +93,21 @@ services:
       SMTP_TLS: "false"
       EMAILS_FROM_EMAIL: "noreply@example.com"
 
-  notification-worker:
+  notification-relay:
+    restart: "no"
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    develop:
+      watch:
+        - path: ./backend
+          action: sync+restart
+          target: /app/backend
+          ignore:
+            - ./backend/.venv
+            - .venv
+
+  notification-consumer:
     restart: "no"
     build:
       context: .

@@ -1,12 +1,11 @@
-from typing import cast
-
-from sqlmodel import Session
+import logging
+from typing import Any, cast
 
 from app.core.config import settings
-from app.models import get_datetime_utc
-from app.notifications import repository
-from app.notifications.models import NotificationOutbox
+from app.notifications.events import USER_REGISTERED
 from app.utils import EmailData, render_email_template, send_email
+
+logger = logging.getLogger(__name__)
 
 
 def generate_welcome_email(*, email_to: str) -> EmailData:
@@ -23,30 +22,22 @@ def generate_welcome_email(*, email_to: str) -> EmailData:
     )
 
 
-def deliver(notification: NotificationOutbox) -> None:
-    if notification.event_type != repository.USER_REGISTERED:
-        raise ValueError(f"Unsupported notification event: {notification.event_type}")
-    email_to = cast(str, notification.payload["email"])
+def deliver_welcome_email(*, payload: dict[str, Any]) -> bool:
+    email_to = cast(str, payload["email"])
     email = generate_welcome_email(email_to=email_to)
-    sent = send_email(
+    return send_email(
         email_to=email_to,
         subject=email.subject,
         html_content=email.html_content,
     )
-    if not sent:
-        raise RuntimeError("Email delivery failed")
 
 
-def process_next(*, session: Session) -> bool:
+def handle_event(event_type: str, payload: dict[str, Any]) -> bool:
+    if event_type != USER_REGISTERED:
+        logger.info("Ignoring unsupported notification event: %s", event_type)
+        return True
     if not settings.emails_enabled:
         return False
-
-    notification = repository.claim_next_unpublished(session=session)
-    if notification is None:
+    if not isinstance(payload.get("email"), str):
         return False
-
-    deliver(notification)
-    notification.published_at = get_datetime_utc()
-    session.add(notification)
-    session.commit()
-    return True
+    return deliver_welcome_email(payload=payload)

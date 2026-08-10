@@ -1,9 +1,8 @@
 from sqlmodel import Session, col, select
 
 from app.models import User
+from app.notifications.events import USER_REGISTERED
 from app.notifications.models import NotificationOutbox
-
-USER_REGISTERED = "user_registered"
 
 
 def enqueue_user_registered(*, session: Session, user: User) -> NotificationOutbox:

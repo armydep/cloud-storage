@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     DB_POOL_RECYCLE_SECONDS: int = Field(default=1800, ge=1)
     DB_POOL_PRE_PING: bool = True
 
+    RABBITMQ_HOST: str = "localhost"
+    RABBITMQ_PORT: int = 5672
+    RABBITMQ_USER: str
+    RABBITMQ_PASSWORD: str
+
     S3_ENDPOINT_URL: str = "http://minio:9000"
     S3_PUBLIC_ENDPOINT_URL: str = "http://localhost:9000"
     S3_BUCKET: str = "cloud-file-storage"
@@ -127,6 +132,7 @@ class Settings(BaseSettings):
     def _enforce_non_default_secrets(self) -> Self:
         self._check_default_secret("SECRET_KEY", self.SECRET_KEY)
         self._check_default_secret("POSTGRES_PASSWORD", self.POSTGRES_PASSWORD)
+        self._check_default_secret("RABBITMQ_PASSWORD", self.RABBITMQ_PASSWORD)
         self._check_default_secret(
             "FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD
         )

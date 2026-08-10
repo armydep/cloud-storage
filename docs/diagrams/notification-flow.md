@@ -1,61 +1,55 @@
 # Notification Flow
 
-This diagram shows notification Slice 1 for user registration. The API stores
-the user and welcome-email intent atomically, then returns without contacting
-SMTP. A separate worker claims and delivers unpublished notifications.
+This diagram shows the broker-backed notification flow. Registration remains
+independent of SMTP: the API commits the user and outbox row together, the relay
+moves the event to RabbitMQ, and the email consumer performs delivery.
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Frontend
     participant API as Backend API
     participant DB as Postgres
-    participant Worker as Notification Worker
+    participant Relay as Notification Relay
+    participant MQ as RabbitMQ
+    participant Consumer as Email Consumer
     participant SMTP as SMTP server
 
-    User->>Frontend: Submit registration
-    Frontend->>API: POST /users/signup
+    User->>API: POST /users/signup
     API->>DB: BEGIN
     API->>DB: INSERT user
     API->>DB: INSERT notification outbox row
-    alt Either insert fails
-        API->>DB: ROLLBACK
-        API-->>Frontend: Registration error
-    else Both inserts succeed
-        API->>DB: COMMIT user and outbox row
-        API-->>Frontend: UserPublic
-        Frontend-->>User: Registration complete
+    API->>DB: COMMIT both rows
+    API-->>User: UserPublic
+
+    loop Poll unpublished rows
+        Relay->>DB: SELECT row FOR UPDATE SKIP LOCKED
+        DB-->>Relay: Registered user event
+        Relay->>MQ: Publish persistent message
+        alt Broker confirms publish
+            MQ-->>Relay: Publisher confirm
+            Relay->>DB: Set published_at and COMMIT
+        else Publish is not confirmed
+            Relay->>DB: ROLLBACK
+            Note over Relay,DB: Row remains unpublished
+        end
     end
 
-    Note over API,SMTP: Signup does not contact SMTP
-
-    loop Poll for unpublished notifications
-        alt Email delivery is disabled
-            Worker->>Worker: Sleep without claiming or sending
-        else Email delivery is enabled
-            Worker->>DB: BEGIN
-            Worker->>DB: SELECT row FOR UPDATE SKIP LOCKED
-            alt No row available
-                DB-->>Worker: No notification
-                Worker->>DB: ROLLBACK read transaction
-                Worker->>Worker: Sleep until next poll
-            else Row claimed
-                DB-->>Worker: Registered user payload
-                Worker->>Worker: Render welcome email
-                Worker->>SMTP: Send welcome email
-                alt SMTP succeeds
-                    SMTP-->>Worker: Successful response
-                    Worker->>DB: Set published_at to UTC time
-                    Worker->>DB: COMMIT
-                else SMTP fails or worker stops before commit
-                    Worker->>DB: Transaction rolls back
-                    Note over Worker,DB: published_at remains NULL and the row can be claimed again
-                end
-            end
+    MQ->>Consumer: Deliver from q.email
+    alt Email delivery succeeds
+        Consumer->>SMTP: Send welcome email
+        SMTP-->>Consumer: Accepted
+        Consumer->>MQ: ACK
+    else Email delivery fails
+        Consumer->>MQ: Reject and requeue
+        alt Delivery limit not reached
+            MQ->>Consumer: Redeliver message
+        else Delivery limit reached
+            MQ->>MQ: Dead-letter to q.email.dead-letter
         end
     end
 ```
 
-The worker holds the row lock while sending. Other worker instances skip the
-locked row, while a crash or SMTP failure rolls back the transaction and leaves
-the notification eligible for a later delivery attempt.
+The `notifications` topic exchange, `q.email`, and dead-letter topology are
+durable. Messages are persistent and the broker data directory is backed by a
+named volume. Delivery is at-least-once: a relay crash after broker confirmation
+but before the database commit can publish the same event again.

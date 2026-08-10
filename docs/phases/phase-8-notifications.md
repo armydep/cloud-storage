@@ -153,6 +153,77 @@ exchange; the slice-1 worker split into a relay and a consumer.
 No user-visible change. The value is operational: retry and dead-lettering move
 out of application code.
 
+#### Operational verification procedure
+
+Run this against an isolated Compose project so the normal development volumes
+are not modified. Start from a fresh copy of `.env.example`, then:
+
+```bash
+docker compose -p cfs-notification-verify up -d --build \
+  backend frontend adminer notification-relay notification-consumer \
+  mailcatcher minio-create-bucket
+docker compose -p cfs-notification-verify ps -a
+```
+
+Wait until `db`, `rabbitmq`, and `backend` report healthy. `prestart` and
+`minio-create-bucket` are expected to exit with status `0` after their one-time
+work completes.
+
+Use `POST /api/v1/users/signup` to enqueue a uniquely addressed user for each
+step. Inspect queue depths with:
+
+```bash
+docker compose -p cfs-notification-verify exec rabbitmq \
+  rabbitmqctl list_queues name messages_ready messages_unacknowledged
+```
+
+1. Register a user with all services running. Confirm the welcome message
+   appears at `http://localhost:1080` and both notification queues are empty.
+2. Stop `notification-consumer`, register another user, and confirm `q.email`
+   has one ready message. Start the consumer and confirm the queue drains and
+   the message appears in Mailcatcher.
+3. Remove the consumer container with
+   `docker compose -p cfs-notification-verify rm -sf notification-consumer`
+   (Compose otherwise restarts dependents when RabbitMQ restarts). Register
+   another user and record the non-zero `q.email` depth. Run
+   `docker compose -p cfs-notification-verify restart rabbitmq`, wait for
+   health, and confirm the depth is unchanged.
+4. Recreate the broker with
+   `docker compose -p cfs-notification-verify up -d --force-recreate rabbitmq`.
+   Wait for health and confirm the queued message remains. This step proves the
+   named `/var/lib/rabbitmq` volume; a restart alone does not.
+5. Recreate the consumer with
+   `docker compose -p cfs-notification-verify up -d notification-consumer` and
+   confirm the preserved message drains.
+6. Stop `mailcatcher`, register another user, and leave the consumer running.
+   After the quorum queue's delivery limit is reached, confirm `q.email` is
+   empty and `q.email.dead-letter` contains the failed message. Start
+   Mailcatcher again when finished.
+
+Clean up only the isolated verification project:
+
+```bash
+docker compose -p cfs-notification-verify down -v --remove-orphans
+```
+
+Verification run on 2026-08-10:
+
+- Fresh `.env.example` stack: all long-running services started; signup produced
+  a welcome message in Mailcatcher.
+- Consumer stopped: `q.email` accumulated one message; starting the consumer
+  drained it.
+- Broker restart: the queued message count remained `1`.
+- Broker container recreation: the queued message count remained `1`, and the
+  `/var/lib/rabbitmq` mount was confirmed as the named
+  `cfs-notification-verify_rabbitmq-data` volume.
+- SMTP unavailable: after five failed deliveries, `q.email` was empty and
+  `q.email.dead-letter` contained one message.
+
+The recreation check requires the stable `hostname: rabbitmq` setting in
+addition to the named volume. Without it, RabbitMQ derives its node name from
+the generated container hostname and does not recover the prior node's data
+after recreation.
+
 ### Later, not yet scheduled
 
 A second event, to prove the infrastructure generalises. `file_shared` is the

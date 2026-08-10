@@ -20,6 +20,22 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_DB=${POSTGRES_DB?Variable not set}
 
+  rabbitmq:
+    image: rabbitmq:4.3-management
+    hostname: rabbitmq
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD?Variable not set}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
   adminer:
     image: adminer
     restart: always
@@ -71,6 +87,8 @@ services:
       - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-2}
       - DB_POOL_RECYCLE_SECONDS=${DB_POOL_RECYCLE_SECONDS:-1800}
       - DB_POOL_PRE_PING=${DB_POOL_PRE_PING:-true}
+      - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
@@ -112,6 +130,8 @@ services:
       - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-2}
       - DB_POOL_RECYCLE_SECONDS=${DB_POOL_RECYCLE_SECONDS:-1800}
       - DB_POOL_PRE_PING=${DB_POOL_PRE_PING:-true}
+      - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
@@ -153,7 +173,7 @@ services:
       # Enable redirection for HTTP and HTTPS
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.middlewares=https-redirect
 
-  notification-worker:
+  notification-relay:
     image: '${DOCKER_IMAGE_BACKEND:?Variable not set}:${TAG:-latest}'
     restart: always
     depends_on:
@@ -162,11 +182,13 @@ services:
         restart: true
       prestart:
         condition: service_completed_successfully
-    command: python -m app.notifications.worker
+      rabbitmq:
+        condition: service_healthy
+        restart: true
+    command: python -m app.notifications.relay
     env_file:
       - .env
     environment:
-      - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
       - ENVIRONMENT=${ENVIRONMENT}
       - SECRET_KEY=${SECRET_KEY?Variable not set}
       - FIRST_SUPERUSER=${FIRST_SUPERUSER?Variable not set}
@@ -175,15 +197,38 @@ services:
       - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-2}
       - DB_POOL_RECYCLE_SECONDS=${DB_POOL_RECYCLE_SECONDS:-1800}
       - DB_POOL_PRE_PING=${DB_POOL_PRE_PING:-true}
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_USER=${SMTP_USER}
-      - SMTP_PASSWORD=${SMTP_PASSWORD}
-      - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
       - POSTGRES_SERVER=db
       - POSTGRES_PORT=${POSTGRES_PORT}
       - POSTGRES_DB=${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+
+  notification-consumer:
+    image: '${DOCKER_IMAGE_BACKEND:?Variable not set}:${TAG:-latest}'
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+        restart: true
+    command: python -m app.notifications.consumer
+    env_file:
+      - .env
+    environment:
+      - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - SECRET_KEY=${SECRET_KEY?Variable not set}
+      - FIRST_SUPERUSER=${FIRST_SUPERUSER?Variable not set}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD?Variable not set}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
 
   frontend:
     image: '${DOCKER_IMAGE_FRONTEND:?Variable not set}:${TAG:-latest}'
@@ -216,6 +261,7 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
 volumes:
   app-db-data:
+  rabbitmq-data:
 
 networks:
   traefik-public:
