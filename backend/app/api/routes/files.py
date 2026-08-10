@@ -181,6 +181,7 @@ def create_file_share(
         return share_file(
             session=session,
             owner_id=current_user.id,
+            owner_email=current_user.email,
             file_id=file_id,
             request=request,
         )

@@ -27,6 +27,7 @@ from app.files.schemas import (
     SharedFilesPublic,
     StoredFilePublic,
 )
+from app.notifications import repository as notification_repository
 
 logger = logging.getLogger(__name__)
 
@@ -534,6 +535,7 @@ def share_file(
     *,
     session: Session,
     owner_id: uuid.UUID,
+    owner_email: str,
     file_id: uuid.UUID,
     request: FileShareCreate,
 ) -> FileSharePublic:
@@ -561,9 +563,21 @@ def share_file(
             session=session,
             file_id=file.id,
             recipient_id=recipient.id,
+            commit=False,
         )
     except repository.DuplicateFileShareRepositoryError:
         raise DuplicateFileShareError
+
+    notification_repository.enqueue_file_shared(
+        session=session,
+        file_id=file.id,
+        file_name=file.name,
+        recipient_id=recipient.id,
+        recipient_email=recipient.email,
+        sharer_email=owner_email,
+    )
+    session.commit()
+    session.refresh(share)
 
     return FileSharePublic(
         id=share.id,

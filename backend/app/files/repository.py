@@ -211,16 +211,24 @@ def get_user_by_email(*, session: Session, email: str) -> User | None:
 
 
 def create_file_share(
-    *, session: Session, file_id: uuid.UUID, recipient_id: uuid.UUID
+    *,
+    session: Session,
+    file_id: uuid.UUID,
+    recipient_id: uuid.UUID,
+    commit: bool = True,
 ) -> FileShare:
     share = FileShare(file_id=file_id, recipient_id=recipient_id)
     try:
         session.add(share)
-        session.commit()
+        if commit:
+            session.commit()
+        else:
+            session.flush()
     except IntegrityError:
         session.rollback()
         raise DuplicateFileShareRepositoryError
-    session.refresh(share)
+    if commit:
+        session.refresh(share)
     return share
 
 

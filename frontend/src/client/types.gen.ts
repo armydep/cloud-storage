@@ -107,6 +107,21 @@ export type NewPassword = {
     new_password: string;
 };
 
+export type NotificationPublic = {
+    id: string;
+    event_type: string;
+    payload: {
+        [key: string]: unknown;
+    };
+    created_at: string;
+    read_at?: (string | null);
+};
+
+export type NotificationsPublic = {
+    data: Array<NotificationPublic>;
+    next_cursor?: (string | null);
+};
+
 export type PresignDownloadResponse = {
     download_url: string;
     method?: string;
@@ -169,6 +184,10 @@ export type StoredFilePublic = {
 export type Token = {
     access_token: string;
     token_type?: string;
+};
+
+export type UnreadCountPublic = {
+    count: number;
 };
 
 export type UpdatePassword = {
@@ -344,6 +363,24 @@ export type LoginRecoverPasswordHtmlContentData = {
 };
 
 export type LoginRecoverPasswordHtmlContentResponse = (string);
+
+export type NotificationsReadNotificationsData = {
+    cursor?: (string | null);
+    limit?: number;
+    unreadOnly?: boolean;
+};
+
+export type NotificationsReadNotificationsResponse = (NotificationsPublic);
+
+export type NotificationsReadUnreadCountResponse = (UnreadCountPublic);
+
+export type NotificationsReadNotificationData = {
+    notificationId: string;
+};
+
+export type NotificationsReadNotificationResponse = (NotificationPublic);
+
+export type NotificationsReadAllNotificationsResponse = (void);
 
 export type PrivateCreateUserData = {
     requestBody: PrivateUserCreate;
