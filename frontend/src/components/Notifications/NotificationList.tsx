@@ -7,6 +7,7 @@ import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
   useNotificationsList,
+  useUnreadCount,
 } from "@/hooks/useNotifications"
 import { cn } from "@/lib/utils"
 
@@ -49,8 +50,14 @@ function NotificationRow({
 export function NotificationList({ open }: { open: boolean }) {
   const query = useNotificationsList(open)
   const markAllRead = useMarkAllNotificationsRead()
+  // The feed is unbounded and only 20 rows are loaded at a time (phase-9
+  // decision 10), so "any unread on the loaded page(s)" is not the same as
+  // "any unread at all" — an older, unfetched page could still have unread
+  // rows. The unread-count query (shared with the bell's badge) is the
+  // source of truth for whether "Mark all read" should be reachable.
+  const unreadCountQuery = useUnreadCount()
   const notifications = query.data?.pages.flatMap((page) => page.data) ?? []
-  const hasUnread = notifications.some((item) => item.read_at == null)
+  const hasUnread = (unreadCountQuery.data?.count ?? 0) > 0
 
   if (query.isPending) {
     return (
