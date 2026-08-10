@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { FilesReadFilesSharedWithMeResponse, FilesCreateChildFolderData, FilesCreateChildFolderResponse, FilesDeleteOwnedFolderData, FilesDeleteOwnedFolderResponse, FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesDeleteOwnedFileData, FilesDeleteOwnedFileResponse, FilesCreateFileShareData, FilesCreateFileShareResponse, FilesReadFileSharesData, FilesReadFileSharesResponse, FilesDeleteFileShareData, FilesDeleteFileShareResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { FilesReadFilesSharedWithMeResponse, FilesCreateChildFolderData, FilesCreateChildFolderResponse, FilesDeleteOwnedFolderData, FilesDeleteOwnedFolderResponse, FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesDeleteOwnedFileData, FilesDeleteOwnedFileResponse, FilesCreateFileShareData, FilesCreateFileShareResponse, FilesReadFileSharesData, FilesReadFileSharesResponse, FilesDeleteFileShareData, FilesDeleteFileShareResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, NotificationsReadNotificationsData, NotificationsReadNotificationsResponse, NotificationsReadUnreadCountResponse, NotificationsReadNotificationData, NotificationsReadNotificationResponse, NotificationsReadAllNotificationsResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class FilesService {
     /**
@@ -429,6 +429,76 @@ export class LoginService {
             errors: {
                 422: 'Validation Error'
             }
+        });
+    }
+}
+
+export class NotificationsService {
+    /**
+     * Read Notifications
+     * @param data The data for the request.
+     * @param data.limit
+     * @param data.cursor
+     * @param data.unreadOnly
+     * @returns NotificationsPublic Successful Response
+     * @throws ApiError
+     */
+    public static readNotifications(data: NotificationsReadNotificationsData = {}): CancelablePromise<NotificationsReadNotificationsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/notifications',
+            query: {
+                limit: data.limit,
+                cursor: data.cursor,
+                unread_only: data.unreadOnly
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Read Unread Count
+     * @returns UnreadCountPublic Successful Response
+     * @throws ApiError
+     */
+    public static readUnreadCount(): CancelablePromise<NotificationsReadUnreadCountResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/notifications/unread-count'
+        });
+    }
+
+    /**
+     * Read Notification
+     * @param data The data for the request.
+     * @param data.notificationId
+     * @returns NotificationPublic Successful Response
+     * @throws ApiError
+     */
+    public static readNotification(data: NotificationsReadNotificationData): CancelablePromise<NotificationsReadNotificationResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/notifications/{notification_id}/read',
+            path: {
+                notification_id: data.notificationId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Read All Notifications
+     * @returns void Successful Response
+     * @throws ApiError
+     */
+    public static readAllNotifications(): CancelablePromise<NotificationsReadAllNotificationsResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/notifications/read-all'
         });
     }
 }

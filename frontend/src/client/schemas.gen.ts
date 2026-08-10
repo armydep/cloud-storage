@@ -542,6 +542,71 @@ export const NewPasswordSchema = {
     title: 'NewPassword'
 } as const;
 
+export const NotificationPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        event_type: {
+            type: 'string',
+            title: 'Event Type'
+        },
+        payload: {
+            additionalProperties: true,
+            type: 'object',
+            title: 'Payload'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        read_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Read At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'event_type', 'payload', 'created_at'],
+    title: 'NotificationPublic'
+} as const;
+
+export const NotificationsPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/NotificationPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        next_cursor: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Next Cursor'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'NotificationsPublic'
+} as const;
+
 export const PresignDownloadResponseSchema = {
     properties: {
         download_url: {
@@ -804,6 +869,18 @@ export const TokenSchema = {
     type: 'object',
     required: ['access_token'],
     title: 'Token'
+} as const;
+
+export const UnreadCountPublicSchema = {
+    properties: {
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['count'],
+    title: 'UnreadCountPublic'
 } as const;
 
 export const UpdatePasswordSchema = {

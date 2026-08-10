@@ -18,6 +18,13 @@ DEAD_LETTER_EXCHANGE = "notifications.dead-letter"
 EMAIL_DEAD_LETTER_QUEUE = "q.email.dead-letter"
 EMAIL_DELIVERY_LIMIT = 5
 
+INAPP_QUEUE = "q.inapp"
+INAPP_DEAD_LETTER_EXCHANGE = "notifications.dead-letter.inapp"
+INAPP_DEAD_LETTER_QUEUE = "q.inapp.dead-letter"
+INAPP_DELIVERY_LIMIT = 5
+
+FILE_SHARED_ROUTING_KEY = "file_shared"
+
 
 class EventPublisher(Protocol):
     def publish(
@@ -29,7 +36,10 @@ class EventPublisher(Protocol):
     ) -> None: ...
 
 
-EventHandler = Callable[[str, dict[str, Any]], bool]
+# (routing_key, payload, message_id) -> handled. message_id is the outbox
+# row's id, set by RabbitPublisher.publish; consumers that need idempotency
+# (the in-app feed) use it against notifications.outbox_id UNIQUE.
+EventHandler = Callable[[str, dict[str, Any], str], bool]
 
 
 def _connection_parameters() -> pika.ConnectionParameters:
@@ -69,6 +79,11 @@ def declare_topology(channel: BlockingChannel) -> None:
         exchange=NOTIFICATIONS_EXCHANGE,
         routing_key="user_registered",
     )
+    channel.queue_bind(
+        queue=EMAIL_QUEUE,
+        exchange=NOTIFICATIONS_EXCHANGE,
+        routing_key=FILE_SHARED_ROUTING_KEY,
+    )
     channel.queue_declare(
         queue=EMAIL_DEAD_LETTER_QUEUE,
         durable=True,
@@ -77,6 +92,39 @@ def declare_topology(channel: BlockingChannel) -> None:
     channel.queue_bind(
         queue=EMAIL_DEAD_LETTER_QUEUE,
         exchange=DEAD_LETTER_EXCHANGE,
+        routing_key="#",
+    )
+
+    # In-app feed channel, added in Phase 9. `user_registered` is deliberately
+    # not bound here (decision 8) -- only events useful after the fact belong
+    # in the feed.
+    channel.exchange_declare(
+        exchange=INAPP_DEAD_LETTER_EXCHANGE,
+        exchange_type="topic",
+        durable=True,
+    )
+    channel.queue_declare(
+        queue=INAPP_QUEUE,
+        durable=True,
+        arguments={
+            "x-queue-type": "quorum",
+            "x-delivery-limit": INAPP_DELIVERY_LIMIT,
+            "x-dead-letter-exchange": INAPP_DEAD_LETTER_EXCHANGE,
+        },
+    )
+    channel.queue_bind(
+        queue=INAPP_QUEUE,
+        exchange=NOTIFICATIONS_EXCHANGE,
+        routing_key=FILE_SHARED_ROUTING_KEY,
+    )
+    channel.queue_declare(
+        queue=INAPP_DEAD_LETTER_QUEUE,
+        durable=True,
+        arguments={"x-queue-type": "quorum"},
+    )
+    channel.queue_bind(
+        queue=INAPP_DEAD_LETTER_QUEUE,
+        exchange=INAPP_DEAD_LETTER_EXCHANGE,
         routing_key="#",
     )
 
@@ -119,16 +167,17 @@ class RabbitConsumer:
         declare_topology(self._channel)
         self._channel.basic_qos(prefetch_count=1)
 
-    def consume(self, handler: EventHandler) -> None:
+    def consume(self, handler: EventHandler, *, queue: str = EMAIL_QUEUE) -> None:
         def on_message(
             channel: BlockingChannel,
             method: pika.spec.Basic.Deliver,
-            _properties: pika.BasicProperties,
+            properties: pika.BasicProperties,
             body: bytes,
         ) -> None:
             try:
                 payload = cast(dict[str, Any], json.loads(body))
-                handled = handler(str(method.routing_key), payload)
+                message_id = properties.message_id or ""
+                handled = handler(str(method.routing_key), payload, message_id)
             except Exception:
                 logger.exception("Notification delivery failed; message will retry")
                 handled = False
@@ -142,7 +191,7 @@ class RabbitConsumer:
                 channel.basic_reject(delivery_tag=method.delivery_tag, requeue=True)
 
         self._channel.basic_consume(
-            queue=EMAIL_QUEUE,
+            queue=queue,
             on_message_callback=on_message,
             auto_ack=False,
         )

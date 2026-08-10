@@ -2,6 +2,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from threading import Barrier, Event, Lock
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,6 +24,8 @@ from app.files.models import (
 from app.files.schemas import CompleteUploadRequest
 from app.files.service import BlobIntegrityError
 from app.models import UserCreate
+from app.notifications.events import FILE_SHARED
+from app.notifications.models import NotificationOutbox
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import random_email
 
@@ -2893,6 +2896,77 @@ def test_share_file_rejects_duplicate_recipient(
 
     assert response.status_code == 409
     assert response.json()["detail"] == "File is already shared with this recipient"
+
+
+def test_share_file_enqueues_exactly_one_file_shared_event(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="NotifyShare",
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/{file.id}/shares",
+        headers=normal_user_token_headers,
+        json={"recipient_email": settings.FIRST_SUPERUSER},
+    )
+
+    assert response.status_code == 201
+    # Other share tests in this module run in the same database, so scope the
+    # assertion to events about *this* file rather than the whole table.
+    outbox_rows = db.exec(
+        select(NotificationOutbox).where(NotificationOutbox.event_type == FILE_SHARED)
+    ).all()
+    matching = [
+        row for row in outbox_rows if row.payload.get("file_id") == str(file.id)
+    ]
+    assert len(matching) == 1
+    payload = matching[0].payload
+    assert payload["file_name"] == file.name
+    assert payload["recipient_email"] == settings.FIRST_SUPERUSER
+    assert payload["sharer_email"] == settings.EMAIL_TEST_USER
+
+
+def test_share_file_notification_failure_rolls_back_the_share(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="RollbackShare",
+    )
+
+    with (
+        patch(
+            "app.files.service.notification_repository.enqueue_file_shared",
+            side_effect=RuntimeError("outbox insert failed"),
+        ),
+        pytest.raises(RuntimeError, match="outbox insert failed"),
+    ):
+        client.post(
+            f"{settings.API_V1_STR}/files/{file.id}/shares",
+            headers=normal_user_token_headers,
+            json={"recipient_email": settings.FIRST_SUPERUSER},
+        )
+
+    db.rollback()
+    assert (
+        db.exec(select(FileShare).where(FileShare.file_id == file.id)).first() is None
+    )
+    # Other share tests in this module run in the same database, so scope the
+    # assertion to events about *this* file rather than the whole table.
+    outbox_rows = db.exec(
+        select(NotificationOutbox).where(NotificationOutbox.event_type == FILE_SHARED)
+    ).all()
+    assert not any(row.payload.get("file_id") == str(file.id) for row in outbox_rows)
 
 
 def test_share_file_rejects_self_unknown_and_inactive_recipients(
