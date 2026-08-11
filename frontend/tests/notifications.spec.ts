@@ -106,6 +106,12 @@ test.describe("Notification bell", () => {
 
     expect(readCalled).toBe(false)
     expect(readAllCalled).toBe(false)
+
+    // The bell button lives outside the sheet, and Radix's dialog marks
+    // everything else aria-hidden while open — close it first so the bell
+    // is back in the accessibility tree for getByRole to find.
+    await page.keyboard.press("Escape")
+    await expect(sheet).toBeHidden()
     await expect(
       page
         .getByRole("button", { name: "Notifications" })
@@ -163,17 +169,23 @@ test.describe("Notification bell", () => {
 
     await sheet.getByRole("button", { name: "Mark read" }).first().click()
 
-    await expect(
-      page
-        .getByRole("button", { name: "Notifications" })
-        .locator('[data-slot="badge"]'),
-    ).toHaveText("1")
     await expect(sheet.getByRole("button", { name: "Mark read" })).toHaveCount(
       1,
     )
     await expect(
       sheet.getByText('bob@example.com shared "budget.xlsx" with you'),
     ).toBeVisible()
+
+    // The bell button lives outside the sheet, and Radix's dialog marks
+    // everything else aria-hidden while open — close it first so the bell
+    // is back in the accessibility tree for getByRole to find.
+    await page.keyboard.press("Escape")
+    await expect(sheet).toBeHidden()
+    await expect(
+      page
+        .getByRole("button", { name: "Notifications" })
+        .locator('[data-slot="badge"]'),
+    ).toHaveText("1")
   })
 
   test("mark all read clears the badge", async ({ page }) => {
@@ -216,14 +228,20 @@ test.describe("Notification bell", () => {
 
     await sheet.getByRole("button", { name: "Mark all read" }).click()
 
+    await expect(sheet.getByRole("button", { name: "Mark read" })).toHaveCount(
+      0,
+    )
+
+    // The bell button lives outside the sheet, and Radix's dialog marks
+    // everything else aria-hidden while open — close it first so the bell
+    // is back in the accessibility tree for getByRole to find.
+    await page.keyboard.press("Escape")
+    await expect(sheet).toBeHidden()
     await expect(
       page
         .getByRole("button", { name: "Notifications" })
         .locator('[data-slot="badge"]'),
     ).toHaveCount(0)
-    await expect(sheet.getByRole("button", { name: "Mark read" })).toHaveCount(
-      0,
-    )
   })
 
   test("loads more notifications by cursor without duplicating entries", async ({
