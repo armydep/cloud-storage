@@ -9,7 +9,6 @@ from sqlmodel import Session
 
 from app.core import storage
 from app.core.config import settings
-from tests.utils.item import create_random_item
 
 
 class MetricsMockS3Client:
@@ -83,14 +82,17 @@ def test_request_metrics_use_route_template_labels(
 def test_request_metrics_use_parameterized_route_template_labels(
     client: TestClient,
     superuser_token_headers: dict[str, str],
-    db: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "METRICS_BEARER_TOKEN", "test-token")
-    item = create_random_item(db)
+    current_user_response = client.get(
+        f"{settings.API_V1_STR}/users/me",
+        headers=superuser_token_headers,
+    )
+    user_id = current_user_response.json()["id"]
 
-    item_response = client.get(
-        f"{settings.API_V1_STR}/items/{item.id}",
+    user_response = client.get(
+        f"{settings.API_V1_STR}/users/{user_id}",
         headers=superuser_token_headers,
     )
     metrics_response = client.get(
@@ -98,13 +100,14 @@ def test_request_metrics_use_parameterized_route_template_labels(
         headers={"Authorization": "Bearer test-token"},
     )
 
-    assert item_response.status_code == 200
+    assert current_user_response.status_code == 200
+    assert user_response.status_code == 200
     assert metrics_response.status_code == 200
     assert (
-        'http_requests_total{endpoint="/api/v1/items/{id}",'
+        'http_requests_total{endpoint="/api/v1/users/{user_id}",'
         'method="GET",status_code="200"}'
     ) in metrics_response.text
-    assert str(item.id) not in metrics_response.text
+    assert user_id not in metrics_response.text
 
 
 def test_storage_operation_metrics_record_success_and_error(

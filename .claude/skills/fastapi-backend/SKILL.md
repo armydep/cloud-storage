@@ -20,7 +20,7 @@ records known structural weaknesses. This skill is the *how we build it* layer.
 ## Package layout
 
 The `files` feature is feature-first with layers inside it. The template's
-original `users`/`items`/`login` routes remain in the older flat layout — follow
+original `users`/`login` routes remain in the older flat layout — follow
 the `files` pattern for anything new.
 
 ```
@@ -40,7 +40,7 @@ app
 │   ├── schemas.py           API contracts, validators, LTREE_PATH_PATTERN
 │   ├── repository.py        all SQL for the feature
 │   └── service.py           business logic + domain exceptions
-├── models.py                User, Item, tokens (template-era, shared)
+├── models.py                User and authentication schemas (template-era, shared)
 ├── crud.py                  user CRUD (template-era)
 └── alembic/versions/        migrations
 ```
@@ -123,7 +123,7 @@ Every file and folder belongs to exactly one user. There is no sharing yet.
 
 ## Pagination
 
-New list endpoints take `skip`/`limit` (see `api/routes/items.py`). The folder
+New list endpoints take `skip`/`limit` (see `api/routes/users.py`). The folder
 listing currently has none — that is a known gap (`SCALE 1.1`–`1.4`), not a
 pattern to copy.
 
@@ -150,7 +150,7 @@ pattern to copy.
 ## Typing and style
 
 - mypy runs `strict`. There is a pre-existing failure baseline in
-  `api/routes/items.py` and `users.py` — do not add to it, and do not fix it as a
+  `api/routes/users.py` — do not add to it, and do not fix it as a
   drive-by.
 - ruff for lint and format: `uv run bash scripts/lint.sh` checks,
   `uv run bash scripts/format.sh` fixes.

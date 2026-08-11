@@ -17,7 +17,6 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
 import { Route as LayoutFilesRouteImport } from './routes/_layout/files'
-import { Route as LayoutItemsRouteImport } from './routes/_layout/items'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
 import { Route as LayoutSharedWithMeRouteImport } from './routes/_layout/shared-with-me'
 
@@ -60,11 +59,6 @@ const LayoutFilesRoute = LayoutFilesRouteImport.update({
   path: '/files',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutItemsRoute = LayoutItemsRouteImport.update({
-  id: '/items',
-  path: '/items',
-  getParentRoute: () => LayoutRoute,
-} as any)
 const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -84,7 +78,6 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/admin': typeof LayoutAdminRoute
   '/files': typeof LayoutFilesRoute
-  '/items': typeof LayoutItemsRoute
   '/settings': typeof LayoutSettingsRoute
   '/shared-with-me': typeof LayoutSharedWithMeRoute
 }
@@ -95,7 +88,6 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/admin': typeof LayoutAdminRoute
   '/files': typeof LayoutFilesRoute
-  '/items': typeof LayoutItemsRoute
   '/settings': typeof LayoutSettingsRoute
   '/shared-with-me': typeof LayoutSharedWithMeRoute
   '/': typeof LayoutIndexRoute
@@ -109,7 +101,6 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/_layout/admin': typeof LayoutAdminRoute
   '/_layout/files': typeof LayoutFilesRoute
-  '/_layout/items': typeof LayoutItemsRoute
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/shared-with-me': typeof LayoutSharedWithMeRoute
   '/_layout/': typeof LayoutIndexRoute
@@ -124,7 +115,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/admin'
     | '/files'
-    | '/items'
     | '/settings'
     | '/shared-with-me'
   fileRoutesByTo: FileRoutesByTo
@@ -135,7 +125,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/admin'
     | '/files'
-    | '/items'
     | '/settings'
     | '/shared-with-me'
     | '/'
@@ -148,7 +137,6 @@ export interface FileRouteTypes {
     | '/signup'
     | '/_layout/admin'
     | '/_layout/files'
-    | '/_layout/items'
     | '/_layout/settings'
     | '/_layout/shared-with-me'
     | '/_layout/'
@@ -220,13 +208,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutFilesRouteImport
       parentRoute: typeof LayoutRoute
     }
-    '/_layout/items': {
-      id: '/_layout/items'
-      path: '/items'
-      fullPath: '/items'
-      preLoaderRoute: typeof LayoutItemsRouteImport
-      parentRoute: typeof LayoutRoute
-    }
     '/_layout/settings': {
       id: '/_layout/settings'
       path: '/settings'
@@ -247,7 +228,6 @@ declare module '@tanstack/react-router' {
 interface LayoutRouteChildren {
   LayoutAdminRoute: typeof LayoutAdminRoute
   LayoutFilesRoute: typeof LayoutFilesRoute
-  LayoutItemsRoute: typeof LayoutItemsRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutSharedWithMeRoute: typeof LayoutSharedWithMeRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
@@ -256,7 +236,6 @@ interface LayoutRouteChildren {
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAdminRoute: LayoutAdminRoute,
   LayoutFilesRoute: LayoutFilesRoute,
-  LayoutItemsRoute: LayoutItemsRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutSharedWithMeRoute: LayoutSharedWithMeRoute,
   LayoutIndexRoute: LayoutIndexRoute,

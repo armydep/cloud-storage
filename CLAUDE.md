@@ -155,7 +155,7 @@ have drifted from the workflows — fix the agent, not just the immediate failur
 - Coverage gate is 90%.
 
 ### General
-- mypy runs `strict`. It has a pre-existing baseline of failures in `app/api/routes/items.py` and
-  `users.py`; do not add new ones, and do not "fix" the baseline as a drive-by.
+- mypy runs `strict`. It has a pre-existing baseline of failures in `app/api/routes/users.py`; do
+  not add new ones, and do not "fix" the baseline as a drive-by.
 - Money-free, but sizes are `BigInteger`; timestamps are `timestamptz`, UTC, via `get_datetime_utc`.
 - Keep `ROADMAP.md` and the docs above in sync when behaviour changes; they are the source of truth.
