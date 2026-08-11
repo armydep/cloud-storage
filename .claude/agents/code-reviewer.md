@@ -105,7 +105,7 @@ Focus on, in priority order:
 
 - **Typing.** mypy runs `strict`. New `type: ignore` comments need a
   justification. There is a pre-existing failure baseline in
-  `app/api/routes/items.py` and `users.py`; do not count those as new
+  `app/api/routes/users.py`; do not count those as new
   findings.
 
 Report as three groups: CRITICAL (must fix), WARNING (should fix),

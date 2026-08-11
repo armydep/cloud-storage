@@ -210,7 +210,7 @@ Responsibilities:
 Refactor scope:
 
 - Move only the file-storage domain first.
-- Leave user/item/login/template code in the current layout unless it blocks Phase 2.
+- Leave user/login/template code in the current layout unless it blocks Phase 2.
 - Keep existing endpoint behavior stable during the refactor:
   ```text
   GET /api/v1/files?path=<ltree-path>
@@ -262,7 +262,6 @@ FolderWithContentsPublic
 
 ```text
 User
-Item
 Token
 Message
 NewPassword

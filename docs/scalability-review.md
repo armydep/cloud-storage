@@ -86,8 +86,8 @@ groundwork that did not exist yet:
 A folder holding tens of thousands of files produces a multi-megabyte response
 and a matching allocation spike on every request.
 
-`app/api/routes/items.py:15` already accepts `skip` and `limit`, so the files
-module is inconsistent with the convention already established elsewhere in the
+The user-list endpoint already accepts `skip` and `limit`, so the files module
+is inconsistent with the convention already established elsewhere in the
 codebase.
 
 **Design constraint before implementing:** contents are currently two separately
