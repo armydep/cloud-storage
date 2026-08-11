@@ -5,6 +5,8 @@ import 'package:cloudestorage/core/config/app_config.dart';
 import 'package:cloudestorage/features/auth/application/auth_providers.dart';
 import 'package:cloudestorage/features/files/application/files_providers.dart';
 import 'package:cloudestorage/features/files/presentation/files_browser_screen.dart';
+import 'package:cloudestorage/features/notifications/application/notifications_controller.dart';
+import 'package:cloudestorage/features/notifications/application/notifications_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -313,6 +315,17 @@ Future<ProviderContainer> _pumpFilesScreen(
         FakeTokenStorage(token: 'test-token'),
       ),
       httpClientProvider.overrideWithValue(httpClient),
+      // This suite pumps the real FilesBrowserScreen, which now hosts the
+      // notification bell. Without autoStart: false, its real
+      // Timer.periodic would still be pending when the test body returns,
+      // which flutter_test's binding treats as a leaked timer -- container
+      // teardown (below) runs too late to prevent that check from failing.
+      notificationsControllerProvider.overrideWith(
+        (ref) => NotificationsController(
+          ref.watch(notificationsRepositoryProvider),
+          autoStart: false,
+        ),
+      ),
     ],
   );
   addTearDown(container.dispose);
