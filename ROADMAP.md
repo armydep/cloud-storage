@@ -80,7 +80,11 @@ Improve the main file-management workflow after the core operations are stable.
 - [ ] **6.4** Create expiring public links
 - [ ] **6.5** Add read-only and edit permissions
 - [ ] **6.6** Record file and folder activity
-- [ ] **6.7** Add notifications for shared content
+- [x] **6.7** Add notifications for shared content
+      ([#106](https://github.com/armydep/cloud-storage/issues/106),
+      [#107](https://github.com/armydep/cloud-storage/issues/107),
+      [#108](https://github.com/armydep/cloud-storage/issues/108),
+      [design](docs/phases/phase-9-in-app-notifications.md))
 
 ## 7. Later phase: Storage and reliability
 

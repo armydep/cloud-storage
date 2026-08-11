@@ -4,6 +4,9 @@ import 'package:cloudestorage/features/files/application/files_state.dart';
 import 'package:cloudestorage/features/files/domain/file_models.dart';
 import 'package:cloudestorage/features/files/presentation/file_detail_screen.dart';
 import 'package:cloudestorage/features/files/presentation/widgets/file_list_item.dart';
+import 'package:cloudestorage/features/notifications/application/notifications_providers.dart';
+import 'package:cloudestorage/features/notifications/presentation/notifications_screen.dart';
+import 'package:cloudestorage/features/notifications/presentation/widgets/notification_bell_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -37,6 +40,9 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
   Widget build(BuildContext context) {
     final filesState = ref.watch(filesControllerProvider);
     final controller = ref.read(filesControllerProvider.notifier);
+    final unreadCount = ref.watch(
+      notificationsControllerProvider.select((state) => state.unreadCount),
+    );
 
     ref.listen(filesControllerProvider, (previous, next) {
       if (previous?.isCreatingFolder == true &&
@@ -74,6 +80,10 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
               tooltip: 'Create folder',
               onPressed: () => _showCreateFolderDialog(context, controller),
               icon: const Icon(Icons.create_new_folder),
+            ),
+            NotificationBellIcon(
+              unreadCount: unreadCount,
+              onPressed: () => _openNotifications(context),
             ),
             IconButton(
               key: const Key('logout-button'),
@@ -268,6 +278,13 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => FileDetailScreen(file: file)),
+    );
+  }
+
+  void _openNotifications(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
     );
   }
 

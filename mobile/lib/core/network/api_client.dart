@@ -89,6 +89,16 @@ class ApiClient {
     );
   }
 
+  /// A POST that returns no body (204), unlike [postJson] which always
+  /// decodes a JSON object from the response.
+  Future<void> postEmpty(String path, {bool authenticated = false}) async {
+    final token = authenticated ? await _requiredToken() : null;
+    await _send(
+      () => _httpClient.post(resolve(path), headers: _headers(token: token)),
+      authenticatedToken: token,
+    );
+  }
+
   Map<String, String> _headers({String? token}) {
     final headers = <String, String>{'Accept': 'application/json'};
     if (token != null) headers['Authorization'] = 'Bearer $token';

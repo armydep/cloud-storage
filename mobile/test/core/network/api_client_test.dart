@@ -101,6 +101,29 @@ void main() {
     expect(capturedRequest.headers['Authorization'], 'Bearer secret-token');
   });
 
+  test('sends authenticated POST requests without decoding a body', () async {
+    final storage = FakeTokenStorage(token: 'secret-token');
+    final session = AuthSession(storage);
+    late http.Request capturedRequest;
+    final apiClient = ApiClient(
+      Uri.parse('https://example.com/'),
+      authSession: session,
+      httpClient: MockClient((request) async {
+        capturedRequest = request;
+        return http.Response('', 204);
+      }),
+    );
+
+    await apiClient.postEmpty(
+      '/api/v1/notifications/read-all',
+      authenticated: true,
+    );
+
+    expect(capturedRequest.method, 'POST');
+    expect(capturedRequest.url.path, '/api/v1/notifications/read-all');
+    expect(capturedRequest.headers['Authorization'], 'Bearer secret-token');
+  });
+
   test('maps DELETE network failures to ApiException network errors', () async {
     final apiClient = ApiClient(
       Uri.parse('https://example.com/'),
