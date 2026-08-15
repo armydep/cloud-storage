@@ -1,123 +1,198 @@
 # File Upload Flow
 
-This diagram shows the Phase 2 upload flow using presigned URLs. The backend authorizes the operation and stores metadata; the browser uploads file bytes directly to MinIO. Upload completion verifies object metadata before taking the `file_blobs` row lock; the lock is held only while mutating blob claims, ref counts, and file metadata.
+This diagram shows the current upload flow using presigned URLs with S3-side checksum verification
+(ROADMAP 2.6 / #91) and delayed blob row locking (ROADMAP 2.7 / #92). The backend authorizes the
+operation and stores metadata; the browser uploads file bytes directly to MinIO. Presigned URL
+generation is local HMAC signing — it never makes a network call to MinIO.
+
+Five Postgres tables are involved, each shown as its own lifeline so every step names exactly which
+table is read or written:
+
+| Table | Role |
+| --- | --- |
+| `folders` | Resolves the target folder by owner + path |
+| `file_blobs` | One row per distinct object (`blob_hash`), holds `ref_count` |
+| `file_blob_claims` | Proves *this* user legitimately possesses a blob's content — the SCALE 8.1 fix |
+| `pending_uploads` | Tracks an in-flight upload until `complete_upload` consumes it |
+| `files` | The metadata row a folder listing actually reads |
+
+## Full flow
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Frontend
     participant Backend as "Backend API"
-    participant DB as "Postgres"
+    participant folders as "folders"
+    participant file_blobs as "file_blobs"
+    participant file_blob_claims as "file_blob_claims"
+    participant pending_uploads as "pending_uploads"
+    participant files as "files"
     participant MinIO
 
     User->>Frontend: Select file to upload
-    Frontend->>Frontend: Compute SHA-256 blob_hash
-    Frontend->>Backend: POST presign upload
-    Backend->>DB: Find folder by owner_id + folder_path
+    Frontend->>Frontend: Compute SHA-256 blob_hash (chunked)
+    Frontend->>Backend: POST /files/presign-upload
+
+    Backend->>folders: SELECT WHERE owner_id + path
     alt Folder missing or not owned
-        DB-->>Backend: No folder
+        folders-->>Backend: no row
         Backend-->>Frontend: 404 Folder not found
     else Folder exists
-        DB-->>Backend: Folder
-        Backend->>Backend: Derive pending upload key
-        Backend->>MinIO: Generate checksum-signed presigned PUT URL
-        MinIO-->>Backend: Presigned upload URL
-        Backend-->>Frontend: upload_url, method=PUT, checksum headers, object_key, expires_in
+        folders-->>Backend: folder row
+        Backend->>file_blobs: SELECT WHERE blob_hash (no lock)
+        file_blobs-->>Backend: blob row or none
+        Backend->>file_blob_claims: SELECT WHERE owner_id + blob_hash
+        file_blob_claims-->>Backend: claim row or none
+
+        alt Blob exists AND already claimed by this user
+            Backend-->>Frontend: upload_required=false, object_key
+            Note over Frontend,MinIO: Bytes already in storage under this user's<br/>claim — the PUT to MinIO is skipped entirely
+        else Upload actually required
+            Backend->>Backend: Sign PUT URL with ChecksumSHA256<br/>(local HMAC — no MinIO call)
+            Backend->>pending_uploads: INSERT (upload_id, owner_id, blob_hash,<br/>object_key, size_bytes, mime_type, expires_at)
+            pending_uploads-->>Backend: row committed
+            Backend-->>Frontend: upload_url, method=PUT,<br/>x-amz-checksum-sha256 header, object_key, expires_in
+            Frontend->>MinIO: PUT file bytes + x-amz-checksum-sha256
+            MinIO-->>Frontend: 200 OK (checksum verified S3-side)
+        end
     end
 
-    Frontend->>MinIO: PUT file bytes with x-amz-checksum-sha256
-    MinIO-->>Frontend: Upload success
+    Frontend->>Backend: POST /files/complete-upload
 
-    Frontend->>Backend: POST complete upload
-
-    Backend->>DB: Find folder by owner_id + folder_path
+    Backend->>folders: SELECT WHERE owner_id + path
     alt Folder missing or not owned
-        DB-->>Backend: No folder
+        folders-->>Backend: no row
         Backend-->>Frontend: 404 Folder not found
     else Folder exists
-        DB-->>Backend: Folder
-        Backend->>DB: Check duplicate filename in folder
-        alt Duplicate filename
-            DB-->>Backend: Existing file
+        folders-->>Backend: folder row
+        Backend->>files: SELECT WHERE folder_id + name
+        alt Duplicate filename in folder
+            files-->>Backend: existing row
             Backend-->>Frontend: 409 File name already exists
-        else No duplicate
-            Backend->>DB: Read file_blobs by hash without row lock
-            Backend->>DB: Find existing blob claim
-            alt Blob already claimed by this user
-                Backend->>DB: SELECT file_blobs FOR UPDATE
-                Backend->>DB: Increment ref_count and insert files row
-                DB-->>Backend: Stored file metadata
-                Backend-->>Frontend: StoredFilePublic
-            else Pending proof required
-                Backend->>DB: Find pending upload
-                Backend->>MinIO: HEAD pending upload with ChecksumMode=ENABLED
-                alt Pending object missing
-                    MinIO-->>Backend: Not found
+        else Name is free
+            files-->>Backend: no row
+            Backend->>file_blobs: SELECT WHERE blob_hash (no lock)
+            file_blobs-->>Backend: blob row or none
+            Backend->>file_blob_claims: SELECT WHERE owner_id + blob_hash
+            file_blob_claims-->>Backend: claim row or none
+
+            alt Blob exists AND already claimed
+                Note over Backend,pending_uploads: No pending_uploads lookup — the claim<br/>alone is proof this user owns the content
+            else Blob missing, or exists but not yet claimed by this user
+                Backend->>pending_uploads: SELECT WHERE owner_id + blob_hash<br/>AND expires_at > now() ORDER BY created_at DESC
+                alt No unexpired pending upload
+                    pending_uploads-->>Backend: no row
                     Backend-->>Frontend: 400 Uploaded object not found
-                else Object exists
-                    MinIO-->>Backend: size_bytes, content_type, checksum_sha256
-                    alt Size/content/checksum validation fails
-                        Backend-->>Frontend: 400 Uploaded object validation error
-                    else Object metadata valid
-                        opt Canonical blob row missing
-                            Backend->>MinIO: Copy pending object to canonical sha256 key
+                else Pending upload found
+                    pending_uploads-->>Backend: pending_upload row
+                    Backend->>MinIO: HEAD pending object (ChecksumMode=ENABLED)
+                    alt Object missing from storage
+                        MinIO-->>Backend: not found
+                        Backend-->>Frontend: 400 Uploaded object not found
+                    else Object present
+                        MinIO-->>Backend: size_bytes, content_type, checksum_sha256
+                        alt size / content-type / checksum mismatch
+                            Backend-->>Frontend: 400 validation error
+                        else Object metadata matches the request
+                            opt Blob row does not exist yet
+                                Backend->>MinIO: COPY pending object -> canonical sha256/&lt;hash&gt; key
+                                Backend->>file_blobs: INSERT (blob_hash, object_key,<br/>size_bytes, ref_count=0)
+                                Note over file_blobs: Duplicate INSERT from a concurrent<br/>uploader is caught and ignored
+                            end
                         end
-                        Backend->>DB: SELECT file_blobs FOR UPDATE
-                        Backend->>DB: Ensure blob claim, increment ref_count, insert files row
-                        DB-->>Backend: Stored file metadata
-                        Backend->>MinIO: Delete pending upload object
-                        Backend-->>Frontend: StoredFilePublic
                     end
                 end
             end
-            Frontend->>Backend: GET current folder listing
-            Backend->>DB: List folder contents
-            DB-->>Backend: Folders + files
-            Backend-->>Frontend: Updated folder listing
+
+            Backend->>file_blobs: SELECT ... FOR UPDATE WHERE blob_hash
+            file_blobs-->>Backend: locked blob row
+            Note over Backend,file_blobs: Row lock held only from here to the<br/>commit below (#92) — not for the whole request
+
+            Backend->>file_blob_claims: INSERT WHERE NOT EXISTS (owner_id, blob_hash)
+            Note over file_blob_claims: No-op SELECT if already claimed
+            Backend->>file_blobs: UPDATE SET ref_count = ref_count + 1
+            Backend->>files: INSERT (owner_id, folder_id, name, blob_hash,<br/>size_bytes, mime_type, category)
+            opt Pending upload was used
+                Backend->>pending_uploads: DELETE WHERE id
+            end
+            Backend->>Backend: COMMIT<br/>(file_blob_claims + file_blobs + files + pending_uploads<br/>together, one transaction)
+            files-->>Backend: committed file row
+
+            opt Pending upload was used
+                Backend->>MinIO: DELETE pending object (best-effort,<br/>outside the transaction; failure is logged, not fatal)
+            end
+            Backend-->>Frontend: StoredFilePublic
+
+            Frontend->>Backend: GET /files (refresh current folder)
+            Backend->>folders: SELECT child folders WHERE parent_id
+            Backend->>files: SELECT files WHERE folder_id
+            folders-->>Backend: child folders
+            files-->>Backend: files
+            Backend-->>Frontend: updated folder listing
+            Frontend-->>User: file appears in the list
         end
     end
 ```
 
-## Happy Path
+## Happy path (blob not previously seen)
+
+The common case for a genuinely new file: no existing blob, no existing claim, a real PUT to MinIO,
+then a canonical blob row created at completion time.
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Frontend
     participant Backend as "Backend API"
-    participant DB as "Postgres"
+    participant folders as "folders"
+    participant file_blobs as "file_blobs"
+    participant file_blob_claims as "file_blob_claims"
+    participant pending_uploads as "pending_uploads"
+    participant files as "files"
     participant MinIO
 
     User->>Frontend: Select file
-    Frontend->>Frontend: Compute blob hash
-    Frontend->>Backend: Request upload URL
-    Backend->>DB: Verify target folder
-    DB-->>Backend: Folder found
-    Backend->>Backend: Build pending upload key and checksum header
-    Backend->>MinIO: Create checksum-signed presigned PUT URL
-    MinIO-->>Backend: Upload URL
-    Backend-->>Frontend: Upload URL and headers
-    Frontend->>MinIO: Upload file bytes with checksum header
-    MinIO-->>Frontend: Upload success
-    Frontend->>Backend: Complete upload
-    Backend->>DB: Read blob metadata without row lock
-    alt Blob already claimed by this user
-        Backend->>DB: Skip pending upload verification
-    else Pending proof required
-        Backend->>MinIO: Verify pending object metadata and checksum
-        MinIO-->>Backend: Object metadata and checksum
-        opt Blob does not already exist
-            Backend->>MinIO: Copy pending object to canonical key
-        end
-    end
-    Backend->>DB: Lock blob row and save claim/ref_count/file metadata
-    DB-->>Backend: Stored file
-    opt Pending proof was used
-        Backend->>MinIO: Delete pending object
-    end
-    Backend-->>Frontend: File metadata
-    Frontend->>Backend: Refresh folder listing
-    Backend->>DB: Load folder contents
-    DB-->>Backend: Current contents
-    Backend-->>Frontend: Updated file list
+    Frontend->>Frontend: Compute blob_hash
+    Frontend->>Backend: POST /files/presign-upload
+    Backend->>folders: SELECT WHERE owner_id + path
+    folders-->>Backend: folder row
+    Backend->>file_blobs: SELECT WHERE blob_hash
+    file_blobs-->>Backend: none
+    Backend->>file_blob_claims: SELECT WHERE owner_id + blob_hash
+    file_blob_claims-->>Backend: none
+    Backend->>Backend: Sign PUT URL with ChecksumSHA256
+    Backend->>pending_uploads: INSERT pending_upload row
+    Backend-->>Frontend: upload_url + checksum header
+    Frontend->>MinIO: PUT file bytes + x-amz-checksum-sha256
+    MinIO-->>Frontend: 200 OK
+
+    Frontend->>Backend: POST /files/complete-upload
+    Backend->>folders: SELECT WHERE owner_id + path
+    folders-->>Backend: folder row
+    Backend->>files: SELECT WHERE folder_id + name
+    files-->>Backend: none (name free)
+    Backend->>file_blobs: SELECT WHERE blob_hash
+    file_blobs-->>Backend: none
+    Backend->>pending_uploads: SELECT latest unexpired for owner + blob_hash
+    pending_uploads-->>Backend: pending_upload row
+    Backend->>MinIO: HEAD object (ChecksumMode=ENABLED)
+    MinIO-->>Backend: size, content_type, checksum — all match
+    Backend->>MinIO: COPY pending object -> sha256/&lt;hash&gt;
+    Backend->>file_blobs: INSERT (blob_hash, object_key, size_bytes, ref_count=0)
+    Backend->>file_blobs: SELECT ... FOR UPDATE WHERE blob_hash
+    file_blobs-->>Backend: locked new row
+    Backend->>file_blob_claims: INSERT (owner_id, blob_hash)
+    Backend->>file_blobs: UPDATE SET ref_count = ref_count + 1
+    Backend->>files: INSERT file row
+    Backend->>pending_uploads: DELETE pending_upload row
+    Backend->>Backend: COMMIT
+    files-->>Backend: committed file row
+    Backend->>MinIO: DELETE pending object (best-effort)
+    Backend-->>Frontend: StoredFilePublic
+    Frontend->>Backend: GET /files (refresh)
+    Backend->>folders: SELECT child folders
+    Backend->>files: SELECT files WHERE folder_id
+    Backend-->>Frontend: updated listing
+    Frontend-->>User: file appears in the list
 ```
