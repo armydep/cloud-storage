@@ -36,7 +36,7 @@ sequenceDiagram
     alt No matching row (not owner, not a share recipient, or file does not exist)
         Backend-->>Frontend: 404 File not found
     else Caller is the owner or a share recipient
-        Backend->>Backend: Derive object_key = sha256/&lt;files.blob_hash&gt;
+        Backend->>Backend: Derive object_key = sha256/{files.blob_hash}
         Backend->>Backend: Sign GET URL (local HMAC — no MinIO call)
         Backend-->>Frontend: download_url, method=GET, expires_in
     end

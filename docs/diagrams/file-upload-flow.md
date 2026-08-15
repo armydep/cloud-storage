@@ -96,7 +96,7 @@ sequenceDiagram
                             Backend-->>Frontend: 400 validation error
                         else Object metadata matches the request
                             opt Blob row does not exist yet
-                                Backend->>MinIO: COPY pending object -> canonical sha256/&lt;hash&gt; key
+                                Backend->>MinIO: COPY pending object into canonical sha256/{hash} key
                                 Backend->>file_blobs: INSERT (blob_hash, object_key,<br/>size_bytes, ref_count=0)
                                 Note over file_blobs: Duplicate INSERT from a concurrent<br/>uploader is caught and ignored
                             end
@@ -120,7 +120,7 @@ sequenceDiagram
             files-->>Backend: committed file row
 
             opt Pending upload was used
-                Backend->>MinIO: DELETE pending object (best-effort,<br/>outside the transaction; failure is logged, not fatal)
+                Backend->>MinIO: DELETE pending object (best-effort,<br/>outside the transaction — failure is logged, not fatal)
             end
             Backend-->>Frontend: StoredFilePublic
 
@@ -178,7 +178,7 @@ sequenceDiagram
     pending_uploads-->>Backend: pending_upload row
     Backend->>MinIO: HEAD object (ChecksumMode=ENABLED)
     MinIO-->>Backend: size, content_type, checksum — all match
-    Backend->>MinIO: COPY pending object -> sha256/&lt;hash&gt;
+    Backend->>MinIO: COPY pending object into sha256/{hash}
     Backend->>file_blobs: INSERT (blob_hash, object_key, size_bytes, ref_count=0)
     Backend->>file_blobs: SELECT ... FOR UPDATE WHERE blob_hash
     file_blobs-->>Backend: locked new row
