@@ -4,6 +4,10 @@ This diagram shows the download flow using presigned URLs. The backend authorize
 single query; the browser then downloads file bytes directly from MinIO. Presigned URL generation is
 local HMAC signing — it never makes a network call to MinIO.
 
+For a step-by-step textual breakdown of every database operation in this flow — including exact
+columns, predicates and why download performs no writes at all — see
+[`file-flow-database-operations.md`](file-flow-database-operations.md).
+
 Two Postgres tables are involved:
 
 | Table | Role |

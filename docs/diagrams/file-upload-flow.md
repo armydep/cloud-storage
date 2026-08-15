@@ -5,6 +5,10 @@ This diagram shows the current upload flow using presigned URLs with S3-side che
 operation and stores metadata; the browser uploads file bytes directly to MinIO. Presigned URL
 generation is local HMAC signing — it never makes a network call to MinIO.
 
+For a step-by-step textual breakdown of every database operation in this flow — including exact
+columns, predicates, transaction boundaries and which steps are conditional — see
+[`file-flow-database-operations.md`](file-flow-database-operations.md).
+
 Five Postgres tables are involved, each shown as its own lifeline so every step names exactly which
 table is read or written:
 
