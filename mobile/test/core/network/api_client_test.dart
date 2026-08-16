@@ -162,6 +162,40 @@ void main() {
     );
   });
 
+  test('extracts the backend detail string from a JSON error body', () async {
+    final apiClient = ApiClient(
+      Uri.parse('https://example.com/'),
+      httpClient: MockClient(
+        (_) async => http.Response('{"detail":"Recipient not found"}', 404),
+      ),
+    );
+
+    await expectLater(
+      apiClient.getJson('/api/v1/files/file-123/shares'),
+      throwsA(
+        isA<ApiException>().having(
+          (error) => error.detail,
+          'detail',
+          'Recipient not found',
+        ),
+      ),
+    );
+  });
+
+  test('leaves detail null when the error body is not JSON', () async {
+    final apiClient = ApiClient(
+      Uri.parse('https://example.com/'),
+      httpClient: MockClient((_) async => http.Response('not json', 500)),
+    );
+
+    await expectLater(
+      apiClient.getJson('/health'),
+      throwsA(
+        isA<ApiException>().having((error) => error.detail, 'detail', isNull),
+      ),
+    );
+  });
+
   test('stale unauthorized response does not clear a newer token', () async {
     final storage = FakeTokenStorage(token: 'old-token');
     final session = AuthSession(storage);

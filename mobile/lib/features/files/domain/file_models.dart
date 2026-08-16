@@ -103,6 +103,31 @@ class SharedFile {
   }
 }
 
+/// The response body of `POST /api/v1/files/{file_id}/shares`, matching the
+/// backend's `FileSharePublic` schema.
+class FileShare {
+  final String id;
+  final String fileId;
+  final String recipientEmail;
+  final DateTime createdAt;
+
+  const FileShare({
+    required this.id,
+    required this.fileId,
+    required this.recipientEmail,
+    required this.createdAt,
+  });
+
+  factory FileShare.fromJson(Map<String, dynamic> json) {
+    return FileShare(
+      id: json['id'] as String,
+      fileId: json['file_id'] as String,
+      recipientEmail: json['recipient_email'] as String,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
 class FolderWithContents {
   final String id;
   final String name;

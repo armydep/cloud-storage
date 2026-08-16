@@ -49,6 +49,51 @@ class FilesRepository {
     }
   }
 
+  Future<FileShare> createFileShare({
+    required String fileId,
+    required String recipientEmail,
+  }) async {
+    try {
+      final json = await apiClient.postJson(
+        '/api/v1/files/$fileId/shares',
+        authenticated: true,
+        body: {'recipient_email': recipientEmail},
+      );
+      return FileShare.fromJson(json);
+    } on ApiException catch (e) {
+      // 404 and 422 each cover two backend cases that share a status code;
+      // `detail` is what distinguishes them (see ApiClient.ApiException).
+      // Matches the mapping in
+      // frontend/src/components/Files/ShareFileDialog.tsx.
+      if (e.statusCode == 404 && e.detail == 'Recipient not found') {
+        throw ShareRecipientNotFoundError(
+          'No account exists for that email address.',
+        );
+      } else if (e.statusCode == 404) {
+        throw FileNotFoundError('File not found or you do not have permission');
+      } else if (e.statusCode == 422 && e.detail == 'Recipient is inactive') {
+        throw ShareRecipientInactiveError('That user account is inactive.');
+      } else if (e.statusCode == 422 &&
+          e.detail == 'A file cannot be shared with its owner') {
+        throw CannotShareWithOwnerError(
+          'You cannot share a file with yourself.',
+        );
+      } else if (e.statusCode == 409) {
+        throw DuplicateFileShareError(
+          'This file is already shared with that user.',
+        );
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError('File sharing failed. Please try again later.');
+      } else if (e.isNetworkError) {
+        throw NetworkError(
+          'Connection lost. Please check your network and try again.',
+        );
+      } else {
+        throw ApiError(e.message);
+      }
+    }
+  }
+
   Future<FileContent> createFolder({
     required String parentPath,
     required String name,
@@ -280,6 +325,42 @@ class InvalidFolderNameError implements Exception {
 class FileNotFoundError implements Exception {
   final String message;
   FileNotFoundError(this.message);
+
+  @override
+  String toString() => message;
+}
+
+// Names mirror the backend's domain exceptions in app/files/service.py
+// (ShareRecipientNotFoundError, ShareRecipientInactiveError,
+// CannotShareWithOwnerError, DuplicateFileShareError) one for one.
+
+class ShareRecipientNotFoundError implements Exception {
+  final String message;
+  ShareRecipientNotFoundError(this.message);
+
+  @override
+  String toString() => message;
+}
+
+class ShareRecipientInactiveError implements Exception {
+  final String message;
+  ShareRecipientInactiveError(this.message);
+
+  @override
+  String toString() => message;
+}
+
+class CannotShareWithOwnerError implements Exception {
+  final String message;
+  CannotShareWithOwnerError(this.message);
+
+  @override
+  String toString() => message;
+}
+
+class DuplicateFileShareError implements Exception {
+  final String message;
+  DuplicateFileShareError(this.message);
 
   @override
   String toString() => message;

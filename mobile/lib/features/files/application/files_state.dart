@@ -8,6 +8,8 @@ class FilesState {
   final String? error;
   final bool isCreatingFolder;
   final String? createError;
+  final bool isSharing;
+  final String? shareError;
   final Map<String, double> downloadProgress;
   final Map<String, String?> downloadError;
   final Set<String> completedDownloads;
@@ -24,6 +26,8 @@ class FilesState {
     this.error,
     this.isCreatingFolder = false,
     this.createError,
+    this.isSharing = false,
+    this.shareError,
     this.downloadProgress = const {},
     this.downloadError = const {},
     this.completedDownloads = const {},
@@ -67,6 +71,9 @@ class FilesState {
     bool? isCreatingFolder,
     String? createError,
     bool clearCreateError = false,
+    bool? isSharing,
+    String? shareError,
+    bool clearShareError = false,
     Map<String, double>? downloadProgress,
     Map<String, String?>? downloadError,
     Set<String>? completedDownloads,
@@ -83,6 +90,8 @@ class FilesState {
       error: clearError ? null : (error ?? this.error),
       isCreatingFolder: isCreatingFolder ?? this.isCreatingFolder,
       createError: clearCreateError ? null : (createError ?? this.createError),
+      isSharing: isSharing ?? this.isSharing,
+      shareError: clearShareError ? null : (shareError ?? this.shareError),
       downloadProgress: downloadProgress ?? this.downloadProgress,
       downloadError: downloadError ?? this.downloadError,
       completedDownloads: completedDownloads ?? this.completedDownloads,

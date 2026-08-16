@@ -8,11 +8,25 @@ class ApiException implements Exception {
     required this.message,
     this.statusCode,
     this.isNetworkError = false,
+    this.detail,
   });
 
   final String message;
   final int? statusCode;
   final bool isNetworkError;
+
+  /// The backend's raw `detail` string, when the error body is JSON and
+  /// carries one.
+  ///
+  /// [message] is a generic, status-code-bucketed string safe to show
+  /// as-is (see `_safeErrorMessage`) — it cannot distinguish two failures
+  /// that share a status code, e.g. a 404 for a missing file versus a 404
+  /// for a missing share recipient. Callers that need to make that
+  /// distinction, the way `frontend/src/components/Files/ShareFileDialog.tsx`
+  /// does by reading `error.body.detail`, use this field instead. It is
+  /// `null` whenever the body isn't JSON or has no `detail` key, so callers
+  /// must still fall back to [statusCode] alone.
+  final String? detail;
 
   bool get isAuthenticationFailure => statusCode == 401 || statusCode == 403;
 
@@ -143,7 +157,20 @@ class ApiClient {
     throw ApiException(
       message: _safeErrorMessage(response),
       statusCode: response.statusCode,
+      detail: _tryExtractDetail(response),
     );
+  }
+
+  String? _tryExtractDetail(http.Response response) {
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic> && decoded['detail'] is String) {
+        return decoded['detail'] as String;
+      }
+    } on FormatException {
+      // Response body isn't JSON; no detail available.
+    }
+    return null;
   }
 
   Map<String, dynamic> _decodeObject(http.Response response) {
