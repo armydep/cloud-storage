@@ -50,3 +50,17 @@ final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
     );
   },
 );
+
+/// The signed-in user's id, or `null` while signed out.
+///
+/// Per-account providers watch this so their state is rebuilt from scratch
+/// whenever the identity changes — on sign-out (id becomes `null`) and on the
+/// next sign-in (id becomes the new user's). Without it, cross-account
+/// isolation would rest on the router happening to unmount the widget tree on
+/// logout, which nothing in the code enforces.
+///
+/// This resolves to `String?`, so dependents rebuild only when the identity
+/// actually changes, not on unrelated auth-state transitions.
+final currentUserIdProvider = Provider<String?>((ref) {
+  return ref.watch(authControllerProvider).user?.id;
+});

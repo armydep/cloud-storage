@@ -20,10 +20,18 @@ final fileTransferServiceProvider = Provider<FileTransferService>((ref) {
   return FileTransferService();
 });
 
-final currentFolderPathProvider = StateProvider<String>((ref) => 'root');
+// Every provider below watches `currentUserIdProvider` so its state is rebuilt
+// when the signed-in identity changes. These are not autoDispose and would
+// otherwise survive a sign-out, letting the next account briefly render the
+// previous one's folder and file names before the first response arrives.
+final currentFolderPathProvider = StateProvider<String>((ref) {
+  ref.watch(currentUserIdProvider);
+  return 'root';
+});
 
 final folderContentsProvider =
     FutureProvider.family<FolderWithContents, String>((ref, path) async {
+      ref.watch(currentUserIdProvider);
       final repository = ref.watch(filesRepositoryProvider);
       return repository.getFolder(path: path);
     });
@@ -35,6 +43,7 @@ final currentFolderContentsProvider = FutureProvider<FolderWithContents>((ref) {
 
 final filesControllerProvider =
     StateNotifierProvider<FilesController, FilesState>((ref) {
+      ref.watch(currentUserIdProvider);
       return FilesController(
         ref.watch(filesRepositoryProvider),
         ref.watch(fileTransferServiceProvider),
@@ -117,6 +126,7 @@ class FilesController extends StateNotifier<FilesState> {
     try {
       final urlResponse = await _repository.getDownloadUrl(fileId: fileId);
       final filePath = await _fileTransferService.download(
+        fileId: fileId,
         url: urlResponse.url,
         fileName: fileName,
         onProgress: (progress) {
