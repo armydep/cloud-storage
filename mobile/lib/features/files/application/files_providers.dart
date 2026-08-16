@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:cloudestorage/features/auth/application/auth_providers.dart';
 import 'package:cloudestorage/features/files/application/files_state.dart';
+import 'package:cloudestorage/features/files/data/file_transfer_service.dart';
 import 'package:cloudestorage/features/files/data/files_repository.dart';
 import 'package:cloudestorage/features/files/domain/file_models.dart';
 import 'package:crypto/crypto.dart';
@@ -9,12 +10,14 @@ import 'package:dio/dio.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:open_file/open_file.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 final filesRepositoryProvider = Provider<FilesRepository>((ref) {
   return FilesRepository(ref.watch(apiClientProvider));
+});
+
+final fileTransferServiceProvider = Provider<FileTransferService>((ref) {
+  return FileTransferService();
 });
 
 final currentFolderPathProvider = StateProvider<String>((ref) => 'root');
@@ -32,11 +35,16 @@ final currentFolderContentsProvider = FutureProvider<FolderWithContents>((ref) {
 
 final filesControllerProvider =
     StateNotifierProvider<FilesController, FilesState>((ref) {
-      return FilesController(ref.watch(filesRepositoryProvider), ref);
+      return FilesController(
+        ref.watch(filesRepositoryProvider),
+        ref.watch(fileTransferServiceProvider),
+        ref,
+      );
     });
 
 class FilesController extends StateNotifier<FilesState> {
   final FilesRepository _repository;
+  final FileTransferService _fileTransferService;
   final Ref _ref;
   final List<String> _navigationStack = ['root'];
 
@@ -44,7 +52,8 @@ class FilesController extends StateNotifier<FilesState> {
   static const String _fileNamePattern = r'^[a-zA-Z0-9\s\-_.]+$';
   static const int _maxFolderNameLength = 255;
 
-  FilesController(this._repository, this._ref) : super(const FilesState());
+  FilesController(this._repository, this._fileTransferService, this._ref)
+    : super(const FilesState());
 
   Future<void> loadFolder(String path) async {
     final currentPath = _ref.read(currentFolderPathProvider);
@@ -107,10 +116,14 @@ class FilesController extends StateNotifier<FilesState> {
 
     try {
       final urlResponse = await _repository.getDownloadUrl(fileId: fileId);
-      final filePath = await _downloadAndSaveFile(
-        fileId,
-        fileName,
-        urlResponse.url,
+      final filePath = await _fileTransferService.download(
+        url: urlResponse.url,
+        fileName: fileName,
+        onProgress: (progress) {
+          if (mounted) {
+            state = state.updateDownloadProgress(fileId, progress);
+          }
+        },
       );
       state = state.setDownloadedFilePath(fileId, filePath);
       state = state.updateDownloadProgress(fileId, 1.0);
@@ -139,46 +152,12 @@ class FilesController extends StateNotifier<FilesState> {
     }
   }
 
-  Future<String> _downloadAndSaveFile(
-    String fileId,
-    String fileName,
-    String url,
-  ) async {
-    try {
-      final dio = Dio();
-      final downloadsDir = await getDownloadsDirectory();
-      if (downloadsDir == null) {
-        throw Exception('Downloads directory not available');
-      }
-
-      debugPrint('Downloading $fileName to ${downloadsDir.path}');
-      final filePath = '${downloadsDir.path}/$fileName';
-      await dio.download(
-        url,
-        filePath,
-        onReceiveProgress: (count, total) {
-          if (total > 0) {
-            state = state.updateDownloadProgress(fileId, count / total);
-          }
-        },
-      );
-      debugPrint('Download completed: $filePath');
-      return filePath;
-    } catch (e) {
-      debugPrint('_downloadAndSaveFile error: $e');
-      rethrow;
-    }
-  }
-
   Future<void> cancelDownload(String fileId) async {
     state = state.clearDownloadState(fileId);
   }
 
   Future<void> openDownloadedFile(String filePath) async {
-    final result = await OpenFile.open(filePath);
-    if (result.type != ResultType.done) {
-      throw Exception('Failed to open file: ${result.message}');
-    }
+    await _fileTransferService.open(filePath);
   }
 
   Future<void> selectAndUploadFile() async {

@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:cloudestorage/core/config/app_config.dart';
 import 'package:cloudestorage/core/network/api_client.dart';
 import 'package:cloudestorage/features/auth/application/auth_providers.dart';
+import 'package:cloudestorage/features/files/application/files_providers.dart';
+import 'package:cloudestorage/features/files/data/file_transfer_service.dart';
 import 'package:cloudestorage/features/notifications/application/notifications_controller.dart';
 import 'package:cloudestorage/features/notifications/application/notifications_providers.dart';
 import 'package:cloudestorage/features/notifications/data/notifications_repository.dart';
@@ -31,6 +33,7 @@ Future<void> _pumpScreen(
   http.Client client, {
   double textScale = 1,
   bool settle = true,
+  FileTransferService? fileTransferService,
 }) async {
   final apiClient = ApiClient(Uri.parse('https://api.example.com/'));
   await tester.pumpWidget(
@@ -43,6 +46,8 @@ Future<void> _pumpScreen(
           FakeTokenStorage(token: 'test-token'),
         ),
         httpClientProvider.overrideWithValue(client),
+        if (fileTransferService != null)
+          fileTransferServiceProvider.overrideWithValue(fileTransferService),
         notificationsControllerProvider.overrideWith(
           (ref) => NotificationsController(
             NotificationsRepository(apiClient),
@@ -209,10 +214,56 @@ void main() {
     expect(find.text('Server error. Please try again.'), findsOneWidget);
   });
 
-  testWidgets('downloads a shared file through its presign endpoint', (
+  testWidgets(
+    'downloads and opens a shared file through injected transfer I/O',
+    (tester) async {
+      String? presignPath;
+      final transferService = _FakeFileTransferService();
+      await _pumpScreen(
+        tester,
+        MockClient((request) async {
+          if (request.url.path == '/api/v1/files/shared-with-me') {
+            return http.Response(
+              jsonEncode({
+                'data': [_sharedFileJson()],
+                'count': 1,
+              }),
+              200,
+            );
+          }
+          presignPath = request.url.path;
+          return http.Response(
+            jsonEncode({
+              'download_url': 'https://objects.example.com/report.pdf',
+              'expires_in': 900,
+            }),
+            200,
+          );
+        }),
+        fileTransferService: transferService,
+      );
+
+      await tester.tap(find.byKey(const Key('download-shared-file-file-1')));
+      await tester.pumpAndSettle();
+
+      expect(presignPath, '/api/v1/files/file-1/presign-download');
+      expect(
+        transferService.downloadUrl,
+        'https://objects.example.com/report.pdf',
+      );
+      expect(transferService.downloadFileName, 'report.pdf');
+      expect(find.byKey(const Key('open-shared-file-file-1')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('open-shared-file-file-1')));
+      await tester.pumpAndSettle();
+      expect(transferService.openedPath, '/downloads/report.pdf');
+    },
+  );
+
+  testWidgets('shows transfer progress while a download is pending', (
     tester,
   ) async {
-    String? presignPath;
+    final transferService = _FakeFileTransferService(waitForCompletion: true);
     await _pumpScreen(
       tester,
       MockClient((request) async {
@@ -225,7 +276,6 @@ void main() {
             200,
           );
         }
-        presignPath = request.url.path;
         return http.Response(
           jsonEncode({
             'download_url': 'https://objects.example.com/report.pdf',
@@ -234,11 +284,89 @@ void main() {
           200,
         );
       }),
+      fileTransferService: transferService,
+    );
+
+    await tester.tap(find.byKey(const Key('download-shared-file-file-1')));
+    await tester.pump();
+    await tester.pump();
+    final progress = tester.widget<LinearProgressIndicator>(
+      find.byType(LinearProgressIndicator),
+    );
+    expect(progress.value, 0.5);
+
+    transferService.completeDownload();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('open-shared-file-file-1')), findsOneWidget);
+  });
+
+  testWidgets('shows retry when shared access is no longer available', (
+    tester,
+  ) async {
+    await _pumpScreen(
+      tester,
+      MockClient((request) async {
+        if (request.url.path == '/api/v1/files/shared-with-me') {
+          return http.Response(
+            jsonEncode({
+              'data': [_sharedFileJson()],
+              'count': 1,
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      }),
+      fileTransferService: _FakeFileTransferService(),
     );
 
     await tester.tap(find.byKey(const Key('download-shared-file-file-1')));
     await tester.pumpAndSettle();
 
-    expect(presignPath, '/api/v1/files/file-1/presign-download');
+    expect(
+      find.text('File not found or you do not have permission'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<IconButton>(
+            find.byKey(const Key('download-shared-file-file-1')),
+          )
+          .tooltip,
+      'Retry download report.pdf',
+    );
   });
+}
+
+class _FakeFileTransferService extends FileTransferService {
+  final bool waitForCompletion;
+  final Completer<String> _downloadCompleter = Completer<String>();
+
+  String? downloadUrl;
+  String? downloadFileName;
+  String? openedPath;
+
+  _FakeFileTransferService({this.waitForCompletion = false});
+
+  @override
+  Future<String> download({
+    required String url,
+    required String fileName,
+    required DownloadProgressCallback onProgress,
+  }) async {
+    downloadUrl = url;
+    downloadFileName = fileName;
+    onProgress(0.5);
+    if (waitForCompletion) return _downloadCompleter.future;
+    return '/downloads/$fileName';
+  }
+
+  void completeDownload() {
+    _downloadCompleter.complete('/downloads/$downloadFileName');
+  }
+
+  @override
+  Future<void> open(String filePath) async {
+    openedPath = filePath;
+  }
 }
