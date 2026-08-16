@@ -1,12 +1,18 @@
+import 'package:cloudestorage/features/auth/application/auth_providers.dart';
 import 'package:cloudestorage/features/files/application/files_providers.dart';
 import 'package:cloudestorage/features/files/application/shared_files_state.dart';
 import 'package:cloudestorage/features/files/data/files_repository.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+// autoDispose alone only clears this when the last listener goes away, which
+// on sign-out depends on the router unmounting the shell route. Watching the
+// identity makes the reset explicit and independent of navigation structure.
 final sharedFilesControllerProvider =
     StateNotifierProvider.autoDispose<SharedFilesController, SharedFilesState>((
       ref,
     ) {
+      ref.watch(currentUserIdProvider);
       return SharedFilesController(ref.watch(filesRepositoryProvider));
     });
 
@@ -36,7 +42,13 @@ class SharedFilesController extends StateNotifier<SharedFilesState> {
         files: existingFiles,
         error: 'Network error. Please check your connection.',
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      // Anything that is neither ServerError nor NetworkError lands here —
+      // notably ApiError for 401/403, and TypeError/FormatException from
+      // SharedFile.fromJson on a schema mismatch. The user-facing message
+      // stays generic, but swallowing the cause left a retry loop with no
+      // diagnostics. Matches the logging in FilesController.downloadFile.
+      debugPrint('Shared files load failed: $error\n$stackTrace');
       if (!mounted || generation != _loadGeneration) return;
       state = SharedFilesState(
         files: existingFiles,

@@ -252,11 +252,12 @@ void main() {
         'https://objects.example.com/report.pdf',
       );
       expect(transferService.downloadFileName, 'report.pdf');
+      expect(transferService.downloadFileId, 'file-1');
       expect(find.byKey(const Key('open-shared-file-file-1')), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('open-shared-file-file-1')));
       await tester.pumpAndSettle();
-      expect(transferService.openedPath, '/downloads/report.pdf');
+      expect(transferService.openedPath, '/downloads/file-1/report.pdf');
     },
   );
 
@@ -344,25 +345,30 @@ class _FakeFileTransferService extends FileTransferService {
 
   String? downloadUrl;
   String? downloadFileName;
+  String? downloadFileId;
   String? openedPath;
 
   _FakeFileTransferService({this.waitForCompletion = false});
 
   @override
   Future<String> download({
+    required String fileId,
     required String url,
     required String fileName,
     required DownloadProgressCallback onProgress,
   }) async {
+    downloadFileId = fileId;
     downloadUrl = url;
     downloadFileName = fileName;
     onProgress(0.5);
     if (waitForCompletion) return _downloadCompleter.future;
-    return '/downloads/$fileName';
+    // Mirrors the real service: downloads are namespaced per file id so a
+    // sharer-chosen name cannot collide with the recipient's own files.
+    return '/downloads/$fileId/$fileName';
   }
 
   void completeDownload() {
-    _downloadCompleter.complete('/downloads/$downloadFileName');
+    _downloadCompleter.complete('/downloads/$downloadFileId/$downloadFileName');
   }
 
   @override

@@ -48,8 +48,19 @@ jobs:
         run: flutter analyze
         working-directory: mobile
       - name: Test
-        run: flutter test
+        run: flutter test --coverage
         working-directory: mobile
+      # Backend gates coverage at 90% and frontend runs Playwright; mobile has
+      # no floor yet. Publishing lcov.info makes the current number visible so
+      # a threshold can be set from a measured baseline rather than guessed —
+      # deliberately non-gating until then.
+      - name: Store mobile coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: mobile-coverage
+          path: mobile/coverage/lcov.info
+          if-no-files-found: error
       - name: Build Android debug APK
         run: flutter build apk --debug
         working-directory: mobile
