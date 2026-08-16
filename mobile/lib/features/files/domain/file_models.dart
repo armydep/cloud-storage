@@ -69,6 +69,40 @@ class FileContent {
   int get hashCode => Object.hash(id, name, type);
 }
 
+class SharedFile {
+  final String id;
+  final String name;
+  final String mimeType;
+  final String category;
+  final int sizeBytes;
+  final String ownerEmail;
+  final DateTime sharedAt;
+
+  const SharedFile({
+    required this.id,
+    required this.name,
+    required this.mimeType,
+    required this.category,
+    required this.sizeBytes,
+    required this.ownerEmail,
+    required this.sharedAt,
+  });
+
+  String get displaySize => FileContent._formatBytes(sizeBytes);
+
+  factory SharedFile.fromJson(Map<String, dynamic> json) {
+    return SharedFile(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      mimeType: json['mime_type'] as String,
+      category: json['category'] as String,
+      sizeBytes: json['size_bytes'] as int,
+      ownerEmail: json['owner_email'] as String,
+      sharedAt: DateTime.parse(json['shared_at'] as String),
+    );
+  }
+}
+
 class FolderWithContents {
   final String id;
   final String name;

@@ -3,6 +3,8 @@ import 'package:cloudestorage/features/auth/application/auth_state.dart';
 import 'package:cloudestorage/features/auth/presentation/login_screen.dart';
 import 'package:cloudestorage/features/auth/presentation/session_error_screen.dart';
 import 'package:cloudestorage/features/files/presentation/files_browser_screen.dart';
+import 'package:cloudestorage/features/files/presentation/shared_with_me_screen.dart';
+import 'package:cloudestorage/features/files/presentation/widgets/main_navigation_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,12 +23,37 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         AuthStatus.initializing => '/splash',
         AuthStatus.restoreFailure => '/session-error',
         AuthStatus.unauthenticated || AuthStatus.authenticating => '/login',
-        AuthStatus.authenticated => '/',
+        AuthStatus.authenticated => switch (state.matchedLocation) {
+          '/login' || '/splash' || '/session-error' => '/',
+          _ => state.matchedLocation,
+        },
       };
       return state.matchedLocation == target ? null : target;
     },
     routes: [
-      GoRoute(path: '/', builder: (_, _) => const FilesBrowserScreen()),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) => Scaffold(
+          body: navigationShell,
+          bottomNavigationBar: MainNavigationBar(
+            navigationShell: navigationShell,
+          ),
+        ),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/', builder: (_, _) => const FilesBrowserScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/shared-with-me',
+                builder: (_, _) => const SharedWithMeScreen(),
+              ),
+            ],
+          ),
+        ],
+      ),
       GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
       GoRoute(
         path: '/splash',
