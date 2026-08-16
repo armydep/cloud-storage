@@ -175,5 +175,24 @@ void main() {
         expect(folder.files[1].name, 'file2.txt');
       });
     });
+
+    group('SharedFile', () {
+      test('parses shared-file metadata', () {
+        final file = SharedFile.fromJson({
+          'id': 'shared-1',
+          'name': 'report.pdf',
+          'mime_type': 'application/pdf',
+          'category': 'document',
+          'size_bytes': 2048,
+          'owner_email': 'owner@example.com',
+          'shared_at': '2026-08-06T12:00:00Z',
+        });
+
+        expect(file.id, 'shared-1');
+        expect(file.ownerEmail, 'owner@example.com');
+        expect(file.displaySize, '2.0 KB');
+        expect(file.sharedAt, DateTime.utc(2026, 8, 6, 12));
+      });
+    });
   });
 }

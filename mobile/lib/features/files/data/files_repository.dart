@@ -28,6 +28,27 @@ class FilesRepository {
     }
   }
 
+  Future<List<SharedFile>> getSharedFiles() async {
+    try {
+      final json = await apiClient.getJson(
+        '/api/v1/files/shared-with-me',
+        authenticated: true,
+      );
+      final data = json['data'] as List<dynamic>? ?? const [];
+      return data
+          .map((item) => SharedFile.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on ApiException catch (e) {
+      if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError('Server error. Please try again.');
+      } else if (e.isNetworkError) {
+        throw NetworkError('Network error. Please check your connection.');
+      } else {
+        throw ApiError(e.message);
+      }
+    }
+  }
+
   Future<FileContent> createFolder({
     required String parentPath,
     required String name,
