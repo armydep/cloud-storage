@@ -152,6 +152,21 @@ This phase advances ROADMAP 3.4 (sorting, filtering and search), ROADMAP 8.1
     slice 3 alongside real queries rather than in slice 1, where there is nothing
     meaningful to measure.
 
+19. **`backend` declares `q.search`, even though it never consumes it.** The
+    queue and its bindings are declared in `declare_topology`
+    (`app/notifications/broker.py`) alongside `q.email` and `q.inapp`.
+
+    The reason is a silent failure mode: a topic exchange **discards** a message
+    that matches no binding, with no error anywhere. If `search-svc` declared its
+    own queue instead — the more usual AMQP arrangement — every file event
+    published before that service first started would vanish, and nothing would
+    report it. Declaring the queue on the publishing side closes that window.
+
+    This does not weaken decision 2. What crosses the boundary is a queue-name
+    string agreed in this document, not a code dependency: `backend` imports
+    nothing from `search-svc`, and `search-svc` still carries its own AMQP client
+    and its own copy of the topology constants.
+
 ## Architecture
 
 ```
