@@ -503,6 +503,70 @@ class FilesController extends StateNotifier<FilesState> {
     }
   }
 
+  Future<void> loadFileShares(String fileId) async {
+    state = state.copyWith(isLoadingShares: true, clearSharesError: true);
+
+    try {
+      final shares = await _repository.getFileShares(fileId: fileId);
+      state = state.copyWith(
+        shares: shares,
+        isLoadingShares: false,
+        clearSharesError: true,
+      );
+    } on FileNotFoundError {
+      state = state.copyWith(
+        isLoadingShares: false,
+        sharesError: 'File not found or you do not have permission',
+      );
+    } on ServerError {
+      state = state.copyWith(
+        isLoadingShares: false,
+        sharesError: 'Recipients could not be loaded.',
+      );
+    } on NetworkError {
+      state = state.copyWith(
+        isLoadingShares: false,
+        sharesError:
+            'Connection lost. Please check your network and try again.',
+      );
+    } catch (e) {
+      debugPrint('Load shares error for $fileId: $e');
+      state = state.copyWith(
+        isLoadingShares: false,
+        sharesError: 'Recipients could not be loaded.',
+      );
+    }
+  }
+
+  Future<void> revokeFileShare({
+    required String fileId,
+    required String shareId,
+  }) async {
+    state = state.startRevokingShare(shareId);
+
+    try {
+      await _repository.revokeFileShare(fileId: fileId, shareId: shareId);
+      final remaining = state.shares
+          .where((share) => share.id != shareId)
+          .toList();
+      state = state.copyWith(shares: remaining).finishRevokingShare(shareId);
+    } on FileShareNotFoundError catch (e) {
+      state = state.setRevokeShareError(shareId, e.message);
+    } on FileNotFoundError catch (e) {
+      state = state.setRevokeShareError(shareId, e.message);
+    } on ServerError catch (e) {
+      state = state.setRevokeShareError(shareId, e.message);
+    } on NetworkError catch (e) {
+      state = state.setRevokeShareError(shareId, e.message);
+    } catch (e) {
+      debugPrint('Revoke share error for $shareId: $e');
+      state = state.setRevokeShareError(
+        shareId,
+        'Access could not be revoked. Try again.',
+      );
+    }
+  }
+
   Future<bool> deleteFile(String fileId) async {
     if (state.isDeleting(fileId)) {
       return false;
