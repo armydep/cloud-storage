@@ -1943,7 +1943,7 @@ def test_complete_upload_enqueues_exactly_one_file_created_event(
         db=db,
         name_prefix="NotifyCreate",
     )
-    blob_hash = "a" * 64
+    blob_hash = uuid.uuid4().hex * 2
     _create_pending_upload(db=db, owner_id=folder.owner_id, blob_hash=blob_hash)
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
@@ -2000,7 +2000,7 @@ def test_complete_upload_notification_failure_rolls_back_the_file(
         db=db,
         name_prefix="RollbackCreate",
     )
-    blob_hash = "b" * 64
+    blob_hash = uuid.uuid4().hex * 2
     _create_pending_upload(db=db, owner_id=folder.owner_id, blob_hash=blob_hash)
     monkeypatch.setattr(
         "app.files.service.storage.stat_object",
