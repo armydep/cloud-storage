@@ -164,6 +164,192 @@ void main() {
       );
     });
   });
+
+  group('FilesRepository.getFileShares', () {
+    test('gets the expected authenticated endpoint', () async {
+      final mockApiClient = _MockApiClient();
+      final repository = FilesRepository(mockApiClient);
+
+      await repository.getFileShares(fileId: 'file-123');
+
+      expect(mockApiClient.lastGetPath, '/api/v1/files/file-123/shares');
+      expect(mockApiClient.lastGetAuthenticated, isTrue);
+    });
+
+    test('returns a list of FileShare parsed from the response', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextGetJson = {
+        'data': [
+          {
+            'id': 'share-1',
+            'file_id': 'file-123',
+            'recipient_email': 'friend@example.com',
+            'created_at': '2026-01-01T00:00:00Z',
+          },
+          {
+            'id': 'share-2',
+            'file_id': 'file-123',
+            'recipient_email': 'other@example.com',
+            'created_at': '2026-01-02T00:00:00Z',
+          },
+        ],
+        'count': 2,
+      };
+      final repository = FilesRepository(mockApiClient);
+
+      final shares = await repository.getFileShares(fileId: 'file-123');
+
+      expect(shares, hasLength(2));
+      expect(shares.first.recipientEmail, 'friend@example.com');
+      expect(shares.last.recipientEmail, 'other@example.com');
+    });
+
+    test('returns an empty list when there is no data key', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextGetJson = {};
+      final repository = FilesRepository(mockApiClient);
+
+      final shares = await repository.getFileShares(fileId: 'file-123');
+
+      expect(shares, isEmpty);
+    });
+
+    test('throws FileNotFoundError on 404', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextException = const ApiException(
+        message: 'Not found',
+        statusCode: 404,
+      );
+      final repository = FilesRepository(mockApiClient);
+
+      expect(
+        () => repository.getFileShares(fileId: 'missing-file'),
+        throwsA(isA<FileNotFoundError>()),
+      );
+    });
+
+    test('throws ServerError on 500', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextException = const ApiException(
+        message: 'Server error',
+        statusCode: 500,
+      );
+      final repository = FilesRepository(mockApiClient);
+
+      expect(
+        () => repository.getFileShares(fileId: 'file-123'),
+        throwsA(isA<ServerError>()),
+      );
+    });
+
+    test('throws NetworkError on network failure', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextException = const ApiException(
+        message: 'Network error',
+        isNetworkError: true,
+      );
+      final repository = FilesRepository(mockApiClient);
+
+      expect(
+        () => repository.getFileShares(fileId: 'file-123'),
+        throwsA(isA<NetworkError>()),
+      );
+    });
+  });
+
+  group('FilesRepository.revokeFileShare', () {
+    test('calls expected authenticated delete endpoint', () async {
+      final mockApiClient = _MockApiClient();
+      final repository = FilesRepository(mockApiClient);
+
+      await repository.revokeFileShare(fileId: 'file-123', shareId: 'share-1');
+
+      expect(
+        mockApiClient.lastDeletePath,
+        '/api/v1/files/file-123/shares/share-1',
+      );
+      expect(mockApiClient.lastDeleteAuthenticated, isTrue);
+    });
+
+    test('completes successfully on 204', () async {
+      final mockApiClient = _MockApiClient();
+      final repository = FilesRepository(mockApiClient);
+
+      await expectLater(
+        repository.revokeFileShare(fileId: 'file-123', shareId: 'share-1'),
+        completes,
+      );
+    });
+
+    test(
+      'throws FileShareNotFoundError on 404 "File share not found"',
+      () async {
+        final mockApiClient = _MockApiClient();
+        mockApiClient.nextException = const ApiException(
+          message: 'Not found',
+          statusCode: 404,
+          detail: 'File share not found',
+        );
+        final repository = FilesRepository(mockApiClient);
+
+        expect(
+          () => repository.revokeFileShare(
+            fileId: 'file-123',
+            shareId: 'missing-share',
+          ),
+          throwsA(isA<FileShareNotFoundError>()),
+        );
+      },
+    );
+
+    test('throws FileNotFoundError on 404 without share detail', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextException = const ApiException(
+        message: 'Not found',
+        statusCode: 404,
+        detail: 'File not found',
+      );
+      final repository = FilesRepository(mockApiClient);
+
+      expect(
+        () => repository.revokeFileShare(
+          fileId: 'missing-file',
+          shareId: 'share-1',
+        ),
+        throwsA(isA<FileNotFoundError>()),
+      );
+    });
+
+    test('throws ServerError on 500', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextException = const ApiException(
+        message: 'Server error',
+        statusCode: 500,
+      );
+      final repository = FilesRepository(mockApiClient);
+
+      expect(
+        () =>
+            repository.revokeFileShare(fileId: 'file-123', shareId: 'share-1'),
+        throwsA(isA<ServerError>()),
+      );
+    });
+
+    test('throws NetworkError on network failure', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextException = const ApiException(
+        message: 'Network error',
+        isNetworkError: true,
+      );
+      final repository = FilesRepository(mockApiClient);
+
+      expect(
+        () =>
+            repository.revokeFileShare(fileId: 'file-123', shareId: 'share-1'),
+        throwsA(isA<NetworkError>()),
+      );
+    });
+  });
 }
 
 class _MockApiClient implements ApiClient {
@@ -171,6 +357,11 @@ class _MockApiClient implements ApiClient {
   String? lastPostPath;
   bool? lastPostAuthenticated;
   Map<String, dynamic>? lastPostBody;
+  String? lastGetPath;
+  bool? lastGetAuthenticated;
+  Map<String, dynamic> nextGetJson = const {'data': <dynamic>[], 'count': 0};
+  String? lastDeletePath;
+  bool? lastDeleteAuthenticated;
 
   @override
   Future<Map<String, dynamic>> postJson(
@@ -195,7 +386,11 @@ class _MockApiClient implements ApiClient {
 
   @override
   Future<void> delete(String path, {bool authenticated = false}) async {
-    throw UnimplementedError();
+    lastDeletePath = path;
+    lastDeleteAuthenticated = authenticated;
+    if (nextException != null) {
+      throw nextException!;
+    }
   }
 
   @override
@@ -204,7 +399,12 @@ class _MockApiClient implements ApiClient {
     bool authenticated = false,
     Map<String, String>? queryParameters,
   }) async {
-    throw UnimplementedError();
+    lastGetPath = path;
+    lastGetAuthenticated = authenticated;
+    if (nextException != null) {
+      throw nextException!;
+    }
+    return nextGetJson;
   }
 
   @override

@@ -10,6 +10,11 @@ class FilesState {
   final String? createError;
   final bool isSharing;
   final String? shareError;
+  final List<FileShare> shares;
+  final bool isLoadingShares;
+  final String? sharesError;
+  final Set<String> revokingShares;
+  final Map<String, String?> revokeShareError;
   final Map<String, double> downloadProgress;
   final Map<String, String?> downloadError;
   final Set<String> completedDownloads;
@@ -28,6 +33,11 @@ class FilesState {
     this.createError,
     this.isSharing = false,
     this.shareError,
+    this.shares = const [],
+    this.isLoadingShares = false,
+    this.sharesError,
+    this.revokingShares = const {},
+    this.revokeShareError = const {},
     this.downloadProgress = const {},
     this.downloadError = const {},
     this.completedDownloads = const {},
@@ -62,6 +72,9 @@ class FilesState {
   bool isDeleting(String fileId) => deletingFiles.contains(fileId);
   String? getDeleteError(String fileId) => deleteError[fileId];
 
+  bool isRevokingShare(String shareId) => revokingShares.contains(shareId);
+  String? getRevokeShareError(String shareId) => revokeShareError[shareId];
+
   FilesState copyWith({
     bool? isLoading,
     FolderWithContents? folder,
@@ -74,6 +87,12 @@ class FilesState {
     bool? isSharing,
     String? shareError,
     bool clearShareError = false,
+    List<FileShare>? shares,
+    bool? isLoadingShares,
+    String? sharesError,
+    bool clearSharesError = false,
+    Set<String>? revokingShares,
+    Map<String, String?>? revokeShareError,
     Map<String, double>? downloadProgress,
     Map<String, String?>? downloadError,
     Set<String>? completedDownloads,
@@ -92,6 +111,11 @@ class FilesState {
       createError: clearCreateError ? null : (createError ?? this.createError),
       isSharing: isSharing ?? this.isSharing,
       shareError: clearShareError ? null : (shareError ?? this.shareError),
+      shares: shares ?? this.shares,
+      isLoadingShares: isLoadingShares ?? this.isLoadingShares,
+      sharesError: clearSharesError ? null : (sharesError ?? this.sharesError),
+      revokingShares: revokingShares ?? this.revokingShares,
+      revokeShareError: revokeShareError ?? this.revokeShareError,
       downloadProgress: downloadProgress ?? this.downloadProgress,
       downloadError: downloadError ?? this.downloadError,
       completedDownloads: completedDownloads ?? this.completedDownloads,
@@ -205,5 +229,26 @@ class FilesState {
     final newError = Map<String, String?>.from(deleteError);
     newError[fileId] = error;
     return copyWith(deletingFiles: newDeleting, deleteError: newError);
+  }
+
+  FilesState startRevokingShare(String shareId) {
+    final newRevoking = Set<String>.from(revokingShares)..add(shareId);
+    final newError = Map<String, String?>.from(revokeShareError)
+      ..remove(shareId);
+    return copyWith(revokingShares: newRevoking, revokeShareError: newError);
+  }
+
+  FilesState finishRevokingShare(String shareId) {
+    final newRevoking = Set<String>.from(revokingShares)..remove(shareId);
+    final newError = Map<String, String?>.from(revokeShareError)
+      ..remove(shareId);
+    return copyWith(revokingShares: newRevoking, revokeShareError: newError);
+  }
+
+  FilesState setRevokeShareError(String shareId, String error) {
+    final newRevoking = Set<String>.from(revokingShares)..remove(shareId);
+    final newError = Map<String, String?>.from(revokeShareError);
+    newError[shareId] = error;
+    return copyWith(revokingShares: newRevoking, revokeShareError: newError);
   }
 }

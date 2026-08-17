@@ -28,12 +28,23 @@ const _rootFolderJson = {
   ],
 };
 
+http.Response _emptySharesListResponse(http.Request request) =>
+    http.Response(jsonEncode({'data': [], 'count': 0}), 200);
+
+http.Response _noContentResponse(http.Request request) =>
+    http.Response('', 204);
+
 /// Pumps the app already signed in and navigated to the file detail screen
-/// for `report.pdf`, with `shareResponse` wired up to answer
-/// `POST /api/v1/files/file-1/shares`.
+/// for `report.pdf`, with the dialog's three requests configurable:
+/// `shareResponse` answers `POST /api/v1/files/file-1/shares` (creating a
+/// share), `sharesListResponse` answers the `GET` on the same path (loading
+/// the recipient list, fired from `initState`), and `revokeResponse` answers
+/// `DELETE /api/v1/files/file-1/shares/{shareId}`.
 Future<void> _pumpToShareDialog(
   WidgetTester tester, {
-  required http.Response Function(http.Request request) shareResponse,
+  http.Response Function(http.Request request)? shareResponse,
+  http.Response Function(http.Request request)? sharesListResponse,
+  http.Response Function(http.Request request)? revokeResponse,
 }) async {
   final storage = FakeTokenStorage(token: 'saved-token');
   final client = MockClient((request) async {
@@ -44,7 +55,12 @@ Future<void> _pumpToShareDialog(
       return http.Response(jsonEncode({'count': 0}), 200);
     }
     if (request.url.path == '/api/v1/files/file-1/shares') {
-      return shareResponse(request);
+      return request.method == 'GET'
+          ? (sharesListResponse ?? _emptySharesListResponse)(request)
+          : shareResponse!(request);
+    }
+    if (request.url.path.startsWith('/api/v1/files/file-1/shares/')) {
+      return (revokeResponse ?? _noContentResponse)(request);
     }
     return http.Response(jsonEncode(_rootFolderJson), 200);
   });
@@ -130,6 +146,117 @@ void main() {
 
     expect(find.text('shared.pdf'), findsOneWidget);
     expect(find.byKey(const Key('share-file-button')), findsNothing);
+  });
+
+  testWidgets('shows the current recipient list', (tester) async {
+    await _pumpToShareDialog(
+      tester,
+      sharesListResponse: (request) => http.Response(
+        jsonEncode({
+          'data': [
+            {
+              'id': 'share-1',
+              'file_id': 'file-1',
+              'recipient_email': 'friend@example.com',
+              'created_at': '2026-08-01T00:00:00Z',
+            },
+            {
+              'id': 'share-2',
+              'file_id': 'file-1',
+              'recipient_email': 'other@example.com',
+              'created_at': '2026-08-02T00:00:00Z',
+            },
+          ],
+          'count': 2,
+        }),
+        200,
+      ),
+    );
+
+    expect(find.text('friend@example.com'), findsOneWidget);
+    expect(find.text('other@example.com'), findsOneWidget);
+    expect(
+      find.byKey(const Key('revoke-share-button-share-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('revoke-share-button-share-2')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('shows the empty state when the file is not shared', (
+    tester,
+  ) async {
+    await _pumpToShareDialog(tester);
+
+    expect(
+      find.text('This file is not shared with anyone yet.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('revoke success removes the recipient from the list', (
+    tester,
+  ) async {
+    await _pumpToShareDialog(
+      tester,
+      sharesListResponse: (request) => http.Response(
+        jsonEncode({
+          'data': [
+            {
+              'id': 'share-1',
+              'file_id': 'file-1',
+              'recipient_email': 'friend@example.com',
+              'created_at': '2026-08-01T00:00:00Z',
+            },
+          ],
+          'count': 1,
+        }),
+        200,
+      ),
+    );
+    expect(find.text('friend@example.com'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('revoke-share-button-share-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('friend@example.com'), findsNothing);
+    expect(
+      find.text('This file is not shared with anyone yet.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('revoke failure leaves the recipient visible with an error', (
+    tester,
+  ) async {
+    await _pumpToShareDialog(
+      tester,
+      sharesListResponse: (request) => http.Response(
+        jsonEncode({
+          'data': [
+            {
+              'id': 'share-1',
+              'file_id': 'file-1',
+              'recipient_email': 'friend@example.com',
+              'created_at': '2026-08-01T00:00:00Z',
+            },
+          ],
+          'count': 1,
+        }),
+        200,
+      ),
+      revokeResponse: (request) =>
+          http.Response(jsonEncode({'detail': 'Server error'}), 500),
+    );
+    expect(find.text('friend@example.com'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('revoke-share-button-share-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('friend@example.com'), findsOneWidget);
+    expect(find.byKey(const Key('revoke-share-error-share-1')), findsOneWidget);
   });
 
   testWidgets('happy path shares the file and closes with confirmation', (

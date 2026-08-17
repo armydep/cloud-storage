@@ -55,6 +55,31 @@ Depends on Slices 2 and 3.
 - Refresh the owner view immediately after revocation.
 - Complete Playwright coverage and mark ROADMAP 6.1 delivered.
 
+## Mobile slices
+
+The Android client (ROADMAP 5.1) reuses the same backend API as Slices 2 and 4
+above, added once each existed. No backend or migration work was needed for
+either.
+
+### Mobile slice A: share entry point (#127)
+
+Depends on Slice 1.
+
+- Add a Share action and recipient-email dialog to owned files.
+- Map the same 404/422/409 error cases as the web dialog.
+- Cover the happy path and every error case with widget tests.
+
+### Mobile slice B: recipient list and revocation (#128)
+
+Depends on Slices 3 and mobile slice A.
+
+- Show current recipients (email and shared date) in the same dialog.
+- Add a per-recipient revoke control with a pending state; a failed revoke
+  leaves the recipient visible rather than removing it optimistically.
+- Refresh the recipient list immediately after a successful revoke.
+- Cover the populated list, empty state, and revoke success/failure with
+  widget tests.
+
 ## Acceptance flow
 
 An owner shares a file with another registered user's email. The recipient sees

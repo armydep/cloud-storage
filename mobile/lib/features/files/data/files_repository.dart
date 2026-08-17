@@ -94,6 +94,57 @@ class FilesRepository {
     }
   }
 
+  Future<List<FileShare>> getFileShares({required String fileId}) async {
+    try {
+      final json = await apiClient.getJson(
+        '/api/v1/files/$fileId/shares',
+        authenticated: true,
+      );
+      final data = json['data'] as List<dynamic>? ?? const [];
+      return data
+          .map((item) => FileShare.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on ApiException catch (e) {
+      if (e.statusCode == 404) {
+        throw FileNotFoundError('File not found or you do not have permission');
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError('Server error. Please try again.');
+      } else if (e.isNetworkError) {
+        throw NetworkError('Network error. Please check your connection.');
+      } else {
+        throw ApiError(e.message);
+      }
+    }
+  }
+
+  Future<void> revokeFileShare({
+    required String fileId,
+    required String shareId,
+  }) async {
+    try {
+      await apiClient.delete(
+        '/api/v1/files/$fileId/shares/$shareId',
+        authenticated: true,
+      );
+    } on ApiException catch (e) {
+      if (e.statusCode == 404 && e.detail == 'File share not found') {
+        throw FileShareNotFoundError('This recipient no longer has access.');
+      } else if (e.statusCode == 404) {
+        throw FileNotFoundError('File not found or you do not have permission');
+      } else if (e.statusCode != null && e.statusCode! >= 500) {
+        throw ServerError(
+          'Access could not be revoked. Please try again later.',
+        );
+      } else if (e.isNetworkError) {
+        throw NetworkError(
+          'Connection lost. Please check your network and try again.',
+        );
+      } else {
+        throw ApiError(e.message);
+      }
+    }
+  }
+
   Future<FileContent> createFolder({
     required String parentPath,
     required String name,
@@ -361,6 +412,14 @@ class CannotShareWithOwnerError implements Exception {
 class DuplicateFileShareError implements Exception {
   final String message;
   DuplicateFileShareError(this.message);
+
+  @override
+  String toString() => message;
+}
+
+class FileShareNotFoundError implements Exception {
+  final String message;
+  FileShareNotFoundError(this.message);
 
   @override
   String toString() => message;
