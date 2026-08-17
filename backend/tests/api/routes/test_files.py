@@ -2037,9 +2037,7 @@ def test_complete_upload_notification_failure_rolls_back_the_file(
         )
 
     db.rollback()
-    assert (
-        db.exec(select(StoredFile).where(StoredFile.name == name)).first() is None
-    )
+    assert db.exec(select(StoredFile).where(StoredFile.name == name)).first() is None
     outbox_rows = db.exec(
         select(NotificationOutbox).where(NotificationOutbox.event_type == FILE_CREATED)
     ).all()
@@ -2311,7 +2309,9 @@ def test_delete_folder_enqueues_exactly_one_folder_deleted_event(
     # indexer expands it server-side via delete_by_query on owner_id and a
     # folder_path prefix (see docs/phases/phase-10-search-service.md).
     outbox_rows = db.exec(
-        select(NotificationOutbox).where(NotificationOutbox.event_type == FOLDER_DELETED)
+        select(NotificationOutbox).where(
+            NotificationOutbox.event_type == FOLDER_DELETED
+        )
     ).all()
     matching = [
         row for row in outbox_rows if row.payload.get("folder_path") == folder_path
@@ -2357,11 +2357,11 @@ def test_delete_folder_notification_failure_rolls_back_the_delete(
     db.expire_all()
     assert db.get(Folder, folder_id) is not None
     outbox_rows = db.exec(
-        select(NotificationOutbox).where(NotificationOutbox.event_type == FOLDER_DELETED)
+        select(NotificationOutbox).where(
+            NotificationOutbox.event_type == FOLDER_DELETED
+        )
     ).all()
-    assert not any(
-        row.payload.get("folder_path") == folder_path for row in outbox_rows
-    )
+    assert not any(row.payload.get("folder_path") == folder_path for row in outbox_rows)
 
 
 def test_delete_folder_rejects_another_users_folder(
