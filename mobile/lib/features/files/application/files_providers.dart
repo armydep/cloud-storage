@@ -542,6 +542,8 @@ class FilesController extends StateNotifier<FilesState> {
     required String fileId,
     required String shareId,
   }) async {
+    if (state.isRevokingShare(shareId)) return;
+
     state = state.startRevokingShare(shareId);
 
     try {

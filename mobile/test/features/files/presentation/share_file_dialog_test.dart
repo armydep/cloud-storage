@@ -196,6 +196,42 @@ void main() {
     );
   });
 
+  testWidgets('shows an error and retries loading recipients', (tester) async {
+    var loadAttempts = 0;
+    await _pumpToShareDialog(
+      tester,
+      sharesListResponse: (request) {
+        loadAttempts++;
+        if (loadAttempts == 1) {
+          return http.Response(jsonEncode({'detail': 'Server error'}), 500);
+        }
+        return http.Response(
+          jsonEncode({
+            'data': [
+              {
+                'id': 'share-1',
+                'file_id': 'file-1',
+                'recipient_email': 'friend@example.com',
+                'created_at': '2026-08-01T00:00:00Z',
+              },
+            ],
+            'count': 1,
+          }),
+          200,
+        );
+      },
+    );
+
+    expect(find.byKey(const Key('share-recipients-error')), findsOneWidget);
+    expect(find.text('friend@example.com'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('share-recipients-retry-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('share-recipients-error')), findsNothing);
+    expect(find.text('friend@example.com'), findsOneWidget);
+  });
+
   testWidgets('revoke success removes the recipient from the list', (
     tester,
   ) async {
