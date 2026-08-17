@@ -120,6 +120,38 @@ This phase advances ROADMAP 3.4 (sorting, filtering and search), ROADMAP 8.1
     This is the same class of gap as the swallowed `delete_object` failures in
     the orphan-cleanup work: a path that bypasses the event stream entirely.
 
+14. **Filenames are analysed with a custom analyzer that splits on separators.**
+    The standard analyzer handles `report_2024-final.pdf` in ways users find
+    surprising. The mapping uses a `char_filter` mapping `_`, `-` and `.` to
+    spaces, then the standard tokenizer and a lowercase filter, so a search for
+    `report` or `2024` or `final` all match. `name.raw` remains a `keyword`
+    subfield for exact match and sorting.
+
+    Edge-ngram and `search_as_you_type` are deliberately **not** used yet. Both
+    inflate the index substantially, and nothing needs prefix completion until
+    the UI asks for as-you-type search. Adding a subfield later is a reindex, but
+    a cheap one relative to carrying the cost from the start.
+
+15. **When Elasticsearch is unavailable, search returns 503.** Not an empty
+    result set. Empty results are indistinguishable from "no matches" and would
+    hide an outage from both users and operators. The web client is already
+    required to render a distinct error state, so it has somewhere to put this.
+
+16. **Ranking is relevance first, recency as a tiebreaker.** The sort is
+    `_score desc, created_at desc, _id asc`.
+
+    The `_id` term is not a stylistic choice: `search_after` requires a
+    deterministic total ordering, so a unique tiebreaker is needed regardless of
+    ranking preference. Without it, pagination silently duplicates or skips
+    results when scores tie.
+
+17. **`q.search` gets a dead-letter exchange**, matching `q.email` from Phase 8.
+    A single poison message must not block every event behind it in the queue.
+
+18. **`search-svc` exposes Prometheus metrics**, matching `backend`. Added in
+    slice 3 alongside real queries rather than in slice 1, where there is nothing
+    meaningful to measure.
+
 ## Architecture
 
 ```
@@ -246,25 +278,7 @@ The front end for ROADMAP 3.4.
 
 ## Open questions
 
-1. **Filename analysis strategy.** Standard analyzer, custom analyzer, or
-   `search_as_you_type`. Affects the mapping, so it must be settled in slice 2
-   before any index is populated.
-
-2. **What happens to search when Elasticsearch is down?** Return 503, or degrade
-   to an empty result set. 503 is more honest; empty results are friendlier and
-   look identical to "no matches", which may hide an outage.
-
-3. **Ranking: relevance or recency?** Elasticsearch defaults to relevance. For a
-   file store, a user searching a half-remembered filename often wants the most
-   recent match. Decide in slice 3.
-
-4. **Does `q.search` get a dead-letter exchange?** `q.email` has one from Phase 8.
-   If the indexer is down for an extended period, messages accumulate. Consistency
-   one way or the other is worth choosing deliberately.
-
-5. **Does `search-svc` get Prometheus metrics?** `backend` gained them in the
-   observability work; leaving the new service unobserved is a gap, but adding
-   them is not free.
+None open.
 
 Resolved during design, retained for context:
 
@@ -273,3 +287,5 @@ Resolved during design, retained for context:
   so folder-scoped search excludes them naturally. Revisit if a "search shared
   with me" requirement appears; it would need the index to model the share graph
   and track grants and revocations.
+- Filename analysis, Elasticsearch-unavailable behaviour, ranking, dead-lettering
+  and metrics are settled as decisions 14 to 18.
