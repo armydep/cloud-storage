@@ -56,6 +56,19 @@ services:
       - "5672:5672"
       - "15672:15672"
 
+  # Local-only debugging access (curl http://localhost:9200) -- production
+  # publishes no port at all (decision 9 in
+  # docs/phases/phase-10-search-service.md).
+  #
+  # Elasticsearch needs `vm.max_map_count` raised on Linux hosts or it fails
+  # to start with no client-visible error -- a container that never becomes
+  # healthy is the only symptom. Run once per host, does not persist across
+  # reboots: `sudo sysctl -w vm.max_map_count=262144`.
+  elasticsearch:
+    restart: "no"
+    ports:
+      - "9200:9200"
+
   adminer:
     restart: "no"
     ports:
@@ -94,6 +107,19 @@ services:
       EMAILS_FROM_EMAIL: "noreply@example.com"
 
   search-svc:
+    restart: "no"
+    build:
+      context: .
+      dockerfile: search-svc/Dockerfile
+    develop:
+      watch:
+        - path: ./search-svc/app
+          action: sync+restart
+          target: /app/app
+        - path: ./search-svc/pyproject.toml
+          action: rebuild
+
+  search-indexer:
     restart: "no"
     build:
       context: .

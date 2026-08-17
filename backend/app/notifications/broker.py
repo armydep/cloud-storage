@@ -23,7 +23,21 @@ INAPP_DEAD_LETTER_EXCHANGE = "notifications.dead-letter.inapp"
 INAPP_DEAD_LETTER_QUEUE = "q.inapp.dead-letter"
 INAPP_DELIVERY_LIMIT = 5
 
+# Consumed by search-svc, a separate deployable (Phase 10) that keeps its own
+# copy of these names rather than importing this module -- see
+# docs/phases/phase-10-search-service.md decision 1 and constraint 3 there.
+# Declared here anyway, even though backend never consumes it, so the queue
+# and its bindings exist before search-svc's indexer has ever started; a
+# topic exchange silently discards a message that matches no binding.
+SEARCH_QUEUE = "q.search"
+SEARCH_DEAD_LETTER_EXCHANGE = "notifications.dead-letter.search"
+SEARCH_DEAD_LETTER_QUEUE = "q.search.dead-letter"
+SEARCH_DELIVERY_LIMIT = 5
+
 FILE_SHARED_ROUTING_KEY = "file_shared"
+FILE_CREATED_ROUTING_KEY = "file_created"
+FILE_DELETED_ROUTING_KEY = "file_deleted"
+FOLDER_DELETED_ROUTING_KEY = "folder_deleted"
 
 
 class EventPublisher(Protocol):
@@ -125,6 +139,49 @@ def declare_topology(channel: BlockingChannel) -> None:
     channel.queue_bind(
         queue=INAPP_DEAD_LETTER_QUEUE,
         exchange=INAPP_DEAD_LETTER_EXCHANGE,
+        routing_key="#",
+    )
+
+    # search-svc's indexer channel, added in Phase 10. No rename events are
+    # bound yet -- file_renamed/folder_renamed cannot be emitted because the
+    # backend has no rename route yet (ROADMAP 1.2, 1.3).
+    channel.exchange_declare(
+        exchange=SEARCH_DEAD_LETTER_EXCHANGE,
+        exchange_type="topic",
+        durable=True,
+    )
+    channel.queue_declare(
+        queue=SEARCH_QUEUE,
+        durable=True,
+        arguments={
+            "x-queue-type": "quorum",
+            "x-delivery-limit": SEARCH_DELIVERY_LIMIT,
+            "x-dead-letter-exchange": SEARCH_DEAD_LETTER_EXCHANGE,
+        },
+    )
+    channel.queue_bind(
+        queue=SEARCH_QUEUE,
+        exchange=NOTIFICATIONS_EXCHANGE,
+        routing_key=FILE_CREATED_ROUTING_KEY,
+    )
+    channel.queue_bind(
+        queue=SEARCH_QUEUE,
+        exchange=NOTIFICATIONS_EXCHANGE,
+        routing_key=FILE_DELETED_ROUTING_KEY,
+    )
+    channel.queue_bind(
+        queue=SEARCH_QUEUE,
+        exchange=NOTIFICATIONS_EXCHANGE,
+        routing_key=FOLDER_DELETED_ROUTING_KEY,
+    )
+    channel.queue_declare(
+        queue=SEARCH_DEAD_LETTER_QUEUE,
+        durable=True,
+        arguments={"x-queue-type": "quorum"},
+    )
+    channel.queue_bind(
+        queue=SEARCH_DEAD_LETTER_QUEUE,
+        exchange=SEARCH_DEAD_LETTER_EXCHANGE,
         routing_key="#",
     )
 

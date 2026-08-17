@@ -7,7 +7,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
 from app.models import User, get_datetime_utc
-from app.notifications.events import FILE_SHARED, USER_REGISTERED
+from app.notifications.events import (
+    FILE_CREATED,
+    FILE_DELETED,
+    FILE_SHARED,
+    FOLDER_DELETED,
+    USER_REGISTERED,
+)
 from app.notifications.models import Notification, NotificationOutbox
 
 
@@ -39,6 +45,71 @@ def enqueue_file_shared(
             "recipient_email": recipient_email,
             "sharer_email": sharer_email,
         },
+    )
+    session.add(notification)
+    session.flush()
+    return notification
+
+
+def enqueue_file_created(
+    *,
+    session: Session,
+    file_id: uuid.UUID,
+    owner_id: uuid.UUID,
+    name: str,
+    folder_path: str,
+    mime_type: str,
+    category: str,
+    size_bytes: int,
+    created_at: datetime,
+) -> NotificationOutbox:
+    """Enqueue for search-svc's indexer. The index is fully denormalized
+
+    (design doc, Option A), so every field the indexer needs to write a
+    document is carried here -- it must never need a second lookup.
+    """
+    notification = NotificationOutbox(
+        event_type=FILE_CREATED,
+        payload={
+            "file_id": str(file_id),
+            "owner_id": str(owner_id),
+            "name": name,
+            "folder_path": folder_path,
+            "mime_type": mime_type,
+            "category": category,
+            "size_bytes": size_bytes,
+            "created_at": created_at.isoformat(),
+        },
+    )
+    session.add(notification)
+    session.flush()
+    return notification
+
+
+def enqueue_file_deleted(
+    *, session: Session, file_id: uuid.UUID, owner_id: uuid.UUID
+) -> NotificationOutbox:
+    notification = NotificationOutbox(
+        event_type=FILE_DELETED,
+        payload={"file_id": str(file_id), "owner_id": str(owner_id)},
+    )
+    session.add(notification)
+    session.flush()
+    return notification
+
+
+def enqueue_folder_deleted(
+    *, session: Session, owner_id: uuid.UUID, folder_path: str
+) -> NotificationOutbox:
+    """One event for the whole subtree -- never one event per descendant file.
+
+    The indexer expands it with a server-side delete_by_query on owner_id and
+    a folder_path prefix (design doc constraint 4); emitting per-file events
+    here would produce a burst proportional to subtree size.
+    """
+    notification = NotificationOutbox(
+        event_type=FOLDER_DELETED,
+        payload={"owner_id": str(owner_id), "folder_path": folder_path},
     )
     session.add(notification)
     session.flush()

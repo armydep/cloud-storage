@@ -89,6 +89,43 @@ def test_inapp_queue_is_durable_and_bound_only_to_file_shared() -> None:
     )
 
 
+def test_search_queue_is_durable_and_bound_to_file_and_folder_events() -> None:
+    channel = MagicMock()
+
+    broker.declare_topology(channel)
+
+    channel.queue_declare.assert_any_call(
+        queue=broker.SEARCH_QUEUE,
+        durable=True,
+        arguments={
+            "x-queue-type": "quorum",
+            "x-delivery-limit": broker.SEARCH_DELIVERY_LIMIT,
+            "x-dead-letter-exchange": broker.SEARCH_DEAD_LETTER_EXCHANGE,
+        },
+    )
+    bound_routing_keys = [
+        call.kwargs["routing_key"]
+        for call in channel.queue_bind.call_args_list
+        if call.kwargs.get("queue") == broker.SEARCH_QUEUE
+    ]
+    assert bound_routing_keys == [
+        broker.FILE_CREATED_ROUTING_KEY,
+        broker.FILE_DELETED_ROUTING_KEY,
+        broker.FOLDER_DELETED_ROUTING_KEY,
+    ]
+
+    channel.queue_declare.assert_any_call(
+        queue=broker.SEARCH_DEAD_LETTER_QUEUE,
+        durable=True,
+        arguments={"x-queue-type": "quorum"},
+    )
+    channel.queue_bind.assert_any_call(
+        queue=broker.SEARCH_DEAD_LETTER_QUEUE,
+        exchange=broker.SEARCH_DEAD_LETTER_EXCHANGE,
+        routing_key="#",
+    )
+
+
 def test_publisher_enables_confirms_and_publishes_persistent_message() -> None:
     connection = MagicMock()
     channel = connection.channel.return_value

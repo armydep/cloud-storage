@@ -6,7 +6,13 @@ from sqlmodel import Session, select
 from app import crud
 from app.models import User, UserCreate
 from app.notifications import repository
-from app.notifications.events import FILE_SHARED, USER_REGISTERED
+from app.notifications.events import (
+    FILE_CREATED,
+    FILE_DELETED,
+    FILE_SHARED,
+    FOLDER_DELETED,
+    USER_REGISTERED,
+)
 from app.notifications.models import Notification
 from tests.utils.utils import random_email, random_lower_string
 
@@ -41,6 +47,68 @@ def test_enqueue_file_shared_writes_expected_payload(db: Session) -> None:
         "recipient_id": str(recipient.id),
         "recipient_email": recipient.email,
         "sharer_email": "alice@example.com",
+    }
+
+
+def test_enqueue_file_created_writes_expected_payload(db: Session) -> None:
+    owner = _create_user(db)
+    file_id = uuid.uuid4()
+    created_at = datetime.now(timezone.utc)
+
+    notification = repository.enqueue_file_created(
+        session=db,
+        file_id=file_id,
+        owner_id=owner.id,
+        name="report.pdf",
+        folder_path="root.reports",
+        mime_type="application/pdf",
+        category="document",
+        size_bytes=123,
+        created_at=created_at,
+    )
+    db.commit()
+
+    assert notification.event_type == FILE_CREATED
+    assert notification.payload == {
+        "file_id": str(file_id),
+        "owner_id": str(owner.id),
+        "name": "report.pdf",
+        "folder_path": "root.reports",
+        "mime_type": "application/pdf",
+        "category": "document",
+        "size_bytes": 123,
+        "created_at": created_at.isoformat(),
+    }
+
+
+def test_enqueue_file_deleted_writes_expected_payload(db: Session) -> None:
+    owner = _create_user(db)
+    file_id = uuid.uuid4()
+
+    notification = repository.enqueue_file_deleted(
+        session=db, file_id=file_id, owner_id=owner.id
+    )
+    db.commit()
+
+    assert notification.event_type == FILE_DELETED
+    assert notification.payload == {
+        "file_id": str(file_id),
+        "owner_id": str(owner.id),
+    }
+
+
+def test_enqueue_folder_deleted_writes_expected_payload(db: Session) -> None:
+    owner = _create_user(db)
+
+    notification = repository.enqueue_folder_deleted(
+        session=db, owner_id=owner.id, folder_path="root.reports"
+    )
+    db.commit()
+
+    assert notification.event_type == FOLDER_DELETED
+    assert notification.payload == {
+        "owner_id": str(owner.id),
+        "folder_path": "root.reports",
     }
 
 

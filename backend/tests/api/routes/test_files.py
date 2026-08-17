@@ -24,7 +24,12 @@ from app.files.models import (
 from app.files.schemas import CompleteUploadRequest
 from app.files.service import BlobIntegrityError
 from app.models import UserCreate
-from app.notifications.events import FILE_SHARED
+from app.notifications.events import (
+    FILE_CREATED,
+    FILE_DELETED,
+    FILE_SHARED,
+    FOLDER_DELETED,
+)
 from app.notifications.models import NotificationOutbox
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import random_email
@@ -1926,6 +1931,121 @@ def test_complete_upload_rejects_another_users_folder(
     assert response.json()["detail"] == "Folder not found"
 
 
+def test_complete_upload_enqueues_exactly_one_file_created_event(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="NotifyCreate",
+    )
+    blob_hash = "a" * 64
+    _create_pending_upload(db=db, owner_id=folder.owner_id, blob_hash=blob_hash)
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=123,
+            content_type="application/pdf",
+            checksum_sha256=sha256_hex_to_base64(blob_hash),
+        ),
+    )
+    monkeypatch.setattr("app.files.service.storage.copy_object", lambda **kwargs: None)
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object", lambda **kwargs: None
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/files/complete-upload",
+        headers=normal_user_token_headers,
+        json={
+            "folder_path": folder.path,
+            "name": "notify-created.pdf",
+            "mime_type": "application/pdf",
+            "category": "document",
+            "blob_hash": blob_hash,
+            "size_bytes": 123,
+        },
+    )
+
+    assert response.status_code == 200
+    file_id = response.json()["id"]
+    outbox_rows = db.exec(
+        select(NotificationOutbox).where(NotificationOutbox.event_type == FILE_CREATED)
+    ).all()
+    matching = [row for row in outbox_rows if row.payload.get("file_id") == file_id]
+    assert len(matching) == 1
+    payload = matching[0].payload
+    assert payload["owner_id"] == str(folder.owner_id)
+    assert payload["name"] == "notify-created.pdf"
+    assert payload["folder_path"] == folder.path
+    assert payload["mime_type"] == "application/pdf"
+    assert payload["category"] == "document"
+    assert payload["size_bytes"] == 123
+    assert payload["created_at"]
+
+
+def test_complete_upload_notification_failure_rolls_back_the_file(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="RollbackCreate",
+    )
+    blob_hash = "b" * 64
+    _create_pending_upload(db=db, owner_id=folder.owner_id, blob_hash=blob_hash)
+    monkeypatch.setattr(
+        "app.files.service.storage.stat_object",
+        lambda *, object_key, include_checksum=False: ObjectStat(
+            size_bytes=123,
+            content_type="application/pdf",
+            checksum_sha256=sha256_hex_to_base64(blob_hash),
+        ),
+    )
+    monkeypatch.setattr("app.files.service.storage.copy_object", lambda **kwargs: None)
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object", lambda **kwargs: None
+    )
+    name = f"rollback-created-{uuid.uuid4().hex}.pdf"
+
+    with (
+        patch(
+            "app.files.service.notification_repository.enqueue_file_created",
+            side_effect=RuntimeError("outbox insert failed"),
+        ),
+        pytest.raises(RuntimeError, match="outbox insert failed"),
+    ):
+        client.post(
+            f"{settings.API_V1_STR}/files/complete-upload",
+            headers=normal_user_token_headers,
+            json={
+                "folder_path": folder.path,
+                "name": name,
+                "mime_type": "application/pdf",
+                "category": "document",
+                "blob_hash": blob_hash,
+                "size_bytes": 123,
+            },
+        )
+
+    db.rollback()
+    assert (
+        db.exec(select(StoredFile).where(StoredFile.name == name)).first() is None
+    )
+    outbox_rows = db.exec(
+        select(NotificationOutbox).where(NotificationOutbox.event_type == FILE_CREATED)
+    ).all()
+    assert not any(row.payload.get("name") == name for row in outbox_rows)
+
+
 def _create_unique_file(
     *,
     client: TestClient,
@@ -2141,6 +2261,107 @@ def test_delete_folder_deletes_nested_subtree_files_and_shares(
         headers=normal_user_token_headers,
     )
     assert download_response.status_code == 404
+
+
+def test_delete_folder_enqueues_exactly_one_folder_deleted_event(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="NotifyDeleteTree",
+    )
+    child_folder = _create_child_folder(
+        db=db,
+        owner_id=folder.owner_id,
+        parent_id=folder.id,
+        parent_path=folder.path,
+        name_prefix="Nested",
+    )
+    _create_file_in_folder(
+        db=db,
+        owner_id=folder.owner_id,
+        folder_id=folder.id,
+        name_prefix="Direct",
+    )
+    _create_file_in_folder(
+        db=db,
+        owner_id=folder.owner_id,
+        folder_id=child_folder.id,
+        name_prefix="Nested",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object", lambda *, object_key: None
+    )
+    folder_id = folder.id
+    folder_path = folder.path
+    owner_id = folder.owner_id
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/folders/{folder_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    # One event for the whole subtree, not one per descendant file -- the
+    # indexer expands it server-side via delete_by_query on owner_id and a
+    # folder_path prefix (see docs/phases/phase-10-search-service.md).
+    outbox_rows = db.exec(
+        select(NotificationOutbox).where(NotificationOutbox.event_type == FOLDER_DELETED)
+    ).all()
+    matching = [
+        row for row in outbox_rows if row.payload.get("folder_path") == folder_path
+    ]
+    assert len(matching) == 1
+    assert matching[0].payload == {
+        "owner_id": str(owner_id),
+        "folder_path": folder_path,
+    }
+
+
+def test_delete_folder_notification_failure_rolls_back_the_delete(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    folder = _create_unique_folder(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="RollbackDeleteTree",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object", lambda *, object_key: None
+    )
+    folder_id = folder.id
+    folder_path = folder.path
+
+    with (
+        patch(
+            "app.files.service.notification_repository.enqueue_folder_deleted",
+            side_effect=RuntimeError("outbox insert failed"),
+        ),
+        pytest.raises(RuntimeError, match="outbox insert failed"),
+    ):
+        client.delete(
+            f"{settings.API_V1_STR}/files/folders/{folder_id}",
+            headers=normal_user_token_headers,
+        )
+
+    db.rollback()
+    db.expire_all()
+    assert db.get(Folder, folder_id) is not None
+    outbox_rows = db.exec(
+        select(NotificationOutbox).where(NotificationOutbox.event_type == FOLDER_DELETED)
+    ).all()
+    assert not any(
+        row.payload.get("folder_path") == folder_path for row in outbox_rows
+    )
 
 
 def test_delete_folder_rejects_another_users_folder(
@@ -2485,6 +2706,78 @@ def test_delete_file_succeeds_for_owner(
     assert db.get(StoredFile, file_id) is None
     assert db.get(FileBlob, blob_hash) is None
     assert calls == [f"sha256/{blob_hash}"]
+
+
+def test_delete_file_enqueues_exactly_one_file_deleted_event(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="NotifyDelete",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object", lambda *, object_key: None
+    )
+    file_id = file.id
+    owner_id = file.owner_id
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/files/{file_id}",
+        headers=normal_user_token_headers,
+    )
+
+    assert response.status_code == 204
+    outbox_rows = db.exec(
+        select(NotificationOutbox).where(NotificationOutbox.event_type == FILE_DELETED)
+    ).all()
+    matching = [
+        row for row in outbox_rows if row.payload.get("file_id") == str(file_id)
+    ]
+    assert len(matching) == 1
+    assert matching[0].payload == {"file_id": str(file_id), "owner_id": str(owner_id)}
+
+
+def test_delete_file_notification_failure_rolls_back_the_delete(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    db: Session,
+    monkeypatch,
+) -> None:
+    file = _create_unique_file(
+        client=client,
+        headers=normal_user_token_headers,
+        db=db,
+        name_prefix="RollbackDelete",
+    )
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object", lambda *, object_key: None
+    )
+    file_id = file.id
+
+    with (
+        patch(
+            "app.files.service.notification_repository.enqueue_file_deleted",
+            side_effect=RuntimeError("outbox insert failed"),
+        ),
+        pytest.raises(RuntimeError, match="outbox insert failed"),
+    ):
+        client.delete(
+            f"{settings.API_V1_STR}/files/{file_id}",
+            headers=normal_user_token_headers,
+        )
+
+    db.rollback()
+    db.expire_all()
+    assert db.get(StoredFile, file_id) is not None
+    outbox_rows = db.exec(
+        select(NotificationOutbox).where(NotificationOutbox.event_type == FILE_DELETED)
+    ).all()
+    assert not any(row.payload.get("file_id") == str(file_id) for row in outbox_rows)
 
 
 def test_delete_file_removes_file_from_folder_listing(

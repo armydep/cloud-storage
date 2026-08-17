@@ -5,6 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 os.environ["SECRET_KEY"] = "search-service-test-secret-at-least-32-bytes"
+os.environ["RABBITMQ_USER"] = "search-service-test-user"
+os.environ["RABBITMQ_PASSWORD"] = "search-service-test-password"
 
 from app.main import app  # noqa: E402
 
