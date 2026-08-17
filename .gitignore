@@ -6,6 +6,8 @@
 !.env.sample
 .copier/.copier-answers.yml
 .idea/
+__pycache__/
+*.py[cod]
 node_modules/
 /test-results/
 /playwright-report/

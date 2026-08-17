@@ -173,6 +173,37 @@ services:
       # Enable redirection for HTTP and HTTPS
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.middlewares=https-redirect
 
+  search-svc:
+    image: '${DOCKER_IMAGE_SEARCH:?Variable not set}:${TAG:-latest}'
+    restart: always
+    networks:
+      - traefik-public
+      - default
+    environment:
+      - SECRET_KEY=${SECRET_KEY?Variable not set}
+      - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
+    build:
+      context: .
+      dockerfile: search-svc/Dockerfile
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.constraint-label=traefik-public
+
+      - traefik.http.services.${STACK_NAME?Variable not set}-search.loadbalancer.server.port=8000
+
+      - traefik.http.routers.${STACK_NAME?Variable not set}-search.rule=Host(`api.${DOMAIN?Variable not set}`) && PathPrefix(`/api/v1/search`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-search.priority=100
+      - traefik.http.routers.${STACK_NAME?Variable not set}-search.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-search.middlewares=https-redirect
+
+      - traefik.http.routers.${STACK_NAME?Variable not set}-search-https.rule=Host(`api.${DOMAIN?Variable not set}`) && PathPrefix(`/api/v1/search`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-search-https.priority=100
+      - traefik.http.routers.${STACK_NAME?Variable not set}-search-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-search-https.tls=true
+      - traefik.http.routers.${STACK_NAME?Variable not set}-search-https.tls.certresolver=le
+
   notification-relay:
     image: '${DOCKER_IMAGE_BACKEND:?Variable not set}:${TAG:-latest}'
     restart: always
