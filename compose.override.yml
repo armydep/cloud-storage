@@ -93,6 +93,19 @@ services:
       SMTP_TLS: "false"
       EMAILS_FROM_EMAIL: "noreply@example.com"
 
+  search-svc:
+    restart: "no"
+    build:
+      context: .
+      dockerfile: search-svc/Dockerfile
+    develop:
+      watch:
+        - path: ./search-svc/app
+          action: sync+restart
+          target: /app/app
+        - path: ./search-svc/pyproject.toml
+          action: rebuild
+
   notification-relay:
     restart: "no"
     build:
@@ -195,7 +208,10 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        - VITE_API_URL=http://localhost:8000
+        # Normal local browser traffic goes through Traefik, just as it does in
+        # production. The backend's published port remains available for direct
+        # debugging, but is not the frontend API origin.
+        - VITE_API_URL=http://api.${DOMAIN?Variable not set}
         - NODE_ENV=development
 
   playwright:

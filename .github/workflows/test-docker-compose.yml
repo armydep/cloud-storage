@@ -26,6 +26,7 @@ jobs:
           filters: |
             changed:
               - backend/**
+              - search-svc/**
               - frontend/**
               - .env.example
               - pyproject.toml
@@ -45,11 +46,35 @@ jobs:
         run: cp .env.example .env
       - run: docker compose build
       - run: docker compose down -v --remove-orphans
-      - run: docker compose up -d --wait backend frontend adminer
+      - run: docker compose up -d --wait backend search-svc frontend adminer proxy
       - name: Test backend is up
         run: curl -fsS http://localhost:8000/api/v1/utils/health-check
       - name: Test frontend is up
         run: curl -fsS http://localhost:5173
+      - name: Verify Traefik routes search and backend paths
+        run: |
+          access_token="$(
+            curl -fsS \
+              -H 'Host: api.localhost' \
+              -H 'Content-Type: application/x-www-form-urlencoded' \
+              --data 'username=admin@example.com&password=changethis' \
+              http://localhost/api/v1/login/access-token \
+              | jq -r .access_token
+          )"
+          curl -fsS \
+            -H 'Host: api.localhost' \
+            -H "Authorization: Bearer ${access_token}" \
+            'http://localhost/api/v1/search/files?folder_path=root' \
+            | jq -e '.results == [] and .next_cursor == null'
+          curl -fsS \
+            -H 'Host: api.localhost' \
+            http://localhost/api/v1/utils/health-check
+      - name: Verify search service has no PostgreSQL credentials
+        run: |
+          if docker compose exec -T search-svc env | grep -q '^POSTGRES_'; then
+            echo 'search-svc must not receive POSTGRES_* variables'
+            exit 1
+          fi
       - name: Stop Docker Compose services
         if: always()
         run: docker compose down -v --remove-orphans

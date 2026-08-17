@@ -78,9 +78,10 @@ Useful local URLs:
 
 ```text
 Frontend:       http://localhost:5173
-Backend API:    http://localhost:8000
-Swagger UI:     http://localhost:8000/docs
-OpenAPI JSON:   http://localhost:8000/api/v1/openapi.json
+API gateway:    http://api.localhost
+Backend direct: http://localhost:8000
+Backend docs:   http://localhost:8000/docs
+Search docs:    http://api.localhost/api/v1/search/docs
 Metrics:        http://localhost:8000/metrics
 Adminer:        http://localhost:8080
 Mailcatcher:    http://localhost:1080
@@ -88,6 +89,11 @@ Traefik:        http://localhost:8090
 MinIO S3 API:   http://localhost:9000
 MinIO console:  http://localhost:9001
 ```
+
+The local frontend is built with `VITE_API_URL=http://api.localhost`, so its API
+requests enter through Traefik and `/api/v1/search/*` follows the same routing as
+production. All other API paths continue to reach `backend`. Port 8000 is kept
+published only for direct backend debugging.
 
 ### Android application
 
@@ -138,6 +144,7 @@ frontend/.env
 ## Tech stack
 
 - FastAPI backend
+- Independently deployable FastAPI search service
 - PostgreSQL database
 - SQLModel and Alembic
 - React frontend

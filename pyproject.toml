@@ -1,2 +1,3 @@
 [tool.uv.workspace]
 members = ["backend"]
+exclude = ["search-svc"]
