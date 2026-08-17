@@ -95,26 +95,23 @@ void main() {
       },
     );
 
-    test(
-      'throws CannotShareWithOwnerError on 422 self-share detail',
-      () async {
-        final mockApiClient = _MockApiClient();
-        mockApiClient.nextException = const ApiException(
-          message: 'Unprocessable',
-          statusCode: 422,
-          detail: 'A file cannot be shared with its owner',
-        );
-        final repository = FilesRepository(mockApiClient);
+    test('throws CannotShareWithOwnerError on 422 self-share detail', () async {
+      final mockApiClient = _MockApiClient();
+      mockApiClient.nextException = const ApiException(
+        message: 'Unprocessable',
+        statusCode: 422,
+        detail: 'A file cannot be shared with its owner',
+      );
+      final repository = FilesRepository(mockApiClient);
 
-        expect(
-          () => repository.createFileShare(
-            fileId: 'file-123',
-            recipientEmail: 'me@example.com',
-          ),
-          throwsA(isA<CannotShareWithOwnerError>()),
-        );
-      },
-    );
+      expect(
+        () => repository.createFileShare(
+          fileId: 'file-123',
+          recipientEmail: 'me@example.com',
+        ),
+        throwsA(isA<CannotShareWithOwnerError>()),
+      );
+    });
 
     test('throws DuplicateFileShareError on 409', () async {
       final mockApiClient = _MockApiClient();

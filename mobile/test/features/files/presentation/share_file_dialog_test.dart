@@ -80,9 +80,7 @@ Future<void> _fillAndSubmit(WidgetTester tester, String email) async {
 }
 
 void main() {
-  testWidgets('share button is not shown from Shared with me', (
-    tester,
-  ) async {
+  testWidgets('share button is not shown from Shared with me', (tester) async {
     final storage = FakeTokenStorage(token: 'saved-token');
     final client = MockClient((request) async {
       if (request.url.path == '/api/v1/login/test-token') {
@@ -163,10 +161,8 @@ void main() {
   ) async {
     await _pumpToShareDialog(
       tester,
-      shareResponse: (request) => http.Response(
-        jsonEncode({'detail': 'Recipient not found'}),
-        404,
-      ),
+      shareResponse: (request) =>
+          http.Response(jsonEncode({'detail': 'Recipient not found'}), 404),
     );
 
     await _fillAndSubmit(tester, 'nobody@example.com');
@@ -194,15 +190,11 @@ void main() {
     );
   });
 
-  testWidgets('shows mapped error when recipient is inactive', (
-    tester,
-  ) async {
+  testWidgets('shows mapped error when recipient is inactive', (tester) async {
     await _pumpToShareDialog(
       tester,
-      shareResponse: (request) => http.Response(
-        jsonEncode({'detail': 'Recipient is inactive'}),
-        422,
-      ),
+      shareResponse: (request) =>
+          http.Response(jsonEncode({'detail': 'Recipient is inactive'}), 422),
     );
 
     await _fillAndSubmit(tester, 'inactive@example.com');
@@ -211,9 +203,7 @@ void main() {
     expect(find.text('That user account is inactive.'), findsOneWidget);
   });
 
-  testWidgets('shows mapped error when sharing with yourself', (
-    tester,
-  ) async {
+  testWidgets('shows mapped error when sharing with yourself', (tester) async {
     await _pumpToShareDialog(
       tester,
       shareResponse: (request) => http.Response(
@@ -225,10 +215,7 @@ void main() {
     await _fillAndSubmit(tester, 'user@example.com');
 
     expect(find.byType(AlertDialog), findsOneWidget);
-    expect(
-      find.text('You cannot share a file with yourself.'),
-      findsOneWidget,
-    );
+    expect(find.text('You cannot share a file with yourself.'), findsOneWidget);
   });
 
   testWidgets('shows mapped error when the file is already shared', (
