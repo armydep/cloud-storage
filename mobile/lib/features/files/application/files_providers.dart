@@ -447,6 +447,62 @@ class FilesController extends StateNotifier<FilesState> {
     }
   }
 
+  Future<void> shareFile({
+    required String fileId,
+    required String recipientEmail,
+  }) async {
+    state = state.copyWith(isSharing: true, clearShareError: true);
+
+    try {
+      await _repository.createFileShare(
+        fileId: fileId,
+        recipientEmail: recipientEmail,
+      );
+      state = state.copyWith(isSharing: false, clearShareError: true);
+    } on FileNotFoundError {
+      state = state.copyWith(
+        isSharing: false,
+        shareError: 'File not found or you do not have permission',
+      );
+    } on ShareRecipientNotFoundError {
+      state = state.copyWith(
+        isSharing: false,
+        shareError: 'No account exists for that email address.',
+      );
+    } on ShareRecipientInactiveError {
+      state = state.copyWith(
+        isSharing: false,
+        shareError: 'That user account is inactive.',
+      );
+    } on CannotShareWithOwnerError {
+      state = state.copyWith(
+        isSharing: false,
+        shareError: 'You cannot share a file with yourself.',
+      );
+    } on DuplicateFileShareError {
+      state = state.copyWith(
+        isSharing: false,
+        shareError: 'This file is already shared with that user.',
+      );
+    } on ServerError {
+      state = state.copyWith(
+        isSharing: false,
+        shareError: 'File sharing failed. Please try again later.',
+      );
+    } on NetworkError {
+      state = state.copyWith(
+        isSharing: false,
+        shareError: 'Connection lost. Please check your network and try again.',
+      );
+    } catch (e) {
+      debugPrint('Share error for $fileId: $e');
+      state = state.copyWith(
+        isSharing: false,
+        shareError: 'File sharing failed. Please try again.',
+      );
+    }
+  }
+
   Future<bool> deleteFile(String fileId) async {
     if (state.isDeleting(fileId)) {
       return false;

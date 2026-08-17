@@ -19,8 +19,8 @@ import '../../../support/fake_token_storage.dart';
 
 /// Lets a test drive auth state directly, without a login round trip.
 class _ControllableAuthController extends AuthController {
-  _ControllableAuthController(AuthRepository repository, AuthSession session)
-    : super(repository, session, restoreOnCreate: false);
+  _ControllableAuthController(super.repository, super.session)
+    : super(restoreOnCreate: false);
 
   void signInAs(String id) {
     state = AuthState.authenticated(

@@ -1,4 +1,5 @@
 import 'package:cloudestorage/features/files/domain/file_models.dart';
+import 'package:cloudestorage/features/files/presentation/widgets/share_file_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -11,6 +12,14 @@ class FileDetailScreen extends StatelessWidget {
     return DateFormat('MMM d, yyyy \'at\' h:mm a').format(dateTime);
   }
 
+  void _showShareDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          ShareFileDialog(fileId: file.id, fileName: file.name),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -20,6 +29,14 @@ class FileDetailScreen extends StatelessWidget {
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            key: const Key('share-file-button'),
+            tooltip: 'Share file',
+            icon: const Icon(Icons.person_add_alt),
+            onPressed: () => _showShareDialog(context),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),

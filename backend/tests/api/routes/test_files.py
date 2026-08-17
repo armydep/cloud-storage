@@ -2988,6 +2988,7 @@ def test_share_file_rejects_self_unknown_and_inactive_recipients(
         json={"recipient_email": settings.EMAIL_TEST_USER},
     )
     assert self_response.status_code == 422
+    assert self_response.json()["detail"] == "A file cannot be shared with its owner"
 
     missing_response = client.post(
         url,
