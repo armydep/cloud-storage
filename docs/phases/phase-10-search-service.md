@@ -54,6 +54,13 @@ This phase advances ROADMAP 3.4 (sorting, filtering and search), ROADMAP 8.1
    file may not appear in search results for a short window. Documented in the
    API so clients do not treat it as a bug.
 
+   A *lost* event is different from a delayed one: because `search-svc` never
+   reads Postgres, it cannot detect that its view has diverged. A dropped
+   `file_deleted` leaves a permanently stale entry, and the user clicking it gets
+   a 404 from `backend`. Reconciliation is therefore always backend-driven —
+   replaying events (decision 8), never `search-svc` comparing against the source
+   of truth.
+
 8. **Backfill is done by replaying events from `backend`, not by `search-svc`
    reading the database.** Existing files predate the event stream. The backfill
    is a backend command that emits `file_created` for every existing file through
@@ -67,6 +74,51 @@ This phase advances ROADMAP 3.4 (sorting, filtering and search), ROADMAP 8.1
     `files-v1`. Mapping changes are handled by building `files-v2` and swapping
     the alias, so reindexing never requires downtime. Doing this from the start
     costs nothing; retrofitting it later requires an outage.
+
+11. **Search is scoped to a folder subtree, not global.** Every query carries a
+    `folder_path` and returns matches from that folder *and everything beneath
+    it* — the recursive reading, matching how file managers behave and how the
+    existing ltree paths already model the hierarchy. There is no whole-workspace
+    search. `folder_path` is therefore a **filter**, not merely a display field,
+    which raises the cost of it going stale (see decision 12).
+
+    `search-svc` validates the path format itself. It cannot import the backend's
+    `LTREE_PATH_PATTERN` (decision 1), so it carries its own copy of the
+    validation. An unvalidated path must never reach the query builder.
+
+    The `owner_id` filter still applies first and independently: passing another
+    user's folder path returns nothing, because ownership is enforced at the
+    chokepoint in decision 6, not by the path.
+
+12. **`folder_path` is a keyword field maintained by a `folder_renamed` event.**
+    Renaming a folder invalidates the stored path on every descendant document.
+    The indexer applies one `folder_renamed` event with an Elasticsearch
+    `update_by_query` against a path prefix — one event, one server-side
+    operation, regardless of subtree size. It never fetches and re-pushes
+    documents individually.
+
+    This matters more than it would under a global-search design: because of
+    decision 11 a stale path means files **disappear from searches of their own
+    folder**, not merely display the wrong breadcrumb.
+
+    Rename does not exist yet (ROADMAP 1.2), so no such event is emitted today.
+    The mapping is nevertheless chosen now, because changing it later requires a
+    reindex.
+
+13. **Deleting a user leaves orphaned documents in the index. Accepted.**
+    `files.owner_id` cascade-deletes in Postgres when a user row is removed, and
+    a database cascade emits no application event — the rows simply vanish.
+    Documents belonging to a deleted user therefore remain in Elasticsearch
+    indefinitely.
+
+    The consequence is stated plainly because it is a privacy one, not a tidiness
+    one: the index retains personal data (filenames) after the account is gone.
+    Accepted deliberately for now. Cleanup, if it is ever needed, is a
+    `delete_by_query` on `owner_id`; making it automatic would require a
+    `user_deleted` event emitted before the cascade runs.
+
+    This is the same class of gap as the swallowed `delete_object` failures in
+    the orphan-cleanup work: a path that bypasses the event stream entirely.
 
 ## Architecture
 
@@ -90,7 +142,7 @@ This phase advances ROADMAP 3.4 (sorting, filtering and search), ROADMAP 8.1
                                                      └────────▲────────┘
                                                               │ index
    backend ──► notification_outbox ──► relay ──► exchange ──► q.search ──► indexer
-   (file_created / file_renamed / file_deleted)
+   (file_created / file_deleted / folder_deleted)
 ```
 
 The left half already exists from Phase 8. `q.search` is one more binding on the
@@ -101,7 +153,8 @@ and in-app consumers.
 
 ```
 GET  /api/v1/search/files
-       ?q=<text>
+       ?folder_path=<ltree path>     (required — see decision 11)
+       &q=<text>
        &category=<image|document|...>
        &limit=<1..100>
        &cursor=<opaque>
@@ -112,7 +165,12 @@ GET  /api/v1/search/health
 ```
 
 Every request requires a bearer token. Results contain only files owned by the
-caller. Query constraints are declared so they appear in the OpenAPI schema.
+caller, from the given folder and its descendants. Query constraints are declared
+so they appear in the OpenAPI schema.
+
+A malformed `folder_path` is rejected with 422 before it reaches the query
+builder, mirroring the backend's rule that an unvalidated ltree path must never
+reach the datastore.
 
 Pagination is keyset, using Elasticsearch `search_after` behind an opaque cursor.
 Not offset — `from`/`size` degrades deep into result sets, and SCALE 4.3 already
@@ -152,7 +210,7 @@ Ships the routing and the contract. Nothing returns fabricated data.
 ### Slice 2 — Elasticsearch, index model, and the indexer
 
 An `elasticsearch` compose service; the index mapping and alias; `file_created`,
-`file_renamed` and `file_deleted` events emitted by `backend` into the existing
+`file_deleted` and `folder_deleted` events emitted by `backend` into the existing
 outbox; a `q.search` binding; an indexer consumer in `search-svc` that applies
 them.
 
@@ -188,16 +246,30 @@ The front end for ROADMAP 3.4.
 
 ## Open questions
 
-1. **Should search cover files shared with the user, or only owned files?** Owned
-   only is simpler and much safer, since it keeps decision 6 to a single
-   `owner_id` term. Covering shares means the index must model the share graph
-   and keep it current as shares are granted and revoked — a materially harder
-   problem. Slices 1–3 assume owned only.
-
-2. **Filename analysis strategy.** Standard analyzer, custom analyzer, or
+1. **Filename analysis strategy.** Standard analyzer, custom analyzer, or
    `search_as_you_type`. Affects the mapping, so it must be settled in slice 2
    before any index is populated.
 
-3. **What happens to search when Elasticsearch is down?** Return 503, or degrade
+2. **What happens to search when Elasticsearch is down?** Return 503, or degrade
    to an empty result set. 503 is more honest; empty results are friendlier and
    look identical to "no matches", which may hide an outage.
+
+3. **Ranking: relevance or recency?** Elasticsearch defaults to relevance. For a
+   file store, a user searching a half-remembered filename often wants the most
+   recent match. Decide in slice 3.
+
+4. **Does `q.search` get a dead-letter exchange?** `q.email` has one from Phase 8.
+   If the indexer is down for an extended period, messages accumulate. Consistency
+   one way or the other is worth choosing deliberately.
+
+5. **Does `search-svc` get Prometheus metrics?** `backend` gained them in the
+   observability work; leaving the new service unobserved is a gap, but adding
+   them is not free.
+
+Resolved during design, retained for context:
+
+- **Owned files only, not shared files.** Decision 11 scopes search to a folder
+  subtree, and files shared with a user do not live in that user's folder tree —
+  so folder-scoped search excludes them naturally. Revisit if a "search shared
+  with me" requirement appears; it would need the index to model the share graph
+  and track grants and revocations.
