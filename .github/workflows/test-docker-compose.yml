@@ -28,6 +28,9 @@ jobs:
               - backend/**
               - frontend/**
               - .env.example
+              - pyproject.toml
+              - bun.lock
+              - package.json
               - compose*.yml
               - .github/workflows/test-docker-compose.yml
 

@@ -27,6 +27,7 @@ jobs:
             changed:
               - backend/**
               - .env.example
+              - pyproject.toml
               - uv.lock
               - .github/workflows/test-backend.yml
 
