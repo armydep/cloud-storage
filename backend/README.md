@@ -163,6 +163,22 @@ $ alembic upgrade head
 
 If you don't want to start with the default models and want to remove them / modify them, from the beginning, without having any previous revision, you can remove the revision files (`.py` Python files) under `./backend/app/alembic/versions/`. And then create a first migration as described above.
 
+## Maintenance scripts
+
+One-off operational commands live at the top level of `app/`, following the
+same `init()` / `main()` shape as `app/initial_data.py`. Run them the same way,
+inside the backend container:
+
+```console
+$ docker compose exec backend python -m app.search_backfill
+```
+
+`app/search_backfill.py` replays a `file_created` event for every existing
+file through the normal notification outbox, so search-svc's Elasticsearch
+index is populated for files that predate the event stream (search-svc/docs,
+Slice 3). It is safe to run more than once -- the search indexer re-indexes
+by file id, so a repeat run just overwrites the same documents.
+
 ## Email Templates
 
 The email templates are in `./backend/app/email-templates/`. Here, there are two directories: `build` and `src`. The `src` directory contains the source files that are used to build the final email templates. The `build` directory contains the final email templates that are used by the application.
