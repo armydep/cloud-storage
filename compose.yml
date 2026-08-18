@@ -205,6 +205,10 @@ services:
   search-svc:
     image: '${DOCKER_IMAGE_SEARCH:?Variable not set}:${TAG:-latest}'
     restart: always
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+        restart: true
     networks:
       - traefik-public
       - default
@@ -212,13 +216,14 @@ services:
       - SECRET_KEY=${SECRET_KEY?Variable not set}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
-      # Not used by this service's own request path yet (only search-indexer
+      # Not used by this service's own request path (only search-indexer
       # consumes RabbitMQ) -- required anyway because Settings is shared
       # between the two and RABBITMQ_USER/PASSWORD have no default, matching
       # backend/app/core/config.py's own RabbitMQ fields.
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
     build:
       context: .
       dockerfile: search-svc/Dockerfile

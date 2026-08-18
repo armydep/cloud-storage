@@ -6,7 +6,33 @@ from sqlmodel import Session
 
 from app.files import repository
 from app.files.models import FileBlob, Folder, StoredFile
+from app.files.schemas import CompleteUploadRequest
 from tests.utils.user import create_random_user
+
+
+def _create_file(
+    *, session: Session, owner_id: uuid.UUID, folder: Folder, name: str = "report.pdf"
+) -> StoredFile:
+    blob_hash = uuid.uuid4().hex * 2
+    repository.create_blob(
+        session=session,
+        blob_hash=blob_hash,
+        object_key=f"sha256/{blob_hash}",
+        size_bytes=123,
+    )
+    return repository.create_file(
+        session=session,
+        owner_id=owner_id,
+        folder_id=folder.id,
+        request=CompleteUploadRequest(
+            folder_path=folder.path,
+            name=name,
+            mime_type="application/pdf",
+            category="document",
+            blob_hash=blob_hash,
+            size_bytes=123,
+        ),
+    )
 
 
 def test_create_root_folder_creates_root(db: Session) -> None:
@@ -265,3 +291,52 @@ def test_list_files_in_folders_returns_only_owned_files_in_requested_folders(
     )
 
     assert [file.id for file in files] == [target_file.id]
+
+
+def test_list_files_for_search_backfill_joins_the_owning_folders_path(
+    db: Session,
+) -> None:
+    user = create_random_user(db)
+    root = repository.create_root_folder(session=db, owner_id=user.id)
+    docs = repository.create_folder(
+        session=db, owner_id=user.id, parent_id=root.id, name="docs", path="root.docs"
+    )
+    file = _create_file(session=db, owner_id=user.id, folder=docs)
+
+    results = repository.list_files_for_search_backfill(
+        session=db, batch_size=10_000, after_id=None
+    )
+
+    matching = [(f.id, path) for f, path in results if f.id == file.id]
+    assert matching == [(file.id, "root.docs")]
+
+
+def test_list_files_for_search_backfill_respects_batch_size(db: Session) -> None:
+    user = create_random_user(db)
+    root = repository.create_root_folder(session=db, owner_id=user.id)
+    for i in range(3):
+        _create_file(session=db, owner_id=user.id, folder=root, name=f"f{i}.pdf")
+
+    results = repository.list_files_for_search_backfill(
+        session=db, batch_size=2, after_id=None
+    )
+
+    assert len(results) == 2
+
+
+def test_list_files_for_search_backfill_after_id_excludes_seen_rows_only(
+    db: Session,
+) -> None:
+    user = create_random_user(db)
+    root = repository.create_root_folder(session=db, owner_id=user.id)
+    first = _create_file(session=db, owner_id=user.id, folder=root, name="a.pdf")
+    second = _create_file(session=db, owner_id=user.id, folder=root, name="b.pdf")
+    smaller_id, larger_id = sorted([first.id, second.id])
+
+    results = repository.list_files_for_search_backfill(
+        session=db, batch_size=10_000, after_id=smaller_id
+    )
+
+    result_ids = {f.id for f, _ in results}
+    assert smaller_id not in result_ids
+    assert larger_id in result_ids

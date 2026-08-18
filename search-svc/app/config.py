@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # search-svc on the internal compose network (decision 9).
     ELASTICSEARCH_URL: str = "http://localhost:9200"
 
+    # Optional, unset by default -- matches backend/app/core/config.py's own
+    # field. /metrics answers 404 until this is configured (decision 18).
+    METRICS_BEARER_TOKEN: str | None = None
+
     @property
     def all_cors_origins(self) -> list[str]:
         configured_origins = (

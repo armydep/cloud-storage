@@ -1,4 +1,6 @@
 import re
+import uuid
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -16,8 +18,18 @@ class FileCategory(str, Enum):
     other = "other"
 
 
+class SearchResultItem(BaseModel):
+    id: uuid.UUID
+    name: str
+    folder_path: str
+    mime_type: str
+    category: FileCategory
+    size_bytes: int
+    created_at: datetime
+
+
 class SearchResponse(BaseModel):
-    results: list[dict[str, object]] = Field(default_factory=list)
+    results: list[SearchResultItem] = Field(default_factory=list)
     next_cursor: str | None = None
 
 

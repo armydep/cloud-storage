@@ -4,8 +4,7 @@ How a search request travels from the client to a result set. Traefik selects th
 service by path prefix; `search-svc` verifies the token locally and never calls
 `backend` or PostgreSQL.
 
-The Elasticsearch steps are **planned (#134)**. Today the service authenticates,
-validates, and returns an empty result set.
+**Live.** The Elasticsearch steps below are implemented (#134).
 
 ```mermaid
 sequenceDiagram

@@ -1,5 +1,6 @@
 from typing import Any
 
+from app.es_index import SearchHit
 from app.indexer import handle_event
 
 
@@ -20,6 +21,21 @@ class _FakeSearchIndex:
 
     def delete_by_folder_prefix(self, *, owner_id: str, folder_path: str) -> None:
         self.deleted_prefixes.append((owner_id, folder_path))
+
+    def search(
+        self,
+        *,
+        owner_id: str,
+        folder_path: str,
+        query: str | None,
+        category: str | None,
+        limit: int,
+        search_after: list[Any] | None,
+    ) -> list[SearchHit]:
+        raise NotImplementedError("the indexer never queries")  # pragma: no cover
+
+    def is_healthy(self) -> bool:
+        raise NotImplementedError("the indexer never checks health")  # pragma: no cover
 
 
 def test_file_created_indexes_document_by_file_id() -> None:
