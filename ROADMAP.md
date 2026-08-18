@@ -48,7 +48,15 @@ Improve the main file-management workflow after the core operations are stable.
 - [ ] **3.1** Drag-and-drop uploads
 - [ ] **3.2** Upload progress, cancellation, and retry
 - [ ] **3.3** Multi-file upload
-- [ ] **3.4** Sorting, filtering, and search
+- [ ] **3.4** Sorting, filtering, and search — filtering and search have
+      shipped on web and mobile; sorting folder contents is not yet
+      implemented
+      ([#132](https://github.com/armydep/cloud-storage/issues/132),
+      [#133](https://github.com/armydep/cloud-storage/issues/133),
+      [#134](https://github.com/armydep/cloud-storage/issues/134),
+      [#135](https://github.com/armydep/cloud-storage/issues/135),
+      [#139](https://github.com/armydep/cloud-storage/issues/139),
+      [design](docs/phases/phase-10-search-service.md))
 - [ ] **3.5** File previews and metadata details
 - [ ] **3.6** Bulk selection and bulk actions
 - [ ] **3.7** Add creation timestamps to files

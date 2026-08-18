@@ -7,6 +7,7 @@ import 'package:cloudestorage/features/files/presentation/widgets/file_list_item
 import 'package:cloudestorage/features/notifications/application/notifications_providers.dart';
 import 'package:cloudestorage/features/notifications/presentation/notifications_screen.dart';
 import 'package:cloudestorage/features/notifications/presentation/widgets/notification_bell_icon.dart';
+import 'package:cloudestorage/features/search/presentation/search_results_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -69,6 +70,12 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
         appBar: AppBar(
           title: Text(filesState.folder?.name ?? 'Files'),
           actions: [
+            IconButton(
+              key: const Key('search-files-button'),
+              tooltip: 'Search files',
+              onPressed: () => _openSearch(context),
+              icon: const Icon(Icons.search),
+            ),
             IconButton(
               key: const Key('upload-file-button'),
               tooltip: 'Upload file',
@@ -278,6 +285,16 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => FileDetailScreen(file: file)),
+    );
+  }
+
+  void _openSearch(BuildContext context) {
+    final folderPath = ref.read(currentFolderPathProvider);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SearchResultsScreen(folderPath: folderPath),
+      ),
     );
   }
 

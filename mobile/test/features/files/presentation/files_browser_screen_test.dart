@@ -47,6 +47,54 @@ void main() {
       expect(find.byIcon(Icons.description), findsOneWidget);
     });
 
+    testWidgets('displays a folder path caption when provided', (
+      WidgetTester tester,
+    ) async {
+      final file = FileContent(
+        id: '2',
+        name: 'file.txt',
+        type: 'file',
+        sizeBytes: 1024,
+        category: 'document',
+        mimeType: 'text/plain',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: FileListItem(
+              item: file,
+              folderPathCaption: 'root.reports.q1',
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('1.0 KB'), findsOneWidget);
+      expect(find.text('root.reports.q1'), findsOneWidget);
+    });
+
+    testWidgets('omits the folder path caption by default', (
+      WidgetTester tester,
+    ) async {
+      final file = FileContent(
+        id: '2',
+        name: 'file.txt',
+        type: 'file',
+        sizeBytes: 1024,
+        category: 'document',
+        mimeType: 'text/plain',
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: FileListItem(item: file)),
+        ),
+      );
+
+      expect(find.text('root.reports.q1'), findsNothing);
+    });
+
     testWidgets('displays correct icon for different file categories', (
       WidgetTester tester,
     ) async {
