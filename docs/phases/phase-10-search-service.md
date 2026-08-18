@@ -254,7 +254,41 @@ ownership chokepoint, plus a backend backfill command that replays
 
 ### Slice 4 — search UI in the React SPA
 
-The front end for ROADMAP 3.4.
+The web front end for ROADMAP 3.4.
+
+### Slice 5 — search in the Flutter client
+
+The same folder-scoped search in the Android app, mirroring the
+backend / web / mobile split already used by phases 7 and 9.
+
+Mobile is less constrained than web here. `frontend/src/client/` is generated
+from OpenAPI, and the two-schema question is unresolved (see slice 4); the
+Flutter app hand-writes its API layer in `mobile/lib/features/files/data/`, so it
+simply adds a call against a different path prefix and can ship without waiting
+for that decision.
+
+It also needs no new navigation state: the app already tracks ltree folder paths
+(`getFolder({required String path})`, `navigateToFolder(item.path!)`) and already
+sends `folder_path` on upload, so decision 11's folder scoping fits what is
+there.
+
+**ROADMAP 3.4 is delivered when both clients ship**, not when the web UI does —
+matching how ROADMAP 6.7 was treated across phase 9's web and mobile slices.
+
+## Reaching search from the clients
+
+In production both clients point at the public API origin, which *is* Traefik, so
+path routing to `search-svc` happens transparently and neither client needs
+special handling. The web client already uses the Traefik origin in local
+development too.
+
+The Android emulator is the one exception, and it is a development-environment
+detail rather than an architectural one: Traefik routes by `Host(api.localhost)`,
+and from inside the emulator that name resolves to the emulator itself rather
+than the host machine. A local emulator run therefore needs the host's Traefik
+port with a matching `Host` header, or an equivalent arrangement. The default in
+`mobile/lib/core/config/app_config.dart` points at the backend's directly
+published port, which bypasses Traefik and cannot reach search.
 
 ## Acceptance flow
 
