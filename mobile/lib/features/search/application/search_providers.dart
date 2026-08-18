@@ -87,7 +87,7 @@ class FileSearchController extends StateNotifier<SearchState> {
         category: state.category,
         limit: _pageSize,
       );
-      if (generation != _requestGeneration) return;
+      if (!mounted || generation != _requestGeneration) return;
       state = state.copyWith(
         isLoading: false,
         results: page.results,
@@ -95,13 +95,13 @@ class FileSearchController extends StateNotifier<SearchState> {
         clearNextCursor: page.nextCursor == null,
       );
     } on ServerError catch (e) {
-      if (generation != _requestGeneration) return;
+      if (!mounted || generation != _requestGeneration) return;
       state = state.copyWith(isLoading: false, error: e.message);
     } on NetworkError catch (e) {
-      if (generation != _requestGeneration) return;
+      if (!mounted || generation != _requestGeneration) return;
       state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
-      if (generation != _requestGeneration) return;
+      if (!mounted || generation != _requestGeneration) return;
       state = state.copyWith(
         isLoading: false,
         error: 'Search failed. Please try again.',
@@ -124,7 +124,7 @@ class FileSearchController extends StateNotifier<SearchState> {
         limit: _pageSize,
         cursor: cursor,
       );
-      if (generation != _requestGeneration) return;
+      if (!mounted || generation != _requestGeneration) return;
       state = state.copyWith(
         isLoadingMore: false,
         results: [...state.results, ...page.results],
@@ -132,13 +132,13 @@ class FileSearchController extends StateNotifier<SearchState> {
         clearNextCursor: page.nextCursor == null,
       );
     } on ServerError catch (e) {
-      if (generation != _requestGeneration) return;
+      if (!mounted || generation != _requestGeneration) return;
       state = state.copyWith(isLoadingMore: false, error: e.message);
     } on NetworkError catch (e) {
-      if (generation != _requestGeneration) return;
+      if (!mounted || generation != _requestGeneration) return;
       state = state.copyWith(isLoadingMore: false, error: e.message);
     } catch (e) {
-      if (generation != _requestGeneration) return;
+      if (!mounted || generation != _requestGeneration) return;
       state = state.copyWith(
         isLoadingMore: false,
         error: 'Search failed. Please try again.',
