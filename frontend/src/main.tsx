@@ -12,14 +12,23 @@ import { ThemeProvider } from "./components/theme-provider"
 import { Toaster } from "./components/ui/sonner"
 import "./index.css"
 import { routeTree } from "./routeTree.gen"
+import {
+  ApiError as SearchApiError,
+  OpenAPI as SearchOpenAPI,
+} from "./search-client"
 
 OpenAPI.BASE = import.meta.env.VITE_API_URL
 OpenAPI.TOKEN = async () => {
   return localStorage.getItem("access_token") || ""
 }
+SearchOpenAPI.BASE = import.meta.env.VITE_API_URL
+SearchOpenAPI.TOKEN = OpenAPI.TOKEN
 
 const handleApiError = (error: Error) => {
-  if (error instanceof ApiError && [401, 403].includes(error.status)) {
+  if (
+    (error instanceof ApiError || error instanceof SearchApiError) &&
+    [401, 403].includes(error.status)
+  ) {
     localStorage.removeItem("access_token")
     window.location.href = "/login"
   }

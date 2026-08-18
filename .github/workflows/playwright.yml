@@ -34,6 +34,7 @@ jobs:
         filters: |
           changed:
             - backend/**
+            - search-svc/**
             - frontend/**
             - .env.example
             - compose*.yml
@@ -73,6 +74,8 @@ jobs:
       uses: astral-sh/setup-uv@v7
     - run: uv sync
       working-directory: backend
+    - run: uv sync
+      working-directory: search-svc
     - run: bun ci
       working-directory: frontend
     - run: bash scripts/generate-client.sh

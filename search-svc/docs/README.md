@@ -36,8 +36,7 @@ At the time of writing:
   lifecycle events, and the indexer that applies them.
 - **Slice 3 (#134) is live** — real query results, keyset pagination, and a
   backend backfill of files that predate the event stream.
-- **Slice 4 (#135) is planned** — search UI in the web client.
+- **Slice 4 (#135) is live** — folder-scoped search UI in the web client.
 
-The index is populated, correct, and queryable. `ROADMAP 3.4` stays unticked
-until Slice 4 ships — a working API without a UI to reach it isn't a delivered
-outcome yet.
+The index is populated, correct, and queryable from the web client. This slice
+does not tick `ROADMAP 3.4`; that roadmap item covers work beyond this web UI.
