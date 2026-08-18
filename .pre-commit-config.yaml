@@ -12,11 +12,11 @@ repos:
       - id: end-of-file-fixer
         exclude: |
             (?x)^(
-                frontend/src/client/.*|
+                frontend/src/(client|search-client)/.*|
                 backend/app/email-templates/build/.*
             )$
       - id: trailing-whitespace
-        exclude: ^frontend/src/client/.*
+        exclude: ^frontend/src/(client|search-client)/.*
   - repo: local
     hooks:
       - id: local-biome-check
