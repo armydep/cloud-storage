@@ -45,6 +45,12 @@ jobs:
     if: ${{ needs.changes.outputs.changed == 'true' }}
     timeout-minutes: 60
     runs-on: ubuntu-latest
+    # Chromium treats *.localhost as its own container's loopback even when
+    # Docker DNS has an explicit alias. Use the same non-.localhost origin as
+    # the disposable local runner so browser API traffic reaches Traefik.
+    env:
+      DOMAIN: cfs-e2e.test
+      STACK_NAME: cfs-e2e
     strategy:
       matrix:
         shardIndex: [1, 2, 3, 4]

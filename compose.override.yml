@@ -42,8 +42,15 @@ services:
       # allow running it locally
       - traefik.http.middlewares.https-redirect.contenttype.autodetect=false
     networks:
-      - traefik-public
-      - default
+      traefik-public:
+      default:
+        aliases:
+          # Chromium maps *.localhost to the Playwright container's loopback
+          # before Docker DNS can help, so both E2E entry points override
+          # DOMAIN with a non-.localhost name. This alias resolves that name to
+          # Traefik; the local runner also uses distinct router names so it
+          # cannot collide with a concurrently running dev stack.
+          - api.${DOMAIN?Variable not set}
 
   db:
     restart: "no"
@@ -245,16 +252,23 @@ services:
       context: .
       dockerfile: frontend/Dockerfile.playwright
       args:
-        - VITE_API_URL=http://backend:8000
+        # E2E traffic must traverse Traefik: it owns the path rule that sends
+        # /api/v1/search/* to search-svc. `proxy` provides this hostname as a
+        # Docker network alias above. CI and the isolated local runner both use
+        # a non-.localhost domain; the local runner additionally supplies a
+        # unique STACK_NAME to avoid discovering same-named dev routers.
+        - VITE_API_URL=http://api.${DOMAIN?Variable not set}
         - NODE_ENV=production
     ipc: host
     depends_on:
       - backend
       - mailcatcher
+      - proxy
+      - search-svc
     env_file:
       - .env
     environment:
-      - VITE_API_URL=http://backend:8000
+      - VITE_API_URL=http://api.${DOMAIN?Variable not set}
       - MAILCATCHER_HOST=http://mailcatcher:1080
       # For the reports when run locally
       - PLAYWRIGHT_HTML_HOST=0.0.0.0

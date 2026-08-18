@@ -2,24 +2,32 @@
 #
 # `docker compose -p <name>` alone separates containers, volumes and networks
 # from a developer's own `docker compose watch` stack, but not host port
-# publishing: compose.override.yml maps db/backend/mailcatcher/playwright to
-# the same host ports (5432, 8000, ...) the dev stack is already using, so a
-# second project would fail to start rather than coexist.
+# publishing: compose.override.yml maps proxy/db/elasticsearch/backend/
+# mailcatcher/playwright to the same host ports (80, 5432, 9200, ...) the dev
+# stack is already using, so a second project would fail to start rather than
+# coexist.
 #
 # None of those host ports are needed for this run: the `playwright` service
-# reaches its dependencies over the compose-internal network by service name
-# (e.g. http://backend:8000) regardless of what is or isn't published to the
-# host. `!reset` (Compose Specification, supported since Compose 2.24) clears
-# the inherited port list instead of appending to it.
+# reaches its dependencies over the compose-internal network (including
+# Traefik through proxy's api.${DOMAIN} alias) regardless of what is or isn't
+# published to the host. The local runner supplies a project-specific DOMAIN
+# and STACK_NAME because both Traefik projects watch the global Docker socket;
+# see scripts/test-e2e-local.sh. `!reset` (Compose Specification, supported
+# since Compose 2.24) clears the inherited port list instead of appending to it.
 # `minio` is deliberately not listed: it isn't in the dependency chain
-# `docker compose run --rm playwright` starts (playwright -> backend,
-# mailcatcher; backend -> db, prestart), so its ports are never bound during
-# this run. No current spec exercises real (unmocked) upload/download, so
-# that's fine today. If one is ever added and needs minio pulled into the
-# chain, its ports (9000, 9001) will need resetting here too, or the same
-# host-port collision this file exists to avoid comes right back.
+# `docker compose run --rm playwright` starts (playwright -> backend, proxy,
+# search-svc, mailcatcher; backend -> db, prestart; search-svc ->
+# elasticsearch), so its ports are never bound during this run. No current
+# spec exercises real (unmocked) upload/download, so that's fine today. If one
+# is ever added and needs minio pulled into the chain, its ports (9000, 9001)
+# will need resetting here too, or the same host-port collision this file
+# exists to avoid comes right back.
 services:
+  proxy:
+    ports: !reset []
   db:
+    ports: !reset []
+  elasticsearch:
     ports: !reset []
   backend:
     ports: !reset []

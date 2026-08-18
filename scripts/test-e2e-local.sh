@@ -28,10 +28,20 @@ if [ ! -f .env ]; then
 fi
 
 PROJECT_NAME="cfs-e2e"
+E2E_DOMAIN="cfs-e2e.test"
+E2E_STACK_NAME="cfs-e2e"
 COMPOSE=(docker compose -p "$PROJECT_NAME" -f compose.yml -f compose.override.yml -f compose.e2e.yml)
 
+run_compose() {
+  # Both Traefik containers watch the global Docker socket. Distinct router
+  # names and host rules prevent this disposable proxy from selecting the dev
+  # project's same-named backend/search services (or vice versa). `.test` also
+  # avoids Chromium's built-in loopback handling for `.localhost` names.
+  env DOMAIN="$E2E_DOMAIN" STACK_NAME="$E2E_STACK_NAME" "${COMPOSE[@]}" "$@"
+}
+
 cleanup() {
-  "${COMPOSE[@]}" down -v --remove-orphans
+  run_compose down -v --remove-orphans
 }
 # EXIT alone isn't guaranteed to fire on a real terminal Ctrl-C; INT/TERM are
 # belt-and-suspenders. If a run is ever killed hard enough to skip all three,
@@ -42,9 +52,10 @@ trap cleanup EXIT INT TERM
 
 # Clears anything left behind by a previous run that crashed before the trap
 # above could run. Safe against the dev stack: distinct project name.
-"${COMPOSE[@]}" down -v --remove-orphans
-# Scoped to what `run --rm playwright` actually starts (playwright -> backend,
-# mailcatcher; backend -> db, prestart) — a bare `build` would also build the
-# unrelated `frontend` image, which this run never touches.
-"${COMPOSE[@]}" build backend prestart playwright
-"${COMPOSE[@]}" run --rm playwright bunx playwright test "$@"
+run_compose down -v --remove-orphans
+# Scoped to what `run --rm playwright` actually builds (playwright -> backend,
+# proxy, search-svc, mailcatcher; backend -> db, prestart; search-svc ->
+# elasticsearch) — a bare `build` would also build unrelated application
+# images this run never touches. Proxy and Elasticsearch use upstream images.
+run_compose build backend prestart search-svc playwright
+run_compose run --rm playwright bunx playwright test "$@"
