@@ -134,8 +134,7 @@ behaviour as `GET /files` when the search engine is down.
 
 ## Client generation
 
-**Planned (#135).** `scripts/generate-client.sh` generates `frontend/src/client/`
-from the backend's OpenAPI schema alone. This service publishes a second schema,
-so either the script generates a second client or the schemas are merged. Until
-that is decided, the SPA has no generated bindings for these endpoints — and
-`frontend/src/client/` must not be hand-edited to add them.
+**Live.** `scripts/generate-client.sh` keeps the services independent: the
+backend schema generates `frontend/src/client/`, while this service's schema
+generates `frontend/src/search-client/`. Both outputs are checked in CI.
+`frontend/src/client/` remains backend-only and must not be hand-edited.

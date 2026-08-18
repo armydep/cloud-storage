@@ -11,6 +11,7 @@ import { getColumns } from "@/components/Files/columns"
 import UploadFileButton from "@/components/Files/UploadFileButton"
 import PendingFiles from "@/components/Pending/PendingFiles"
 import { Button } from "@/components/ui/button"
+import { SearchFiles } from "@/features/search"
 
 const filesSearchSchema = z.object({
   path: z.string().catch("root"),
@@ -141,7 +142,9 @@ function Files() {
           <UploadFileButton currentPath={currentPath} />
         </div>
       </div>
-      <FilesTable currentPath={currentPath} onOpenFolder={openFolder} />
+      <SearchFiles currentPath={currentPath}>
+        <FilesTable currentPath={currentPath} onOpenFolder={openFolder} />
+      </SearchFiles>
     </div>
   )
 }

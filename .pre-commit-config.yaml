@@ -21,7 +21,7 @@ repos:
     hooks:
       - id: local-biome-check
         name: biome check
-        entry: npm run lint
+        entry: bun run lint
         language: system
         types: [text]
         files: ^frontend/
@@ -45,4 +45,6 @@ repos:
         entry: bash ./scripts/generate-client.sh
         pass_filenames: false
         language: unsupported
-        files: ^backend/.*$|^scripts/generate-client\.sh$
+        # Backend and search-svc publish independent schemas, so both generated
+        # clients must stay in sync when either service contract changes.
+        files: ^backend/.*$|^search-svc/.*$|^frontend/openapi(-search)?-ts\.config\.ts$|^scripts/generate-client\.sh$

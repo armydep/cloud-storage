@@ -26,6 +26,7 @@ jobs:
           filters: |
             changed:
               - backend/**
+              - search-svc/**
               - frontend/**
               - package.json
               - bun.lock
@@ -50,6 +51,9 @@ jobs:
       - name: Install backend dependencies
         run: uv sync
         working-directory: backend
+      - name: Install search service dependencies
+        run: uv sync
+        working-directory: search-svc
       - name: Install frontend dependencies
         run: bun ci
         working-directory: frontend
@@ -58,7 +62,17 @@ jobs:
       - name: Generate frontend client
         run: bash scripts/generate-client.sh
       - name: Verify generated frontend client is committed
-        run: git diff --exit-code -- frontend/openapi.json frontend/src/client
+        run: |
+          generated_status="$(git status --porcelain --untracked-files=all -- \
+            frontend/openapi.json \
+            frontend/search-openapi.json \
+            frontend/src/client \
+            frontend/src/search-client)"
+          if [ -n "$generated_status" ]; then
+            echo "Generated frontend clients are not committed:"
+            echo "$generated_status"
+            exit 1
+          fi
       - name: Build frontend
         run: bun run --filter frontend build
 

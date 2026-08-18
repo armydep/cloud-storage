@@ -36,7 +36,28 @@ function CopyId({ id }: { id: string }) {
   )
 }
 
-function formatSize(value?: number | null) {
+export function FileNameContent({
+  name,
+  isFolder = false,
+}: {
+  name: string
+  isFolder?: boolean
+}) {
+  const Icon = isFolder ? Folder : File
+
+  return (
+    <>
+      <Icon
+        className={
+          isFolder ? "size-4 text-blue-500" : "size-4 text-muted-foreground"
+        }
+      />
+      <span className="font-medium">{name}</span>
+    </>
+  )
+}
+
+export function formatSize(value?: number | null) {
   if (value == null) {
     return "—"
   }
@@ -46,7 +67,7 @@ function formatSize(value?: number | null) {
   }).format(value)
 }
 
-function formatDate(value?: string | null) {
+export function formatDate(value?: string | null) {
   if (!value) {
     return "—"
   }
@@ -72,18 +93,8 @@ export function getColumns({
       header: "Name",
       cell: ({ row }) => {
         const isFolder = row.original.type === "folder"
-        const Icon = isFolder ? Folder : File
         const nameContent = (
-          <>
-            <Icon
-              className={
-                isFolder
-                  ? "size-4 text-blue-500"
-                  : "size-4 text-muted-foreground"
-              }
-            />
-            <span className="font-medium">{row.original.name}</span>
-          </>
+          <FileNameContent name={row.original.name} isFolder={isFolder} />
         )
 
         if (isFolder && row.original.path) {

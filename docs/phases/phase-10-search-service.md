@@ -276,11 +276,11 @@ The web front end for ROADMAP 3.4.
 The same folder-scoped search in the Android app, mirroring the
 backend / web / mobile split already used by phases 7 and 9.
 
-Mobile is less constrained than web here. `frontend/src/client/` is generated
-from OpenAPI, and the two-schema question is unresolved (see slice 4); the
-Flutter app hand-writes its API layer in `mobile/lib/features/files/data/`, so it
-simply adds a call against a different path prefix and can ship without waiting
-for that decision.
+Mobile is less constrained than web here. The web build keeps the schemas
+independent: `frontend/src/client/` is generated from the backend schema and
+`frontend/src/search-client/` from the search-service schema. The Flutter app
+hand-writes its API layer in `mobile/lib/features/files/data/`, so it simply
+adds a call against a different path prefix.
 
 It also needs no new navigation state: the app already tracks ltree folder paths
 (`getFolder({required String path})`, `navigateToFolder(item.path!)`) and already
