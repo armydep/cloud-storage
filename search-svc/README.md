@@ -25,8 +25,11 @@ uv run bash scripts/lint.sh
 `uv run pytest` includes a real Elasticsearch integration test
 (`tests/test_es_index.py`) that starts a throwaway container via
 `testcontainers`, so Docker must be running for the full suite; the rest of the
-suite (`tests/test_api.py`, `tests/test_broker.py`, `tests/test_indexer.py`)
-needs no external services.
+suite (`tests/test_api.py`, `tests/test_broker.py`, `tests/test_indexer.py`,
+`tests/test_query.py`, `tests/test_cursor.py`, `tests/test_search_service.py`,
+`tests/test_es_index_availability.py`) needs no external services -- query
+construction and pagination are tested behind the `SearchIndex` protocol with
+a fake, the same way the indexer's tests are.
 
 In the local compose stack, clients reach the service through Traefik at
 `http://api.localhost/api/v1/search/*`. The frontend uses that Traefik origin for

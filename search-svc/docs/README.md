@@ -34,8 +34,10 @@ At the time of writing:
   contract.
 - **Slice 2 (#133) is live** — Elasticsearch, the index mapping and alias, file
   lifecycle events, and the indexer that applies them.
-- **Slice 3 (#134) is planned** — real query results, pagination, and backfill of
-  files that predate the event stream.
+- **Slice 3 (#134) is live** — real query results, keyset pagination, and a
+  backend backfill of files that predate the event stream.
 - **Slice 4 (#135) is planned** — search UI in the web client.
 
-So the index is populated and correct, but queries still return empty results.
+The index is populated, correct, and queryable. `ROADMAP 3.4` stays unticked
+until Slice 4 ships — a working API without a UI to reach it isn't a delivered
+outcome yet.

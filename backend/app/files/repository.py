@@ -430,6 +430,28 @@ def delete_blob(*, session: Session, blob: FileBlob) -> None:
     session.delete(blob)
 
 
+def list_files_for_search_backfill(
+    *, session: Session, batch_size: int, after_id: uuid.UUID | None
+) -> list[tuple[StoredFile, str]]:
+    """Keyset-paginated over StoredFile.id, joined to Folder for folder_path.
+
+    Files carry no folder_path of their own -- it lives on the folder the
+    file belongs to (search_backfill.py needs it for the same reason
+    enqueue_file_created does at upload time). Keyset rather than offset
+    pagination so a large table is never loaded into memory at once and
+    scanning doesn't degrade as the backfill proceeds deeper into it.
+    """
+    statement = (
+        select(StoredFile, Folder.path)
+        .join(Folder, col(Folder.id) == col(StoredFile.folder_id))
+        .order_by(col(StoredFile.id))
+        .limit(batch_size)
+    )
+    if after_id is not None:
+        statement = statement.where(col(StoredFile.id) > after_id)
+    return list(session.exec(statement).all())
+
+
 def get_file_by_folder_and_name(
     *, session: Session, folder_id: uuid.UUID, name: str
 ) -> StoredFile | None:

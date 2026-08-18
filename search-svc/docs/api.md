@@ -58,18 +58,30 @@ passing another user's folder path returns nothing rather than their files.
 
 ```json
 {
-  "results": [],
-  "next_cursor": null
+  "results": [
+    {
+      "id": "b3f1c2a4-...",
+      "name": "report_2024.pdf",
+      "folder_path": "root.reports",
+      "mime_type": "application/pdf",
+      "category": "document",
+      "size_bytes": 123456,
+      "created_at": "2026-08-17T12:00:00Z"
+    }
+  ],
+  "next_cursor": "eyJ..."
 }
 ```
 
 `next_cursor` is `null` on the last page. It is opaque: clients must pass it back
-unmodified and must not construct or parse one.
+unmodified and must not construct or parse one — it encodes only Elasticsearch
+sort values, never `owner_id` or anything else that could change *whose*
+results a page returns. See phase document constraint 5.
 
-**Live:** the endpoint validates and authenticates, then returns an empty result
-set. It queries nothing. Nothing here returns fabricated data.
-
-**Planned (#134):** real matches, populated `results`, working pagination.
+**Live:** real matches from Elasticsearch, ranked, paginated. `owner_id` is
+applied as a mandatory filter at a single chokepoint every query routes
+through — independently of `folder_path` — so passing another user's folder
+path returns nothing rather than their files.
 
 ### Errors
 
@@ -77,12 +89,14 @@ set. It queries nothing. Nothing here returns fabricated data.
 | --- | --- |
 | 401 | No bearer token |
 | 403 | Token invalid, expired, or wrongly signed |
-| 422 | `folder_path` missing, malformed, or failing the ltree pattern; `limit` out of range |
-| 503 | *Planned (#134)* — Elasticsearch unavailable |
+| 422 | `folder_path` missing, malformed, or failing the ltree pattern; `limit` out of range; `cursor` malformed or untrusted |
+| 503 | Elasticsearch unavailable |
 
 A malformed `folder_path` is rejected at the request boundary, before reaching
 any query builder. This mirrors the backend rule that an unvalidated ltree path
 must never reach the datastore, where it surfaces as a 500 rather than a 422.
+A cursor that fails to decode, or whose shape doesn't match a sort-value
+triple, is rejected the same way — it never reaches Elasticsearch.
 
 On 503 rather than empty results when the search engine is down: an empty result
 set is indistinguishable from "no matches" and would hide an outage from users
@@ -90,13 +104,17 @@ and operators alike. See phase document decision 15.
 
 ### Pagination
 
-**Planned (#134).** Keyset pagination using Elasticsearch `search_after` behind
-the opaque cursor. Not offset — `from`/`size` degrades deep into result sets.
+**Live.** Keyset pagination using Elasticsearch `search_after` behind the
+opaque cursor. Not offset — `from`/`size` degrades deep into result sets.
 
-The sort is `_score desc, created_at desc, _id asc`. The `_id` term is not
-stylistic: `search_after` requires a deterministic total ordering, so a unique
-tiebreaker is needed regardless of ranking preference. Without it, pagination
-silently duplicates or skips results whenever scores tie.
+The sort is `_score desc, created_at desc, doc_id asc` — `doc_id` is a mapped
+field that mirrors the document's Elasticsearch `_id` (the file id) purely so
+it can be used as a sort tiebreaker; Elasticsearch disables fielddata on the
+real `_id` field by default, so sorting on it directly is rejected. The
+tiebreaker is not stylistic: `search_after` requires a deterministic total
+ordering, so a unique tiebreaker is needed regardless of ranking preference.
+Without it, pagination silently duplicates or skips results whenever scores
+tie.
 
 ## `GET /api/v1/search/health`
 
@@ -110,9 +128,9 @@ silently duplicates or skips results whenever scores tie.
 }
 ```
 
-Currently a static response — it reports the configured index and engine names,
-not live cluster state. **Planned (#134):** report real index and cluster
-reachability, alongside the 503 behaviour for an unavailable engine.
+Reports live cluster reachability via a lightweight ping — 200 with the body
+above when Elasticsearch answers, 503 when it doesn't. Alongside the same 503
+behaviour as `GET /files` when the search engine is down.
 
 ## Client generation
 
