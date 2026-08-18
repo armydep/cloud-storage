@@ -53,22 +53,63 @@ jobs:
         run: curl -fsS http://localhost:5173
       - name: Verify Traefik routes search and backend paths
         run: |
-          access_token="$(
-            curl -fsS \
+          set -o pipefail
+
+          route_retry_attempts=10
+          route_request() {
+            local attempt
+            local response
+            for ((attempt = 1; attempt <= route_retry_attempts; attempt++)); do
+              if response="$(
+                curl -fsS --connect-timeout 2 --max-time 5 "$@"
+              )"; then
+                printf '%s' "$response"
+                return 0
+              fi
+              if ((attempt < route_retry_attempts)); then
+                sleep 1
+              fi
+            done
+            return 1
+          }
+
+          dump_proxy_logs() {
+            docker compose logs --no-color --tail=200 proxy
+          }
+
+          # `docker compose up --wait` waits for container health, but Traefik
+          # may still be processing the final Docker provider event. Capture
+          # each attempt independently so a partial response cannot contaminate
+          # the next one; timeouts bound each routed request's wait to 59s.
+          if ! login_response="$(
+            route_request \
               -H 'Host: api.localhost' \
               -H 'Content-Type: application/x-www-form-urlencoded' \
               --data 'username=admin@example.com&password=changethis' \
-              http://localhost/api/v1/login/access-token \
-              | jq -r .access_token
-          )"
-          curl -fsS \
+              http://localhost/api/v1/login/access-token
+          )" || ! access_token="$(
+            jq -er '.access_token // empty' <<<"$login_response"
+          )"; then
+            dump_proxy_logs
+            exit 1
+          fi
+          if ! search_response="$(
+            route_request \
+              -H 'Host: api.localhost' \
+              -H "Authorization: Bearer ${access_token}" \
+              'http://localhost/api/v1/search/files?folder_path=root'
+          )" || ! jq -e \
+            '.results == [] and .next_cursor == null' \
+            <<<"$search_response"; then
+            dump_proxy_logs
+            exit 1
+          fi
+          if ! route_request \
             -H 'Host: api.localhost' \
-            -H "Authorization: Bearer ${access_token}" \
-            'http://localhost/api/v1/search/files?folder_path=root' \
-            | jq -e '.results == [] and .next_cursor == null'
-          curl -fsS \
-            -H 'Host: api.localhost' \
-            http://localhost/api/v1/utils/health-check
+            http://localhost/api/v1/utils/health-check; then
+            dump_proxy_logs
+            exit 1
+          fi
       - name: Verify search service has no PostgreSQL credentials
         run: |
           if docker compose exec -T search-svc env | grep -q '^POSTGRES_'; then
