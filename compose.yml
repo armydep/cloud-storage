@@ -36,6 +36,35 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
 
+  # Single node (decision 3 in docs/phases/phase-10-search-service.md):
+  # clustering, replicas and snapshot/restore are explicitly out of scope.
+  # No ingress -- reachable only by search-indexer and search-svc on the
+  # internal network, never through Traefik, and no port is published here
+  # (compose.override.yml publishes one for local debugging only).
+  #
+  # Resource floor: 512m/512m heap plus xpack.security.enabled=false, since
+  # this node has no ingress to protect and TLS/auth would need certificates
+  # and credentials this design never introduces. Linux hosts need
+  # `vm.max_map_count` raised to at least 262144
+  # (`sudo sysctl -w vm.max_map_count=262144`) or Elasticsearch fails to
+  # start with no client-visible error -- a container that never becomes
+  # healthy is the symptom.
+  elasticsearch:
+    image: elasticsearch:8.17.0
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      retries: 10
+      start_period: 60s
+      timeout: 10s
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+
   adminer:
     image: adminer
     restart: always
@@ -183,6 +212,13 @@ services:
       - SECRET_KEY=${SECRET_KEY?Variable not set}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
+      # Not used by this service's own request path yet (only search-indexer
+      # consumes RabbitMQ) -- required anyway because Settings is shared
+      # between the two and RABBITMQ_USER/PASSWORD have no default, matching
+      # backend/app/core/config.py's own RabbitMQ fields.
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
     build:
       context: .
       dockerfile: search-svc/Dockerfile
@@ -203,6 +239,29 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-search-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-search-https.tls=true
       - traefik.http.routers.${STACK_NAME?Variable not set}-search-https.tls.certresolver=le
+
+  search-indexer:
+    image: '${DOCKER_IMAGE_SEARCH:?Variable not set}:${TAG:-latest}'
+    restart: always
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+        restart: true
+      rabbitmq:
+        condition: service_healthy
+        restart: true
+    command: python -m app.indexer
+    environment:
+      - SECRET_KEY=${SECRET_KEY?Variable not set}
+      - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=${RABBITMQ_USER?Variable not set}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    build:
+      context: .
+      dockerfile: search-svc/Dockerfile
 
   notification-relay:
     image: '${DOCKER_IMAGE_BACKEND:?Variable not set}:${TAG:-latest}'
@@ -326,6 +385,7 @@ services:
 volumes:
   app-db-data:
   rabbitmq-data:
+  elasticsearch-data:
 
 networks:
   traefik-public:

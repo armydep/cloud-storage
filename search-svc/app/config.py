@@ -26,6 +26,18 @@ class Settings(BaseSettings):
         list[AnyUrl] | str, BeforeValidator(parse_cors)
     ] = []
 
+    # search-svc's own copies, matching backend/app/core/config.py's shape --
+    # it is a genuinely separate deployable (decision 1) and connects to the
+    # same broker with the same credentials, but never imports backend code.
+    RABBITMQ_HOST: str = "localhost"
+    RABBITMQ_PORT: int = 5672
+    RABBITMQ_USER: str
+    RABBITMQ_PASSWORD: str
+
+    # No authentication: Elasticsearch has no ingress and is reachable only by
+    # search-svc on the internal compose network (decision 9).
+    ELASTICSEARCH_URL: str = "http://localhost:9200"
+
     @property
     def all_cors_origins(self) -> list[str]:
         configured_origins = (

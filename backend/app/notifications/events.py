@@ -1,2 +1,5 @@
 USER_REGISTERED = "user_registered"
 FILE_SHARED = "file_shared"
+FILE_CREATED = "file_created"
+FILE_DELETED = "file_deleted"
+FOLDER_DELETED = "folder_deleted"

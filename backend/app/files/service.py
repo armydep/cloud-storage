@@ -364,6 +364,17 @@ def complete_upload(
             request=request,
             commit=False,
         )
+        notification_repository.enqueue_file_created(
+            session=session,
+            file_id=file.id,
+            owner_id=owner_id,
+            name=file.name,
+            folder_path=folder.path,
+            mime_type=file.mime_type,
+            category=file.category,
+            size_bytes=file.size_bytes,
+            created_at=file.created_at,
+        )
         if pending_upload is not None:
             repository.delete_pending_upload(
                 session=session,
@@ -437,6 +448,14 @@ def delete_file(*, session: Session, owner_id: uuid.UUID, file_id: uuid.UUID) ->
     object_key = blob.object_key
     repository.delete_file(session=session, file=file)
     repository.decrement_blob_ref_count(blob=blob)
+    # Enqueued -- and flushed -- before the S3 delete below, which is
+    # irreversible and outside the transaction. If this flush fails, the
+    # transaction rolls back here, before anything unrecoverable happens.
+    notification_repository.enqueue_file_deleted(
+        session=session,
+        file_id=file.id,
+        owner_id=owner_id,
+    )
 
     should_delete_object = blob.ref_count == 0
     if should_delete_object:
@@ -460,6 +479,7 @@ def delete_folder(
     )
     if not folder or folder.path == ROOT_FOLDER_PATH:
         raise FolderNotFoundError
+    folder_path = folder.path
 
     subtree_folders = repository.list_folder_subtree(
         session=session,
@@ -499,6 +519,14 @@ def delete_folder(
 
     session.flush()
     repository.delete_folder(session=session, folder=folder)
+    # Enqueued -- and flushed -- before the S3 deletes below, which are
+    # irreversible and outside the transaction. If this flush fails, the
+    # transaction rolls back here, before anything unrecoverable happens.
+    notification_repository.enqueue_folder_deleted(
+        session=session,
+        owner_id=owner_id,
+        folder_path=folder_path,
+    )
     for object_key in object_keys_to_delete:
         try:
             storage.delete_object(object_key=object_key)
