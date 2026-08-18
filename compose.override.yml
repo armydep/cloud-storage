@@ -81,6 +81,14 @@ services:
     ports:
       - "8080:8080"
 
+  # Every backend-derived local service selects the same development target.
+  # They also share one image tag, so mixing targets would make the final tag
+  # depend on Compose build order. The base compose file uses the Dockerfile's
+  # final runtime stage instead.
+  prestart:
+    build:
+      target: development
+
   backend:
     restart: "no"
     ports:
@@ -88,6 +96,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: development
     # command: sleep infinity  # Infinite loop to keep container alive doing nothing
     command:
       - fastapi
@@ -144,6 +153,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: development
     develop:
       watch:
         - path: ./backend
@@ -158,6 +168,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: development
     develop:
       watch:
         - path: ./backend
@@ -177,6 +188,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: development
     develop:
       watch:
         - path: ./backend

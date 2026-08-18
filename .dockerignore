@@ -1,0 +1,28 @@
+# Every Compose build uses the repository root as its context. Ignore files
+# here rather than in service subdirectories so Docker does not transfer local
+# environments, generated test output, or credentials to any builder.
+.git
+
+# Keep credentials out of every nested service context while retaining the
+# checked-in templates developers and CI use to create local environments.
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.sample
+
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.py[cod]
+**/.mypy_cache
+**/.pytest_cache
+**/.ruff_cache
+**/.coverage
+**/htmlcov
+
+frontend/blob-report
+frontend/playwright-report
+frontend/test-results
+frontend/dist
+mobile/.dart_tool
+mobile/build
