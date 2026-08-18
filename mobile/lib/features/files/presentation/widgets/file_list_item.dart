@@ -13,6 +13,12 @@ class FileListItem extends StatelessWidget {
   final double? uploadProgress;
   final String? uploadError;
   final bool isDeleting;
+  // Set only by search results, which can come from any subfolder of the
+  // searched one (design doc decision 11): without this, two same-named
+  // files in different subfolders are indistinguishable. The folder browser
+  // never passes it, since every row there is already known to be in the
+  // folder being viewed.
+  final String? folderPathCaption;
 
   const FileListItem({
     required this.item,
@@ -26,6 +32,7 @@ class FileListItem extends StatelessWidget {
     this.uploadProgress,
     this.uploadError,
     this.isDeleting = false,
+    this.folderPathCaption,
     super.key,
   });
 
@@ -39,7 +46,7 @@ class FileListItem extends StatelessWidget {
               ? const Icon(Icons.folder_outlined, color: Colors.blue)
               : _getCategoryIcon(),
           title: Text(item.name),
-          subtitle: _buildSubtitle(),
+          subtitle: _buildSubtitleWithCaption(),
           onTap: onTap,
           trailing: _buildTrailing(),
         ),
@@ -57,6 +64,24 @@ class FileListItem extends StatelessWidget {
             bottom: 0,
             child: LinearProgressIndicator(value: uploadProgress),
           ),
+      ],
+    );
+  }
+
+  Widget? _buildSubtitleWithCaption() {
+    final subtitle = _buildSubtitle();
+    if (folderPathCaption == null) return subtitle;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ?subtitle,
+        Text(
+          folderPathCaption!,
+          style: const TextStyle(fontSize: 11, color: Colors.grey),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }

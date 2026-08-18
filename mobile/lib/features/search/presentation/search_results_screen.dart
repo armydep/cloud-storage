@@ -231,6 +231,9 @@ class _SearchResultsScreenState extends ConsumerState<SearchResultsScreen> {
               : null,
           downloadProgress: filesState.getDownloadProgress(item.id),
           downloadError: filesState.getDownloadError(item.id),
+          // Results can come from any subfolder of the one searched
+          // (decision 11), so the row must say which one.
+          folderPathCaption: result.folderPath,
         );
       },
     );
