@@ -107,7 +107,7 @@ flutter run
 flutter build apk --dart-define=API_BASE_URL=https://api.example.com
 ```
 
-The Android application ID is `com.armydep.cloudestorage`.
+The Android application ID is `com.armydep.cloudstorage`.
 
 ## Authentication
 
@@ -177,7 +177,7 @@ fail or return nothing against it. A human with access to the
    production (phase 12 design doc, decision 8). Do not share one project
    across environments.
 2. Register an Android app in each with application ID
-   `com.armydep.cloudestorage`.
+   `com.armydep.cloudstorage`.
 3. Download each project's `google-services.json` and swap it into
    `android/app/google-services.json` for the environment you are building
    against, replacing the placeholder committed here.

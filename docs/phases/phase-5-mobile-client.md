@@ -11,7 +11,7 @@ device and object storage using presigned URLs, just like the web frontend.
 
 The Flutter application is initialized and buildable at `mobile/`, with:
 
-- Android platform support only, application ID `com.armydep.cloudestorage`
+- Android platform support only, application ID `com.armydep.cloudstorage`
 - Environment-aware backend API URL configuration via `--dart-define=API_BASE_URL=...`
 - Base HTTP client infrastructure (`app/core/network/api_client.dart`) for authenticated requests
 - Placeholder launchable screen
