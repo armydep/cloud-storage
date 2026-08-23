@@ -118,6 +118,23 @@ ROADMAP.md when this phase is scheduled.
     In production both stay bound: push has no delivery guarantee, so the feed
     must keep receiving everything (decision 2).
 
+16. **Push is opt-in.** A user receives no push notifications until they turn
+    them on. A freshly installed app is silent by default.
+
+    The preference is stored per user and checked by the push consumer before it
+    fans out to any token. A user who switches it off has their tokens **skipped,
+    not deleted** — switching it back on must not require re-registering the
+    device.
+
+    This is a *push-channel* preference only. Email and the in-app feed are
+    unaffected: turning push off silences the phone, it does not stop the feed
+    entry being recorded or the email being sent.
+
+    **There are therefore two independent gates, and both must be open:** the
+    Android runtime `POST_NOTIFICATIONS` permission, and this application
+    preference. Recorded explicitly because "push is silent" will otherwise be
+    investigated as a bug when it is in fact the designed default.
+
 ## Architecture
 
 ```
@@ -136,6 +153,32 @@ notification_outbox ──► relay ──► RabbitMQ exchange: notifications
 Everything left of `q.push` already exists. The consumer looks up the recipient's
 device tokens, sends to each, and prunes the ones FCM rejects.
 
+### What push shares, and what it owns
+
+```
+SHARED — one spine for every channel
+  notification_outbox     one row per event
+  relay                   outbox → exchange
+  notifications exchange  topic, routed by event_type
+
+OWNED BY PUSH                        OWNED BY THE IN-APP FEED
+  q.push + q.push.dead-letter          q.inapp + its dead-letter
+  push consumer process                inapp consumer process
+  device_tokens table                  notifications table
+  FCM service-account credential       —
+  mobile: firebase_messaging           mobile: /notifications polling
+          and OS callbacks                     and feed screen state
+```
+
+The two channels share no tables, no queues, no consumer process and no client
+code path. The push consumer never writes to `notifications`; the in-app consumer
+has no knowledge of FCM. Unbinding or breaking one leaves the other working.
+
+What they do share is the spine: an event enters the outbox once, and the broker
+fans it out. That is what makes adding a channel a queue binding rather than a
+schema change (phase 8 decision 4), and it is also why decision 15 works — the
+binding is the only join between the spine and a channel.
+
 ## Data model
 
 ```sql
@@ -149,6 +192,15 @@ device_tokens
 
   INDEX (user_id)
 ```
+
+```sql
+user
+  push_enabled  boolean  NOT NULL  DEFAULT false   -- opt-in, decision 16
+```
+
+`push_enabled` defaults to `false`, which is what makes push opt-in rather than
+opt-out. The push consumer reads it before fanning out; the in-app and email
+consumers never look at it.
 
 `token` is unique globally, not per user: the same device registering under a
 second account must move the token rather than duplicate it, which is what makes
@@ -177,8 +229,10 @@ to them, which is why decision 5 is load-bearing rather than tidying.
 
 ### Slice 1 — device token registration
 
-`device_tokens` table; register and unregister endpoints; `firebase_messaging` in
-the Flutter app; runtime `POST_NOTIFICATIONS` permission on Android 13+; register
+`device_tokens` table; register and unregister endpoints; `user.push_enabled`
+defaulting to `false` and an endpoint to set it; `firebase_messaging` in the
+Flutter app; runtime `POST_NOTIFICATIONS` permission on Android 13+; a settings
+toggle that requests the OS permission and sets the preference together; register
 on login, re-register on refresh, unregister on logout; Firebase project setup
 for development.
 
@@ -190,9 +244,10 @@ alternative if the combined size is acceptable.
 
 ### Slice 2 — push delivery for `file_shared`
 
-`q.push` binding and dead-letter queue; a push consumer that fans out to a user's
-tokens and prunes rejected ones; the FCM service-account credential in the deploy
-pipeline; the manual verification procedure from decision 9.
+`q.push` binding and dead-letter queue; a push consumer that checks
+`user.push_enabled`, fans out to that user's tokens and prunes rejected ones; the
+FCM service-account credential in the deploy pipeline; the manual verification
+procedure from decision 9.
 
 ### Slice 3 — tap to open
 
@@ -201,8 +256,10 @@ than the app's default screen.
 
 ## Acceptance flow
 
-1. A user signs in on an Android device and grants notification permission.
-2. The device's FCM token is registered against that user.
+1. A user signs in on an Android device. No push arrives yet — push is opt-in
+   (decision 16).
+2. They enable push in settings, granting the OS permission and setting
+   `push_enabled` in one step. The device's FCM token is registered against them.
 3. Another user shares a file with them.
 4. The event reaches `q.push`; the consumer sends to every token the recipient
    holds.
@@ -226,25 +283,17 @@ than the app's default screen.
 
 ## Open questions
 
-1. **Do per-user notification preferences come along in this phase?**
-
-   There is currently no user-facing way to switch any notification off, on any
-   channel. That has been deliberate since phase 9, and it is tolerable for
-   transactional email.
-
-   Push is different in kind: it makes a phone buzz. "How do I turn this off" is
-   the usual first request after any push feature ships, and the answer today
-   would be "uninstall the app or revoke the OS permission" — which silences
-   everything, including notifications the user did want.
-
-   Note this is distinct from decision 15. Unbinding a queue silences a channel
-   for *every* user and is an operator action; a preference silences it for *one*
-   user and is theirs to set.
-
-   Recommendation: include at minimum a per-channel on/off switch for push in
-   this phase, even if full per-event preferences stay deferred.
+None open.
 
 Resolved during design, retained for context:
 
-- **Payload content** — settled as decision 12: data-only, no file names through
-  Google's infrastructure.
+- **Payload content** — settled as decision 12: data-only, with no file names
+  passing through Google's infrastructure.
+- **Whether preferences ship with this phase** — settled as decision 16: yes, and
+  as opt-in rather than opt-out. Full per-event preferences remain deferred; this
+  is a single per-channel switch for push.
+
+Note the distinction between decisions 15 and 16, which sound similar and are
+not. Unbinding a queue silences a channel for *every* user and is an operator
+action taken on the broker. `push_enabled` silences it for *one* user and is
+theirs to set. Neither substitutes for the other.
