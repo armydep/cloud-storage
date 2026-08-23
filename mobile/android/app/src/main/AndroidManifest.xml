@@ -5,7 +5,7 @@
     <!-- Required on Android 13+ (API 33) to show any notification at all;
          a device token can still be obtained without it. Requested at
          runtime from the push settings toggle, not granted just by being
-         declared here -- see FirebaseFcmClient.requestPermission. -->
+         declared here; see FirebaseFcmClient.requestPermission. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:allowBackup="false"
