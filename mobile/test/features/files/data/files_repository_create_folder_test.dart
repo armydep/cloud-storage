@@ -121,6 +121,15 @@ class _MockApiClient implements ApiClient {
   }
 
   @override
+  Future<Map<String, dynamic>> patchJson(
+    String path, {
+    bool authenticated = false,
+    Map<String, dynamic>? body,
+  }) async {
+    throw UnimplementedError();
+  }
+
+  @override
   Future<Map<String, dynamic>> postJson(
     String path, {
     bool authenticated = false,

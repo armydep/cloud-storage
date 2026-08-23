@@ -16,6 +16,10 @@ class UserBase(SQLModel):
     is_active: bool = True
     is_superuser: bool = False
     full_name: str | None = Field(default=None, max_length=255)
+    # Opt-in, not opt-out (phase 12 decision 16): a fresh install is silent
+    # until the user explicitly turns push on. Push-channel only -- email and
+    # the in-app feed never read this.
+    push_enabled: bool = False
 
 
 # Properties to receive via API on creation
@@ -38,6 +42,7 @@ class UserUpdate(UserBase):
 class UserUpdateMe(SQLModel):
     full_name: str | None = Field(default=None, max_length=255)
     email: EmailStr | None = Field(default=None, max_length=255)
+    push_enabled: bool | None = Field(default=None)
 
 
 class UpdatePassword(SQLModel):

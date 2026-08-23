@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "538874850506",
+    "project_id": "cloud-storage-dev-3df06",
+    "storage_bucket": "cloud-storage-dev-3df06.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:538874850506:android:5d235c46a9d25d1af05833",
+        "android_client_info": {
+          "package_name": "com.armydep.cloudstorage"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDXaFdc0KVcy2W3_zxsgOXz6SGGpQu-xvo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

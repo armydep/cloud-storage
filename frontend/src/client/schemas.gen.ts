@@ -97,6 +97,60 @@ export const CompleteUploadRequestSchema = {
     title: 'CompleteUploadRequest'
 } as const;
 
+export const DevicePlatformSchema = {
+    type: 'string',
+    enum: ['android'],
+    title: 'DevicePlatform'
+} as const;
+
+export const DeviceTokenPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        token: {
+            type: 'string',
+            title: 'Token'
+        },
+        platform: {
+            type: 'string',
+            title: 'Platform'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        last_seen_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Last Seen At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'token', 'platform', 'created_at', 'last_seen_at'],
+    title: 'DeviceTokenPublic'
+} as const;
+
+export const DeviceTokenRegisterSchema = {
+    properties: {
+        token: {
+            type: 'string',
+            maxLength: 4096,
+            minLength: 1,
+            title: 'Token'
+        },
+        platform: {
+            '$ref': '#/components/schemas/DevicePlatform'
+        }
+    },
+    type: 'object',
+    required: ['token', 'platform'],
+    title: 'DeviceTokenRegister'
+} as const;
+
 export const FileCategorySchema = {
     type: 'string',
     enum: ['image', 'video', 'audio', 'document', 'spreadsheet', 'archive', 'other'],
@@ -808,6 +862,11 @@ export const UserCreateSchema = {
             ],
             title: 'Full Name'
         },
+        push_enabled: {
+            type: 'boolean',
+            title: 'Push Enabled',
+            default: false
+        },
         password: {
             type: 'string',
             maxLength: 128,
@@ -849,6 +908,11 @@ export const UserPublicSchema = {
                 }
             ],
             title: 'Full Name'
+        },
+        push_enabled: {
+            type: 'boolean',
+            title: 'Push Enabled',
+            default: false
         },
         id: {
             type: 'string',
@@ -942,6 +1006,11 @@ export const UserUpdateSchema = {
             ],
             title: 'Full Name'
         },
+        push_enabled: {
+            type: 'boolean',
+            title: 'Push Enabled',
+            default: false
+        },
         password: {
             anyOf: [
                 {
@@ -986,6 +1055,17 @@ export const UserUpdateMeSchema = {
                 }
             ],
             title: 'Email'
+        },
+        push_enabled: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Push Enabled'
         }
     },
     type: 'object',

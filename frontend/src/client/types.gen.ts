@@ -18,6 +18,21 @@ export type CompleteUploadRequest = {
     size_bytes: number;
 };
 
+export type DevicePlatform = 'android';
+
+export type DeviceTokenPublic = {
+    id: string;
+    token: string;
+    platform: string;
+    created_at: string;
+    last_seen_at: string;
+};
+
+export type DeviceTokenRegister = {
+    token: string;
+    platform: DevicePlatform;
+};
+
 export type FileCategory = 'image' | 'video' | 'audio' | 'document' | 'spreadsheet' | 'archive' | 'other';
 
 export type FileShareCreate = {
@@ -177,6 +192,7 @@ export type UserCreate = {
     is_active?: boolean;
     is_superuser?: boolean;
     full_name?: (string | null);
+    push_enabled?: boolean;
     password: string;
 };
 
@@ -185,6 +201,7 @@ export type UserPublic = {
     is_active?: boolean;
     is_superuser?: boolean;
     full_name?: (string | null);
+    push_enabled?: boolean;
     id: string;
     created_at?: (string | null);
 };
@@ -205,12 +222,14 @@ export type UserUpdate = {
     is_active?: boolean;
     is_superuser?: boolean;
     full_name?: (string | null);
+    push_enabled?: boolean;
     password?: (string | null);
 };
 
 export type UserUpdateMe = {
     full_name?: (string | null);
     email?: (string | null);
+    push_enabled?: (boolean | null);
 };
 
 export type ValidationError = {
@@ -332,6 +351,18 @@ export type PrivateCreateUserData = {
 };
 
 export type PrivateCreateUserResponse = (UserPublic);
+
+export type PushRegisterDeviceTokenData = {
+    requestBody: DeviceTokenRegister;
+};
+
+export type PushRegisterDeviceTokenResponse = (DeviceTokenPublic);
+
+export type PushUnregisterDeviceTokenData = {
+    token: string;
+};
+
+export type PushUnregisterDeviceTokenResponse = (void);
 
 export type UsersReadUsersData = {
     limit?: number;
