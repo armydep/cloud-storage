@@ -179,6 +179,33 @@ def test_delete_device_token_does_not_remove_another_users_token(db: Session) ->
     assert device_token_db.user_id == owner.id
 
 
+def test_list_tokens_for_user_returns_every_device_they_hold(db: Session) -> None:
+    user = create_random_user(db)
+    other_user = create_random_user(db)
+    token_a, token_b = uuid.uuid4().hex, uuid.uuid4().hex
+    repository.register_device_token(
+        session=db, user_id=user.id, token=token_a, platform="android"
+    )
+    repository.register_device_token(
+        session=db, user_id=user.id, token=token_b, platform="android"
+    )
+    repository.register_device_token(
+        session=db, user_id=other_user.id, token=uuid.uuid4().hex, platform="android"
+    )
+
+    tokens = repository.list_tokens_for_user(session=db, user_id=user.id)
+
+    assert {t.token for t in tokens} == {token_a, token_b}
+
+
+def test_list_tokens_for_user_is_empty_with_no_registered_devices(db: Session) -> None:
+    user = create_random_user(db)
+
+    tokens = repository.list_tokens_for_user(session=db, user_id=user.id)
+
+    assert tokens == []
+
+
 def test_deleting_a_user_cascades_to_their_device_tokens(db: Session) -> None:
     user = create_random_user(db)
     token = uuid.uuid4().hex

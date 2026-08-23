@@ -131,4 +131,14 @@ final pushDeviceRegistrationProvider = Provider.autoDispose<void>((ref) {
   unawaited(register(null));
   final subscription = fcm.onTokenRefresh.listen(register);
   ref.onDispose(subscription.cancel);
+
+  // Foreground suppression (design doc decision 14): a message arriving
+  // while the app is in front must not raise a system banner over itself.
+  // firebase_messaging already delivers foreground messages through this
+  // separate stream instead of auto-displaying them, so the correct
+  // handling here is to do nothing user-visible -- not to call the local
+  // notification client. The feed still gets the same event over its own,
+  // separate channel (q.inapp), which is what stays authoritative.
+  final foregroundSubscription = fcm.onMessage.listen((_) {});
+  ref.onDispose(foregroundSubscription.cancel);
 });

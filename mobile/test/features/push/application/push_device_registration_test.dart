@@ -4,6 +4,7 @@ import 'package:cloudestorage/core/network/api_client.dart';
 import 'package:cloudestorage/features/push/application/push_providers.dart';
 import 'package:cloudestorage/features/push/data/fcm_client.dart';
 import 'package:cloudestorage/features/push/data/push_repository.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -95,11 +96,50 @@ void main() {
 
     expect(repository.registerCalls, isEmpty);
   });
+
+  test(
+    'a foreground message does not throw and does not touch the repository',
+    () async {
+      // Decision 14: firebase_messaging delivers foreground messages
+      // through this stream instead of auto-displaying them; the correct
+      // handling is to do nothing observable, not to call any repository
+      // or notification method.
+      final fcm = _FakeFcmClient()..token = 'initial-token';
+      final repository = _FakePushRepository();
+      final container = ProviderContainer(
+        overrides: [
+          fcmClientProvider.overrideWithValue(fcm),
+          pushRepositoryProvider.overrideWithValue(repository),
+        ],
+      );
+      addTearDown(container.dispose);
+      final subscription = container.listen(
+        pushDeviceRegistrationProvider,
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        () => fcm.emitForeground(
+          const RemoteMessage(data: {'event_type': 'file_shared'}),
+        ),
+        returnsNormally,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(repository.registerCalls, [
+        {'token': 'initial-token', 'platform': 'android'},
+      ]);
+    },
+  );
 }
 
 class _FakeFcmClient implements FcmClient {
   String? token;
   final StreamController<String> _refreshController =
+      StreamController.broadcast();
+  final StreamController<RemoteMessage> _messageController =
       StreamController.broadcast();
 
   @override
@@ -111,7 +151,12 @@ class _FakeFcmClient implements FcmClient {
   @override
   Future<bool> requestPermission() async => true;
 
+  @override
+  Stream<RemoteMessage> get onMessage => _messageController.stream;
+
   void emitRefresh(String newToken) => _refreshController.add(newToken);
+
+  void emitForeground(RemoteMessage message) => _messageController.add(message);
 }
 
 class _FakePushRepository implements PushRepository {

@@ -139,17 +139,40 @@ just a file.
 
 ## Push notifications
 
-This slice (issue #119) registers the device's FCM token with the backend and
-lets the user opt in from Settings. **No notification is ever sent yet** --
-that is a separate, later slice (#152). What exists today is purely the
-plumbing: a device token reaches the backend, and a per-user `push_enabled`
-preference can be turned on and off. Android only; no APNs, no web push.
+Issue #119 registered the device's FCM token with the backend and let the
+user opt in from Settings. Issue #152 (this slice) adds actual delivery:
+sharing a file with a user who has push enabled sends a notification to
+their device, including with the app closed. Android only; no APNs, no web
+push; only `file_shared` triggers a push (phase 12 design doc decision 11).
+
+Payloads are data-only (decision 12) -- no file name ever leaves the
+backend via FCM, only a generic title, the event type, and the identifiers
+needed to resolve the target. That means:
+
+- **App closed or backgrounded**: `firebaseMessagingBackgroundHandler`
+  (`lib/features/push/data/push_background_handler.dart`) runs in its own
+  isolate and builds the tray notification itself via
+  `flutter_local_notifications`, since a data-only FCM message is never
+  auto-displayed by Android the way a "notification" message is.
+- **App in the foreground**: the same event arrives through
+  `FcmClient.onMessage` instead, and is deliberately a no-op -- raising a
+  banner over an app the user is already looking at would be redundant
+  (decision 14). The in-app feed remains the authoritative record either
+  way (decision 2).
+- **Redelivery**: FCM delivery is at-least-once. The tray notification's id
+  is derived from the server's `notification_id` (the outbox event id), so
+  redelivering the same event replaces the existing notification instead of
+  stacking a duplicate one.
+
+`flutter_local_notifications` requires Android core library desugaring
+unconditionally, even though this app only calls `.show()` and never
+schedules -- already wired into `android/app/build.gradle.kts`.
 
 ### Two gates, both must be open
 
-Push delivery (once #152 ships) will require **two independent things** to be
-true at once, and "nothing arrives" during manual testing is almost always one
-of them being closed by design, not a bug:
+Push delivery requires **two independent things** to be true at once, and
+"nothing arrives" during manual testing is almost always one of them being
+closed by design, not a bug:
 
 1. **The OS notification permission** (`POST_NOTIFICATIONS`, requested from
    the Settings toggle) -- declining it is a normal, supported outcome. The
@@ -162,8 +185,8 @@ of them being closed by design, not a bug:
    permission and never reach the preference, or (in principle, via the API)
    have the preference set without ever having granted the permission.
 
-If you are testing this slice end-to-end, confirm both explicitly before
-concluding something is broken.
+If you are testing end-to-end, confirm both explicitly before concluding
+something is broken.
 
 ### Firebase project setup (required, not included)
 
@@ -182,6 +205,13 @@ fail or return nothing against it. A human with access to the
    `android/app/google-services.json` for the environment you are building
    against, replacing the placeholder committed here.
 4. Enable Cloud Messaging (FCM) on each project.
+5. Generate a service-account private key for that same project (Project
+   settings > Service accounts > Generate new private key) and set it as the
+   backend's `FCM_PROJECT_ID` / `FCM_SERVICE_ACCOUNT_JSON_BASE64` in the repo
+   root `.env.example` -- see that file's comments. The mobile app's
+   `google-services.json` and the backend's service-account credential must
+   come from the **same** Firebase project, or tokens the app registers will
+   never receive anything the backend sends.
 
 The placeholder file is safe to leave committed as the checked-in default --
 it only stops working when someone tries to actually receive a token, at

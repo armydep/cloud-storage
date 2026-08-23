@@ -1,4 +1,5 @@
 import 'package:cloudestorage/features/push/data/fcm_client.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 /// A no-op double for tests that render screens watching
 /// `pushDeviceRegistrationProvider` (currently `FilesBrowserScreen`) but
@@ -17,4 +18,7 @@ class NoOpFcmClient implements FcmClient {
 
   @override
   Future<bool> requestPermission() async => false;
+
+  @override
+  Stream<RemoteMessage> get onMessage => const Stream.empty();
 }

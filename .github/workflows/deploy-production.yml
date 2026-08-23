@@ -35,6 +35,8 @@ jobs:
       RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
       SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+      FCM_PROJECT_ID: ${{ secrets.FCM_PROJECT_ID_PRODUCTION }}
+      FCM_SERVICE_ACCOUNT_JSON_BASE64: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON_BASE64_PRODUCTION }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
