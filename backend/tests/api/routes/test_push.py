@@ -22,7 +22,7 @@ def test_register_device_token(
         json={"token": token, "platform": "android"},
     )
 
-    assert r.status_code == 200
+    assert r.status_code == 201
     body = r.json()
     assert body["token"] == token
     assert body["platform"] == "android"
@@ -85,7 +85,7 @@ def test_register_device_token_moves_between_users(
         json={"token": token, "platform": "android"},
     )
 
-    assert r.status_code == 200
+    assert r.status_code == 201
     rows = db.exec(select(DeviceToken).where(DeviceToken.token == token)).all()
     assert len(rows) == 1
 
@@ -131,6 +131,44 @@ def test_unregister_device_token_requires_authentication(client: TestClient) -> 
     r = client.delete(f"{settings.API_V1_STR}/push/device-tokens/some-token")
 
     assert r.status_code == 401
+
+
+def test_unregister_device_token_does_not_remove_another_users_token(
+    client: TestClient, db: Session
+) -> None:
+    """A no-op, not a 404 -- this endpoint intentionally never reveals
+
+    whether a token exists under someone else's account, so a second user
+    calling delete on the first user's token must 204 without touching it.
+    """
+    first_email, second_email = random_email(), random_email()
+    password = random_lower_string()
+    crud.create_user(
+        session=db, user_create=UserCreate(email=first_email, password=password)
+    )
+    crud.create_user(
+        session=db, user_create=UserCreate(email=second_email, password=password)
+    )
+    first_headers = user_authentication_headers(
+        client=client, email=first_email, password=password
+    )
+    second_headers = user_authentication_headers(
+        client=client, email=second_email, password=password
+    )
+    token = uuid.uuid4().hex
+    client.post(
+        f"{settings.API_V1_STR}/push/device-tokens",
+        headers=first_headers,
+        json={"token": token, "platform": "android"},
+    )
+
+    r = client.delete(
+        f"{settings.API_V1_STR}/push/device-tokens/{token}",
+        headers=second_headers,
+    )
+
+    assert r.status_code == 204
+    assert db.exec(select(DeviceToken).where(DeviceToken.token == token)).first()
 
 
 def test_signing_out_unregisters_the_token_so_the_next_user_does_not_inherit_it(
@@ -182,7 +220,7 @@ def test_signing_out_unregisters_the_token_so_the_next_user_does_not_inherit_it(
         headers=second_headers,
         json={"token": token, "platform": "android"},
     )
-    assert r.status_code == 200
+    assert r.status_code == 201
     second_user_id = client.get(
         f"{settings.API_V1_STR}/users/me", headers=second_headers
     ).json()["id"]
