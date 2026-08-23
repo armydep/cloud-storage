@@ -78,6 +78,46 @@ ROADMAP.md when this phase is scheduled.
     the user is holding the phone at the time. Which events push is a per-event
     decision recorded in the bindings, not a property of the channel.
 
+12. **Payloads are data-only; no file names leave our servers.** A push carries
+    the event type and the identifiers needed to resolve the target, with a
+    generic title such as "You have a new notification". The app fetches the
+    details from the API when it displays or opens the notification.
+
+    The alternative — "Alice shared tax_return_2024.pdf with you" — reads better
+    on a lock screen, but it routes customer file names through Google's
+    infrastructure. For a product whose entire purpose is storing private files,
+    that is the wrong default. A sender's display name may be included if the
+    lock-screen experience proves too thin; a file name may not.
+
+    Consequence: a notification opened with no network shows only the generic
+    text, because the detail was never in the payload.
+
+13. **Push and the in-app feed are different surfaces, not duplicates.** One
+    event produces an OS notification *and* a feed entry on the same device. That
+    is intended, and matches how comparable apps behave: the feed is the durable
+    record with read state, the push is a transient alert that works with the app
+    closed. Suppressing one to avoid "duplication" would either lose the record
+    or lose the alert.
+
+14. **The app suppresses the system notification while it is in the foreground.**
+    Raising a banner over an app the user is already looking at is redundant.
+    `firebase_messaging` delivers foreground messages through a separate callback
+    from background ones, so the app updates the feed silently instead.
+
+    Not handled: a notification already sitting in one device's tray is not
+    dismissed when the user reads it on another device. Clearing it would require
+    sending a dismissal message to the remaining devices. The gap is accepted;
+    most applications live with it.
+
+15. **A channel can be silenced for a whole event by unbinding it.** Because
+    fan-out is a queue binding (phase 8 decision 4), removing `file_shared` from
+    `q.inapp` leaves push as the only channel, and rebinding restores it — no code
+    change, no deploy, no migration. This is the mechanism for observing push in
+    isolation on a development stack.
+
+    In production both stay bound: push has no delivery guarantee, so the feed
+    must keep receiving everything (decision 2).
+
 ## Architecture
 
 ```
@@ -186,27 +226,25 @@ than the app's default screen.
 
 ## Open questions
 
-1. **What goes in the push payload?** This is specific to a file-storage product
-   and worth deciding deliberately rather than defaulting to whatever an FCM
-   tutorial does.
+1. **Do per-user notification preferences come along in this phase?**
 
-   ```
-   CONTENT PUSH                        DATA-ONLY PUSH
-   "Alice shared tax_return.pdf"       "You have a new notification"
-   better UX, readable at a glance     app fetches details on open
-   filename passes through Google      nothing sensitive leaves our servers
-   ```
+   There is currently no user-facing way to switch any notification off, on any
+   channel. That has been deliberate since phase 9, and it is tolerable for
+   transactional email.
 
-   Recommendation: a generic title with the details fetched on tap, or at most a
-   sender name without a file name. Sending customer file names through a third
-   party is a poor default for a product whose whole purpose is storing private
-   files.
+   Push is different in kind: it makes a phone buzz. "How do I turn this off" is
+   the usual first request after any push feature ships, and the answer today
+   would be "uninstall the app or revoke the OS permission" — which silences
+   everything, including notifications the user did want.
 
-2. **Do per-user notification preferences come along in this phase?**
-   Preferences have been deliberately out of scope since phase 9, and email
-   without an opt-out is tolerable. An unmutable push is a much larger imposition,
-   and the usual first complaint about any push feature is that it cannot be
-   turned off.
+   Note this is distinct from decision 15. Unbinding a queue silences a channel
+   for *every* user and is an operator action; a preference silences it for *one*
+   user and is theirs to set.
 
    Recommendation: include at minimum a per-channel on/off switch for push in
    this phase, even if full per-event preferences stay deferred.
+
+Resolved during design, retained for context:
+
+- **Payload content** — settled as decision 12: data-only, no file names through
+  Google's infrastructure.
