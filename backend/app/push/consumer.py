@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 RECONNECT_INTERVAL_SECONDS = 1.0
 
 
-def build_fcm_client() -> FcmClient:
+def build_fcm_client() -> HttpV1FcmClient:
     assert settings.FCM_PROJECT_ID is not None
     assert settings.FCM_SERVICE_ACCOUNT_JSON_BASE64 is not None
     service_account_info = json.loads(
@@ -54,6 +54,7 @@ def run() -> None:
             continue
 
         consumer: RabbitConsumer | None = None
+        fcm_client: HttpV1FcmClient | None = None
         try:
             fcm_client = build_fcm_client()
             consumer = RabbitConsumer()
@@ -64,6 +65,8 @@ def run() -> None:
         finally:
             if consumer is not None:
                 consumer.close()
+            if fcm_client is not None:
+                fcm_client.close()
 
 
 if __name__ == "__main__":

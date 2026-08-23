@@ -54,6 +54,20 @@ void main() {
       expect(content, isNull);
     });
 
+    test(
+      'fails closed rather than collapsing onto a shared id when notification_id is missing',
+      () {
+        // A shared fallback id (e.g. derived from event_type alone) would
+        // make unrelated file_shared notifications silently replace one
+        // another in the tray. The server always sends notification_id, so
+        // this should not happen in practice -- but if it did, this must
+        // not show anything rather than guess at an id.
+        final content = parsePushMessageData({'event_type': 'file_shared'});
+
+        expect(content, isNull);
+      },
+    );
+
     test('returns null when event_type is missing', () {
       final content = parsePushMessageData({'notification_id': 'outbox-1'});
 

@@ -30,13 +30,20 @@ PushMessageContent? parsePushMessageData(Map<String, dynamic> data) {
   }
 
   final notificationIdSource = data['notification_id'];
-  final id = notificationIdSource is String
-      ? stableNotificationId(notificationIdSource)
-      : stableNotificationId(eventType);
+  if (notificationIdSource is! String) {
+    // Fail closed rather than falling back to a shared id derived from
+    // `eventType` -- that would silently collapse unrelated notifications
+    // (different events, different recipients even) onto the same Android
+    // notification id and have them replace one another in the tray. The
+    // server always sends `notification_id`, so this should not happen in
+    // practice; treat it the same as an unsupported event type instead of
+    // guessing at an id.
+    return null;
+  }
 
   final title = data['title'];
   return PushMessageContent(
-    notificationId: id,
+    notificationId: stableNotificationId(notificationIdSource),
     title: title is String && title.isNotEmpty ? title : _defaultTitle,
   );
 }
