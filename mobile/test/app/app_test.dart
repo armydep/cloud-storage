@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cloudestorage/app/app.dart';
 import 'package:cloudestorage/core/config/app_config.dart';
 import 'package:cloudestorage/features/auth/application/auth_providers.dart';
+import 'package:cloudestorage/features/push/application/push_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import '../support/auth_fixtures.dart';
+import '../support/fake_fcm_client.dart';
 import '../support/fake_token_storage.dart';
 
 void main() {
@@ -17,6 +19,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          fcmClientProvider.overrideWithValue(const NoOpFcmClient()),
           appConfigProvider.overrideWithValue(
             AppConfig.fromApiBaseUrl('https://api.example.com'),
           ),
@@ -66,6 +69,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          fcmClientProvider.overrideWithValue(const NoOpFcmClient()),
           appConfigProvider.overrideWithValue(
             AppConfig.fromApiBaseUrl('https://api.example.com'),
           ),
@@ -126,6 +130,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          fcmClientProvider.overrideWithValue(const NoOpFcmClient()),
           appConfigProvider.overrideWithValue(
             AppConfig.fromApiBaseUrl('https://api.example.com'),
           ),
@@ -193,6 +198,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          fcmClientProvider.overrideWithValue(const NoOpFcmClient()),
           appConfigProvider.overrideWithValue(
             AppConfig.fromApiBaseUrl('https://api.example.com'),
           ),

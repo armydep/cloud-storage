@@ -33,8 +33,14 @@ Override it without editing source files:
 flutter run --dart-define=API_BASE_URL=https://api.example.com
 ```
 
-For a physical device, use a backend URL reachable from that device. Do not put
-tokens, passwords, or other secrets in `--dart-define` values.
+For a physical device, use a backend URL reachable from that device -- and make
+sure that URL is **Traefik's** origin (port 80/443, `Host: api.${DOMAIN}`), not
+`backend`'s directly-published port 8000. Pointing at port 8000 works for
+login and file upload (those routes exist on `backend` itself), which is what
+makes the mistake easy to miss, but `backend` does not serve
+`/api/v1/search/*` -- only Traefik routes that prefix on to `search-svc` -- so
+search silently 404s while everything else appears to work. Do not put tokens,
+passwords, or other secrets in `--dart-define` values.
 
 ### Reaching search from the emulator
 
@@ -131,6 +137,56 @@ Opening a result reuses the same download/open handling as the files browser,
 including shared download progress and error state, since a search result is
 just a file.
 
+## Push notifications
+
+This slice (issue #119) registers the device's FCM token with the backend and
+lets the user opt in from Settings. **No notification is ever sent yet** --
+that is a separate, later slice (#152). What exists today is purely the
+plumbing: a device token reaches the backend, and a per-user `push_enabled`
+preference can be turned on and off. Android only; no APNs, no web push.
+
+### Two gates, both must be open
+
+Push delivery (once #152 ships) will require **two independent things** to be
+true at once, and "nothing arrives" during manual testing is almost always one
+of them being closed by design, not a bug:
+
+1. **The OS notification permission** (`POST_NOTIFICATIONS`, requested from
+   the Settings toggle) -- declining it is a normal, supported outcome. The
+   app continues to work fully; it just never registers a token or turns the
+   preference on.
+2. **The `push_enabled` preference** on the user's account -- defaults to
+   `false` for every user (opt-in, never opt-out, per the phase 12 design
+   doc). Turning the OS permission on does not imply this is on, and vice
+   versa: the Settings toggle sets both together, but a user can decline the
+   permission and never reach the preference, or (in principle, via the API)
+   have the preference set without ever having granted the permission.
+
+If you are testing this slice end-to-end, confirm both explicitly before
+concluding something is broken.
+
+### Firebase project setup (required, not included)
+
+`google-services.json` in `android/app/` is currently a **placeholder** --
+structurally valid enough for `flutter build apk` and CI to succeed, but it is
+not a real Firebase project and `FirebaseMessaging.instance.getToken()` will
+fail or return nothing against it. A human with access to the
+[Firebase console](https://console.firebase.google.com) needs to:
+
+1. Create **two** separate Firebase projects -- one for development, one for
+   production (phase 12 design doc, decision 8). Do not share one project
+   across environments.
+2. Register an Android app in each with application ID
+   `com.armydep.cloudestorage`.
+3. Download each project's `google-services.json` and swap it into
+   `android/app/google-services.json` for the environment you are building
+   against, replacing the placeholder committed here.
+4. Enable Cloud Messaging (FCM) on each project.
+
+The placeholder file is safe to leave committed as the checked-in default --
+it only stops working when someone tries to actually receive a token, at
+which point the fix is step 3 above, done locally and never committed back.
+
 ## Quality checks
 
 ```bash
@@ -150,6 +206,7 @@ lib/
 │   ├── config/      Compile-time application configuration
 │   └── network/     Reusable backend HTTP client foundation
 ├── features/
-│   └── auth/        Session state, secure storage, API, and screens
+│   ├── auth/        Session state, secure storage, API, and screens
+│   └── push/        FCM device-token lifecycle and the push opt-in
 └── main.dart        Application bootstrap
 ```

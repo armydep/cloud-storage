@@ -5,6 +5,7 @@ import 'package:cloudestorage/features/auth/application/auth_state.dart';
 import 'package:cloudestorage/features/auth/data/auth_repository.dart';
 import 'package:cloudestorage/features/auth/data/auth_session.dart';
 import 'package:cloudestorage/features/auth/data/token_storage.dart';
+import 'package:cloudestorage/features/push/application/push_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
@@ -39,6 +40,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(
     ref.watch(apiClientProvider),
     ref.watch(authSessionProvider),
+    onBeforeLogout: ref.watch(pushLogoutHookProvider),
   );
 });
 

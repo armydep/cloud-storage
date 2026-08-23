@@ -7,12 +7,14 @@ import 'package:cloudestorage/features/files/application/files_providers.dart';
 import 'package:cloudestorage/features/files/presentation/files_browser_screen.dart';
 import 'package:cloudestorage/features/notifications/application/notifications_controller.dart';
 import 'package:cloudestorage/features/notifications/application/notifications_providers.dart';
+import 'package:cloudestorage/features/push/application/push_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../../../support/fake_fcm_client.dart';
 import '../../../support/fake_token_storage.dart';
 
 void main() {
@@ -308,6 +310,7 @@ Future<ProviderContainer> _pumpFilesScreen(
 ) async {
   final container = ProviderContainer(
     overrides: [
+      fcmClientProvider.overrideWithValue(const NoOpFcmClient()),
       appConfigProvider.overrideWithValue(
         AppConfig.fromApiBaseUrl('https://example.com/'),
       ),

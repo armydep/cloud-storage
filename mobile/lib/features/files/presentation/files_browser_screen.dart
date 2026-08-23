@@ -7,6 +7,8 @@ import 'package:cloudestorage/features/files/presentation/widgets/file_list_item
 import 'package:cloudestorage/features/notifications/application/notifications_providers.dart';
 import 'package:cloudestorage/features/notifications/presentation/notifications_screen.dart';
 import 'package:cloudestorage/features/notifications/presentation/widgets/notification_bell_icon.dart';
+import 'package:cloudestorage/features/push/application/push_providers.dart';
+import 'package:cloudestorage/features/push/presentation/settings_screen.dart';
 import 'package:cloudestorage/features/search/presentation/search_results_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,6 +46,9 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
     final unreadCount = ref.watch(
       notificationsControllerProvider.select((state) => state.unreadCount),
     );
+    // Registers this device's push token on becoming authenticated and
+    // keeps it current -- see push_providers.dart.
+    ref.watch(pushDeviceRegistrationProvider);
 
     ref.listen(filesControllerProvider, (previous, next) {
       if (previous?.isCreatingFolder == true &&
@@ -91,6 +96,12 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
             NotificationBellIcon(
               unreadCount: unreadCount,
               onPressed: () => _openNotifications(context),
+            ),
+            IconButton(
+              key: const Key('settings-button'),
+              tooltip: 'Settings',
+              onPressed: () => _openSettings(context),
+              icon: const Icon(Icons.settings),
             ),
             IconButton(
               key: const Key('logout-button'),
@@ -295,6 +306,13 @@ class _FilesBrowserScreenState extends ConsumerState<FilesBrowserScreen> {
       MaterialPageRoute(
         builder: (context) => SearchResultsScreen(folderPath: folderPath),
       ),
+    );
+  }
+
+  void _openSettings(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const SettingsScreen()),
     );
   }
 

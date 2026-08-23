@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.security import verify_password
 from app.models import User, UserCreate
 from app.notifications.models import NotificationOutbox
+from app.push.models import DeviceToken
 from tests.utils.user import create_random_user
 from tests.utils.utils import random_email, random_lower_string
 
@@ -221,6 +222,67 @@ def test_update_user_me(
     assert user_db
     assert user_db.email == email
     assert user_db.full_name == full_name
+
+
+def test_new_user_has_push_disabled_by_default(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    r = client.get(f"{settings.API_V1_STR}/users/me", headers=normal_user_token_headers)
+    assert r.status_code == 200
+    assert r.json()["push_enabled"] is False
+
+
+def test_update_user_me_sets_push_enabled(
+    client: TestClient, normal_user_token_headers: dict[str, str], db: Session
+) -> None:
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers=normal_user_token_headers,
+        json={"push_enabled": True},
+    )
+    assert r.status_code == 200
+    assert r.json()["push_enabled"] is True
+
+    email = client.get(
+        f"{settings.API_V1_STR}/users/me", headers=normal_user_token_headers
+    ).json()["email"]
+    user_db = db.exec(select(User).where(User.email == email)).first()
+    assert user_db
+    assert user_db.push_enabled is True
+
+
+def test_update_user_me_disabling_push_does_not_delete_device_tokens(
+    client: TestClient, normal_user_token_headers: dict[str, str], db: Session
+) -> None:
+    """Disabling push must skip tokens, not delete them (design doc
+
+    decision 16) -- re-enabling must not require the device to register
+    again.
+    """
+    token = uuid.uuid4().hex
+    client.post(
+        f"{settings.API_V1_STR}/push/device-tokens",
+        headers=normal_user_token_headers,
+        json={"token": token, "platform": "android"},
+    )
+    client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers=normal_user_token_headers,
+        json={"push_enabled": True},
+    )
+
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers=normal_user_token_headers,
+        json={"push_enabled": False},
+    )
+
+    assert r.status_code == 200
+    assert r.json()["push_enabled"] is False
+    device_token_db = db.exec(
+        select(DeviceToken).where(DeviceToken.token == token)
+    ).first()
+    assert device_token_db is not None
 
 
 def test_update_password_me(

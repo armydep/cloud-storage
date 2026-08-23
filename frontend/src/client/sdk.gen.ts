@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { FilesReadFilesSharedWithMeResponse, FilesCreateChildFolderData, FilesCreateChildFolderResponse, FilesDeleteOwnedFolderData, FilesDeleteOwnedFolderResponse, FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesDeleteOwnedFileData, FilesDeleteOwnedFileResponse, FilesCreateFileShareData, FilesCreateFileShareResponse, FilesReadFileSharesData, FilesReadFileSharesResponse, FilesDeleteFileShareData, FilesDeleteFileShareResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, NotificationsReadNotificationsData, NotificationsReadNotificationsResponse, NotificationsReadUnreadCountResponse, NotificationsReadNotificationData, NotificationsReadNotificationResponse, NotificationsReadAllNotificationsResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { FilesReadFilesSharedWithMeResponse, FilesCreateChildFolderData, FilesCreateChildFolderResponse, FilesDeleteOwnedFolderData, FilesDeleteOwnedFolderResponse, FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesDeleteOwnedFileData, FilesDeleteOwnedFileResponse, FilesCreateFileShareData, FilesCreateFileShareResponse, FilesReadFileSharesData, FilesReadFileSharesResponse, FilesDeleteFileShareData, FilesDeleteFileShareResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, NotificationsReadNotificationsData, NotificationsReadNotificationsResponse, NotificationsReadUnreadCountResponse, NotificationsReadNotificationData, NotificationsReadNotificationResponse, NotificationsReadAllNotificationsResponse, PrivateCreateUserData, PrivateCreateUserResponse, PushRegisterDeviceTokenData, PushRegisterDeviceTokenResponse, PushUnregisterDeviceTokenData, PushUnregisterDeviceTokenResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class FilesService {
     /**
@@ -407,6 +407,47 @@ export class PrivateService {
             url: '/api/v1/private/users/',
             body: data.requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class PushService {
+    /**
+     * Register Device Token
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns DeviceTokenPublic Successful Response
+     * @throws ApiError
+     */
+    public static registerDeviceToken(data: PushRegisterDeviceTokenData): CancelablePromise<PushRegisterDeviceTokenResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/push/device-tokens',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Unregister Device Token
+     * @param data The data for the request.
+     * @param data.token
+     * @returns void Successful Response
+     * @throws ApiError
+     */
+    public static unregisterDeviceToken(data: PushUnregisterDeviceTokenData): CancelablePromise<PushUnregisterDeviceTokenResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/push/device-tokens/{token}',
+            path: {
+                token: data.token
+            },
             errors: {
                 422: 'Validation Error'
             }

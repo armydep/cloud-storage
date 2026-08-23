@@ -84,6 +84,25 @@ class ApiClient {
     return _decodeObject(response);
   }
 
+  Future<Map<String, dynamic>> patchJson(
+    String path, {
+    bool authenticated = false,
+    Map<String, dynamic>? body,
+  }) async {
+    final token = authenticated ? await _requiredToken() : null;
+    final headers = _headers(token: token);
+    headers['Content-Type'] = 'application/json';
+    final response = await _send(
+      () => _httpClient.patch(
+        resolve(path),
+        headers: headers,
+        body: body != null ? jsonEncode(body) : null,
+      ),
+      authenticatedToken: token,
+    );
+    return _decodeObject(response);
+  }
+
   Future<Map<String, dynamic>> postForm(
     String path, {
     required Map<String, String> fields,

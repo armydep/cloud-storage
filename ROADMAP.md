@@ -71,6 +71,10 @@ Improve the main file-management workflow after the core operations are stable.
       [design](docs/phases/phase-8-notifications.md))
 - [ ] **4.2** Set per-user storage quotas
 - [ ] **4.3** Notify users when they reach or approach their quota
+- [ ] **4.4** Deliver OS-level push notifications to the Android client via
+      Firebase Cloud Messaging, as an additional channel alongside email and
+      the in-app feed ([#119](https://github.com/armydep/cloud-storage/issues/119),
+      [design](docs/phases/phase-12-push-notifications.md))
 
 ## 5. Later phase: Mobile and synchronization
 
