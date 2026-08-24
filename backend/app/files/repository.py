@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import delete as sql_delete
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, select
 
@@ -208,6 +208,44 @@ def get_downloadable_file_by_id(
 
 def get_user_by_email(*, session: Session, email: str) -> User | None:
     return session.exec(select(User).where(User.email == email)).first()
+
+
+def get_user_for_update(*, session: Session, user_id: uuid.UUID) -> User | None:
+    """Lock the user row for the duration of the current transaction.
+
+    Mirrors `get_blob_for_update`: this is how a check-then-reserve quota
+    decision is made atomic across concurrent uploads from the same user
+    (phase 11 decision 7). `populate_existing` guards against returning a
+    stale cached copy of `current_user`, already in the session's identity
+    map from the request's auth dependency.
+    """
+    statement = (
+        select(User).where(User.id == user_id).with_for_update()
+    ).execution_options(populate_existing=True)
+    return session.exec(statement).first()
+
+
+def get_usage_bytes(*, session: Session, owner_id: uuid.UUID) -> int:
+    """Logical usage: SUM(files.size_bytes) plus unexpired reservations.
+
+    Computed on demand every call, not maintained as a counter (decision
+    10). Deliberately not deduplicated across shared blobs (decision 1) --
+    N files rows referencing the same blob count N times for their owner.
+    A pending upload stops counting the instant `expires_at` passes,
+    whether or not anything has reaped the row yet (decision 9).
+    """
+    files_total = session.exec(
+        select(func.coalesce(func.sum(StoredFile.size_bytes), 0)).where(
+            StoredFile.owner_id == owner_id
+        )
+    ).one()
+    pending_total = session.exec(
+        select(func.coalesce(func.sum(PendingUpload.size_bytes), 0)).where(
+            PendingUpload.owner_id == owner_id,
+            PendingUpload.expires_at > datetime.now(timezone.utc),
+        )
+    ).one()
+    return int(files_total) + int(pending_total)
 
 
 def create_file_share(

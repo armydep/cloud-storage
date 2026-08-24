@@ -75,6 +75,11 @@ class PresignDownloadResponse(SQLModel):
     expires_in: int
 
 
+class QuotaUsagePublic(SQLModel):
+    used_bytes: int
+    total_bytes: int
+
+
 class FolderCreate(SQLModel):
     parent_path: str = Field(min_length=1, max_length=1024)
     name: str = Field(min_length=1, max_length=255)

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from pydantic import EmailStr
-from sqlalchemy import DateTime
+from sqlalchemy import BigInteger, DateTime
 from sqlmodel import Field, SQLModel
 
 
@@ -58,6 +58,15 @@ class User(UserBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
     )
+    # NULL means "use the configured QUOTA_DEFAULT_BYTES" (phase 11 decision
+    # 3) -- not user-settable directly, hence living on User rather than
+    # UserBase/UserUpdateMe; only an admin quota-management endpoint (#151)
+    # writes this.
+    quota_bytes: int | None = Field(default=None, sa_type=BigInteger)
+    # Highest notification threshold percent already notified at (phase 11
+    # decision 12, written by #148). Added here so that slice needs no
+    # migration; nothing in this slice writes to it.
+    quota_notified_threshold: int | None = Field(default=None)
 
 
 # Properties to return via API, id is always required

@@ -1537,7 +1537,7 @@ def test_complete_upload_missing_object_returns_400(
         db=db,
         name_prefix="CompleteUploadMissingObject",
     )
-    _create_pending_upload(
+    pending_upload = _create_pending_upload(
         db=db,
         owner_id=folder.owner_id,
         blob_hash="3" * 64,
@@ -1550,6 +1550,11 @@ def test_complete_upload_missing_object_returns_400(
         raise ObjectNotFoundError
 
     monkeypatch.setattr("app.files.service.storage.stat_object", mock_stat_object)
+    delete_calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: delete_calls.append(object_key),
+    )
 
     response = client.post(
         f"{settings.API_V1_STR}/files/complete-upload",
@@ -1566,6 +1571,7 @@ def test_complete_upload_missing_object_returns_400(
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Uploaded object not found"
+    assert delete_calls == [pending_upload.object_key]
 
 
 def test_complete_upload_size_mismatch_returns_400(
@@ -1580,7 +1586,7 @@ def test_complete_upload_size_mismatch_returns_400(
         db=db,
         name_prefix="CompleteUploadSizeMismatch",
     )
-    _create_pending_upload(
+    pending_upload = _create_pending_upload(
         db=db,
         owner_id=folder.owner_id,
         blob_hash="4" * 64,
@@ -1591,6 +1597,11 @@ def test_complete_upload_size_mismatch_returns_400(
             size_bytes=999,
             checksum_sha256=sha256_hex_to_base64("4" * 64),
         ),
+    )
+    delete_calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: delete_calls.append(object_key),
     )
 
     response = client.post(
@@ -1608,6 +1619,10 @@ def test_complete_upload_size_mismatch_returns_400(
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Uploaded object size mismatch"
+    # Decision 6: the pending object is not left behind for the client's
+    # under-reported size (30MB reserved, 80MB actually uploaded, here
+    # 123 vs. 999 bytes) to become an orphan.
+    assert delete_calls == [pending_upload.object_key]
 
 
 def test_complete_upload_content_type_mismatch_returns_400(
@@ -1622,7 +1637,7 @@ def test_complete_upload_content_type_mismatch_returns_400(
         db=db,
         name_prefix="CompleteUploadContentTypeMismatch",
     )
-    _create_pending_upload(
+    pending_upload = _create_pending_upload(
         db=db,
         owner_id=folder.owner_id,
         blob_hash="5" * 64,
@@ -1634,6 +1649,11 @@ def test_complete_upload_content_type_mismatch_returns_400(
             content_type="text/plain",
             checksum_sha256=sha256_hex_to_base64("5" * 64),
         ),
+    )
+    delete_calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: delete_calls.append(object_key),
     )
 
     response = client.post(
@@ -1651,6 +1671,7 @@ def test_complete_upload_content_type_mismatch_returns_400(
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Uploaded object content type mismatch"
+    assert delete_calls == [pending_upload.object_key]
 
 
 def test_complete_upload_hash_mismatch_returns_400(
@@ -1666,7 +1687,7 @@ def test_complete_upload_hash_mismatch_returns_400(
         name_prefix="CompleteUploadHashMismatch",
     )
     blob_hash = "6" * 64
-    _create_pending_upload(
+    pending_upload = _create_pending_upload(
         db=db,
         owner_id=folder.owner_id,
         blob_hash=blob_hash,
@@ -1678,6 +1699,11 @@ def test_complete_upload_hash_mismatch_returns_400(
             content_type="application/pdf",
             checksum_sha256=sha256_hex_to_base64("a" * 64),
         ),
+    )
+    delete_calls = []
+    monkeypatch.setattr(
+        "app.files.service.storage.delete_object",
+        lambda *, object_key: delete_calls.append(object_key),
     )
 
     response = client.post(
@@ -1695,6 +1721,7 @@ def test_complete_upload_hash_mismatch_returns_400(
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Uploaded object hash mismatch"
+    assert delete_calls == [pending_upload.object_key]
 
 
 def test_complete_upload_duplicate_filename_returns_409(

@@ -147,6 +147,11 @@ export type PrivateUserCreate = {
     is_verified?: boolean;
 };
 
+export type QuotaUsagePublic = {
+    used_bytes: number;
+    total_bytes: number;
+};
+
 export type SharedFilePublic = {
     id: string;
     name: string;
@@ -301,6 +306,8 @@ export type FilesPresignUploadData = {
 };
 
 export type FilesPresignUploadResponse = (PresignUploadResponse);
+
+export type FilesReadQuotaUsageResponse = (QuotaUsagePublic);
 
 export type LoginLoginAccessTokenData = {
     formData: Body_login_login_access_token;

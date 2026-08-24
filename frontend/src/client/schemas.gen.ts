@@ -673,6 +673,22 @@ export const PrivateUserCreateSchema = {
     title: 'PrivateUserCreate'
 } as const;
 
+export const QuotaUsagePublicSchema = {
+    properties: {
+        used_bytes: {
+            type: 'integer',
+            title: 'Used Bytes'
+        },
+        total_bytes: {
+            type: 'integer',
+            title: 'Total Bytes'
+        }
+    },
+    type: 'object',
+    required: ['used_bytes', 'total_bytes'],
+    title: 'QuotaUsagePublic'
+} as const;
+
 export const SharedFilePublicSchema = {
     properties: {
         id: {

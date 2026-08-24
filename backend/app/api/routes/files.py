@@ -17,6 +17,7 @@ from app.files.schemas import (
     PresignDownloadResponse,
     PresignUploadRequest,
     PresignUploadResponse,
+    QuotaUsagePublic,
     SharedFilesPublic,
     StoredFilePublic,
 )
@@ -33,6 +34,7 @@ from app.files.service import (
     ObjectHashMismatchError,
     ObjectNotUploadedError,
     ObjectSizeMismatchError,
+    QuotaExceededError,
     ShareRecipientInactiveError,
     ShareRecipientNotFoundError,
     StoredFileNotFoundError,
@@ -45,6 +47,7 @@ from app.files.service import (
     get_file_shares,
     get_files_shared_with_user,
     get_folder_contents,
+    get_quota_usage,
     revoke_file_share,
     share_file,
 )
@@ -265,6 +268,8 @@ def complete_file_upload(
         raise HTTPException(status_code=400, detail="Uploaded object hash mismatch")
     except DuplicateFileNameError:
         raise HTTPException(status_code=409, detail="File name already exists")
+    except QuotaExceededError:
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
 
 
 @router.post("/presign-upload", response_model=PresignUploadResponse)
@@ -281,3 +286,10 @@ def presign_upload(
         )
     except FolderNotFoundError:
         raise HTTPException(status_code=404, detail="Folder not found")
+    except QuotaExceededError:
+        raise HTTPException(status_code=413, detail="Storage quota exceeded")
+
+
+@router.get("/quota", response_model=QuotaUsagePublic)
+def read_quota_usage(session: SessionDep, current_user: CurrentUser) -> Any:
+    return get_quota_usage(session=session, user=current_user)

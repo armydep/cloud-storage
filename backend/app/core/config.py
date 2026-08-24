@@ -113,6 +113,12 @@ class Settings(BaseSettings):
     def emails_enabled(self) -> bool:
         return bool(self.SMTP_HOST and self.EMAILS_FROM_EMAIL)
 
+    # Storage quotas, phase 11. NULL user.quota_bytes falls back to this
+    # default (decision 3); changing it moves every unconfigured user at
+    # once. The notify threshold is used by slice 2 (#148), not this slice.
+    QUOTA_DEFAULT_BYTES: int = Field(default=104_857_600, ge=1)
+    QUOTA_NOTIFY_THRESHOLD_PERCENT: int = Field(default=80, ge=1, le=100)
+
     # Push notifications (Firebase Cloud Messaging), phase 12. FCM is the
     # first mandatory external service dependency in an otherwise
     # self-hosted stack (design doc decision 1) -- there is no self-hosted

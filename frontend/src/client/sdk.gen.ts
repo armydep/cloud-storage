@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { FilesReadFilesSharedWithMeResponse, FilesCreateChildFolderData, FilesCreateChildFolderResponse, FilesDeleteOwnedFolderData, FilesDeleteOwnedFolderResponse, FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesDeleteOwnedFileData, FilesDeleteOwnedFileResponse, FilesCreateFileShareData, FilesCreateFileShareResponse, FilesReadFileSharesData, FilesReadFileSharesResponse, FilesDeleteFileShareData, FilesDeleteFileShareResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, NotificationsReadNotificationsData, NotificationsReadNotificationsResponse, NotificationsReadUnreadCountResponse, NotificationsReadNotificationData, NotificationsReadNotificationResponse, NotificationsReadAllNotificationsResponse, PrivateCreateUserData, PrivateCreateUserResponse, PushRegisterDeviceTokenData, PushRegisterDeviceTokenResponse, PushUnregisterDeviceTokenData, PushUnregisterDeviceTokenResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { FilesReadFilesSharedWithMeResponse, FilesCreateChildFolderData, FilesCreateChildFolderResponse, FilesDeleteOwnedFolderData, FilesDeleteOwnedFolderResponse, FilesReadFilesData, FilesReadFilesResponse, FilesPresignDownloadData, FilesPresignDownloadResponse, FilesDeleteOwnedFileData, FilesDeleteOwnedFileResponse, FilesCreateFileShareData, FilesCreateFileShareResponse, FilesReadFileSharesData, FilesReadFileSharesResponse, FilesDeleteFileShareData, FilesDeleteFileShareResponse, FilesCompleteFileUploadData, FilesCompleteFileUploadResponse, FilesPresignUploadData, FilesPresignUploadResponse, FilesReadQuotaUsageResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, NotificationsReadNotificationsData, NotificationsReadNotificationsResponse, NotificationsReadUnreadCountResponse, NotificationsReadNotificationData, NotificationsReadNotificationResponse, NotificationsReadAllNotificationsResponse, PrivateCreateUserData, PrivateCreateUserResponse, PushRegisterDeviceTokenData, PushRegisterDeviceTokenResponse, PushUnregisterDeviceTokenData, PushUnregisterDeviceTokenResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class FilesService {
     /**
@@ -221,6 +221,18 @@ export class FilesService {
             errors: {
                 422: 'Validation Error'
             }
+        });
+    }
+
+    /**
+     * Read Quota Usage
+     * @returns QuotaUsagePublic Successful Response
+     * @throws ApiError
+     */
+    public static readQuotaUsage(): CancelablePromise<FilesReadQuotaUsageResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/files/quota'
         });
     }
 }

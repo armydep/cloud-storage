@@ -23,10 +23,12 @@ from app.files.schemas import (
     PresignDownloadResponse,
     PresignUploadRequest,
     PresignUploadResponse,
+    QuotaUsagePublic,
     SharedFilePublic,
     SharedFilesPublic,
     StoredFilePublic,
 )
+from app.models import User
 from app.notifications import repository as notification_repository
 
 logger = logging.getLogger(__name__)
@@ -89,6 +91,10 @@ class FileShareNotFoundError(Exception):
 
 
 class BlobIntegrityError(Exception):
+    pass
+
+
+class QuotaExceededError(Exception):
     pass
 
 
@@ -183,6 +189,37 @@ def get_folder_contents(
     )
 
 
+def _effective_quota_bytes(user: User) -> int:
+    return (
+        user.quota_bytes
+        if user.quota_bytes is not None
+        else settings.QUOTA_DEFAULT_BYTES
+    )
+
+
+def _reserve_quota(
+    *, session: Session, owner_id: uuid.UUID, additional_bytes: int
+) -> None:
+    """Check and reserve quota for one more `additional_bytes`, atomically.
+
+    Takes the user row lock late and holds it only long enough to read
+    current usage and compare it against the effective quota (phase 11
+    decisions 7 and 3) -- mirrors `get_blob_for_update`. The caller's own
+    transaction commit or rollback is what releases the lock; this
+    function neither commits nor rolls back.
+    """
+    user = repository.get_user_for_update(session=session, user_id=owner_id)
+    assert user is not None, "authenticated user row missing during quota check"
+    usage = repository.get_usage_bytes(session=session, owner_id=owner_id)
+    if usage + additional_bytes > _effective_quota_bytes(user):
+        raise QuotaExceededError
+
+
+def get_quota_usage(*, session: Session, user: User) -> QuotaUsagePublic:
+    usage = repository.get_usage_bytes(session=session, owner_id=user.id)
+    return QuotaUsagePublic(used_bytes=usage, total_bytes=_effective_quota_bytes(user))
+
+
 def create_presigned_upload(
     *, session: Session, owner_id: uuid.UUID, request: PresignUploadRequest
 ) -> PresignUploadResponse:
@@ -193,6 +230,15 @@ def create_presigned_upload(
     )
     if not folder:
         raise FolderNotFoundError
+
+    # Fast feedback only -- this size is client-supplied and untrusted
+    # (decision 5). A new `files` row of this size will be created at
+    # completion regardless of which branch below is taken (even the
+    # already-claimed dedup fast path still creates one), so the check
+    # applies uniformly to both.
+    _reserve_quota(
+        session=session, owner_id=owner_id, additional_bytes=request.size_bytes
+    )
 
     existing_blob = repository.get_blob_by_hash(
         session=session,
@@ -280,10 +326,19 @@ def complete_upload(
     pending_upload = None
     pending_object_key = None
 
-    if blob:
-        if blob.size_bytes != request.size_bytes:
-            raise ObjectSizeMismatchError
-        if not existing_claim:
+    try:
+        if blob:
+            if blob.size_bytes != request.size_bytes:
+                raise ObjectSizeMismatchError
+            if not existing_claim:
+                pending_upload = repository.get_latest_pending_upload(
+                    session=session,
+                    owner_id=owner_id,
+                    blob_hash=request.blob_hash,
+                )
+                if pending_upload is None:
+                    raise ObjectNotUploadedError
+        else:
             pending_upload = repository.get_latest_pending_upload(
                 session=session,
                 owner_id=owner_id,
@@ -291,54 +346,47 @@ def complete_upload(
             )
             if pending_upload is None:
                 raise ObjectNotUploadedError
-    else:
-        pending_upload = repository.get_latest_pending_upload(
-            session=session,
-            owner_id=owner_id,
-            blob_hash=request.blob_hash,
+
+        if pending_upload is not None:
+            pending_object_key = pending_upload.object_key
+            if pending_upload.size_bytes != request.size_bytes:
+                raise ObjectSizeMismatchError
+
+            if pending_upload.mime_type != request.mime_type:
+                raise ObjectContentTypeMismatchError
+
+            try:
+                object_stat = storage.stat_object(
+                    object_key=pending_upload.object_key,
+                    include_checksum=True,
+                )
+            except storage.ObjectNotFoundError:
+                raise ObjectNotUploadedError
+
+            if object_stat.size_bytes != request.size_bytes:
+                raise ObjectSizeMismatchError
+
+            if (
+                object_stat.content_type
+                and object_stat.content_type != request.mime_type
+            ):
+                raise ObjectContentTypeMismatchError
+
+            expected_checksum = storage.sha256_hex_to_base64(request.blob_hash)
+            if object_stat.checksum_sha256 != expected_checksum:
+                raise ObjectHashMismatchError
+
+        # Quota check: late (after the HEAD verification above, which is
+        # slow I/O that must never happen while holding a row lock -- the
+        # same lesson already applied to the file_blobs lock below) and
+        # using `request.size_bytes`, now verified authoritative rather
+        # than the client's untrusted presign-time figure (decisions 5
+        # and 7). A user-lock-then-blob-lock order is used consistently
+        # here to avoid a lock-ordering deadlock with itself.
+        _reserve_quota(
+            session=session, owner_id=owner_id, additional_bytes=request.size_bytes
         )
-        if pending_upload is None:
-            raise ObjectNotUploadedError
 
-    if pending_upload is not None:
-        pending_object_key = pending_upload.object_key
-        if pending_upload.size_bytes != request.size_bytes:
-            raise ObjectSizeMismatchError
-
-        if pending_upload.mime_type != request.mime_type:
-            raise ObjectContentTypeMismatchError
-
-        try:
-            object_stat = storage.stat_object(
-                object_key=pending_upload.object_key,
-                include_checksum=True,
-            )
-        except storage.ObjectNotFoundError:
-            raise ObjectNotUploadedError
-
-        if object_stat.size_bytes != request.size_bytes:
-            raise ObjectSizeMismatchError
-
-        if object_stat.content_type and object_stat.content_type != request.mime_type:
-            raise ObjectContentTypeMismatchError
-
-        expected_checksum = storage.sha256_hex_to_base64(request.blob_hash)
-        if object_stat.checksum_sha256 != expected_checksum:
-            raise ObjectHashMismatchError
-
-    if blob is None:
-        blob = _copy_pending_upload_to_canonical_blob(
-            session=session,
-            blob_hash=request.blob_hash,
-            pending_object_key=pending_object_key,
-            canonical_object_key=canonical_object_key,
-            size_bytes=request.size_bytes,
-        )
-    else:
-        blob = repository.get_blob_for_update(
-            session=session,
-            blob_hash=request.blob_hash,
-        )
         if blob is None:
             blob = _copy_pending_upload_to_canonical_blob(
                 session=session,
@@ -347,10 +395,22 @@ def complete_upload(
                 canonical_object_key=canonical_object_key,
                 size_bytes=request.size_bytes,
             )
-        elif blob.size_bytes != request.size_bytes:
-            raise ObjectSizeMismatchError
+        else:
+            blob = repository.get_blob_for_update(
+                session=session,
+                blob_hash=request.blob_hash,
+            )
+            if blob is None:
+                blob = _copy_pending_upload_to_canonical_blob(
+                    session=session,
+                    blob_hash=request.blob_hash,
+                    pending_object_key=pending_object_key,
+                    canonical_object_key=canonical_object_key,
+                    size_bytes=request.size_bytes,
+                )
+            elif blob.size_bytes != request.size_bytes:
+                raise ObjectSizeMismatchError
 
-    try:
         repository.ensure_blob_claim(
             session=session,
             owner_id=owner_id,
@@ -385,6 +445,28 @@ def complete_upload(
     except repository.DuplicateFileNameRepositoryError:
         session.rollback()
         raise DuplicateFileNameError
+    except (
+        ObjectNotUploadedError,
+        ObjectSizeMismatchError,
+        ObjectContentTypeMismatchError,
+        ObjectHashMismatchError,
+        QuotaExceededError,
+    ):
+        # Rejecting at completion must delete the pending object (decision
+        # 6) -- the bytes are already in object storage under
+        # uploads/<owner_id>/<upload_id>, and leaving them there creates
+        # exactly the orphan class the cleanup work exists to remove.
+        # `pending_object_key` is still None here if rejection happened
+        # before a pending upload was identified, in which case there is
+        # nothing to delete.
+        session.rollback()
+        if pending_object_key is not None:
+            try:
+                storage.delete_object(object_key=pending_object_key)
+            except Exception:
+                logger.exception("Failed to delete rejected pending upload object")
+        raise
+
     if pending_object_key is not None:
         try:
             storage.delete_object(object_key=pending_object_key)
