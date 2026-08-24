@@ -22,9 +22,29 @@ reference) and covers **SCALE 5.2**.
    writes to no table the backend owns.
 
 2. **`cleanup-svc` never reads PostgreSQL.** It is given no database credentials.
-   Everything it needs arrives in an event or is read from object storage. This is
-   what keeps the split from becoming a distributed monolith, and it is enforced
-   by configuration rather than discipline.
+   Everything it needs arrives in an event, is read from object storage, or is
+   fetched from a backend API. This is what keeps the split from becoming a
+   distributed monolith, and it is enforced by configuration rather than
+   discipline.
+
+   Deletion (slice 2) needs nothing but the key in the event. **Detection (slice
+   1) is the case that tests this rule**, because finding orphans means comparing
+   the bucket against metadata, and metadata lives in PostgreSQL.
+
+   The resolution is that `backend` exposes the set of known object keys through
+   a paginated, superuser-only endpoint, and `cleanup-svc` consumes it. A
+   service-to-service call is a materially weaker coupling than a shared schema:
+   the contract is an API that can be versioned, not table definitions that change
+   underneath a service that does not own them.
+
+   The cost is real and worth stating: `cleanup-svc` gains an outbound dependency
+   on `backend`, so the detector cannot run while the backend is down. For a
+   scheduled reporting job that is acceptable — it simply runs later.
+
+   Note this is a deliberate difference from `search-svc`, which calls nothing.
+   Search could avoid it because its whole dataset is pushed to it by events;
+   reconciliation is inherently a comparison against the source of truth, so it
+   has to reach the source of truth somehow.
 
 3. **The backend decides what is deletable; `cleanup-svc` only executes.** By the
    time a delete request is emitted, the backend has already established inside a
@@ -105,20 +125,32 @@ flowchart LR
     OB --> RELAY --> EX --> QC --> SVC
     SVC -->|delete| S3
     SVC -->|scan, read-only| S3
+    SVC -->|GET known object keys| API
     API --- PG
     SVC -.->|never| PG
 ```
 
-`cleanup-svc` touches object storage and the broker. It has no route through
-Traefik, no inbound API, and no database.
+`cleanup-svc` touches object storage, the broker, and one backend endpoint. It
+has no route through Traefik, no inbound API of its own, and no database
+credentials.
+
+The arrow to `backend` exists only for detection. Deletion needs nothing but the
+key carried in the event, so slice 2 has no such dependency.
 
 ## Slice breakdown
 
 ### Slice 1 — orphan detector (#101)
 
-The Go service skeleton, plus a scheduled read-only scan that reports objects in
-storage with no metadata reference, and metadata rows whose object is missing.
-Deletes nothing.
+Two parts, because the comparison needs both sides:
+
+**Backend** — a paginated, superuser-only endpoint exposing the set of known
+object keys, covering both `file_blobs.object_key` and the pending-upload keys.
+This is what lets `cleanup-svc` compare without database credentials (decision 2).
+
+**`cleanup-svc`** — the Go service skeleton, plus a scheduled read-only scan that
+streams the bucket, streams the known-keys endpoint, and reports the difference in
+both directions: objects with no metadata reference, and metadata rows whose
+object is missing. Deletes nothing, and holds no write credentials to storage.
 
 Ships first for two reasons. It blocks nothing and nothing blocks it, so it can
 land whenever there is time. And being read-only, it is the safe place to
@@ -146,9 +178,13 @@ This supersedes the "durable delete retry" half of #100. See Open questions.
    object.
 4. A redelivery of the same request finds the object already gone and treats that
    as success.
-5. Separately, the detector runs on its schedule and reports objects older than
-   the age threshold with no metadata reference — under both prefixes.
+5. Separately, the detector runs on its schedule. It streams the bucket, streams
+   the backend's known-object-keys endpoint, and reports objects older than the
+   age threshold with no metadata reference — under both prefixes.
 6. The report is visible to an operator. Nothing is deleted as a result of it.
+7. With the backend unreachable, the detector reports that it could not run rather
+   than reporting everything as an orphan. An empty known-keys response must never
+   be treated as "no metadata exists".
 
 ## Out of scope
 
@@ -174,3 +210,16 @@ This supersedes the "durable delete retry" half of #100. See Open questions.
 
 3. **Where does the detector's report go?** Log output, a Prometheus metric, or
    both. A number nobody looks at is not a report.
+
+4. **How does `cleanup-svc` authenticate to the known-object-keys endpoint?** It
+   is not a user, so the existing user JWT flow does not obviously apply. Options
+   include a dedicated service account, a shared secret, or restricting the
+   endpoint to the internal network and not authenticating it at all. The last is
+   the simplest and is defensible while the endpoint has no route through Traefik,
+   but it should be a decision rather than an omission.
+
+Resolved during design, retained for context:
+
+- **Whether `cleanup-svc` can honour "no PostgreSQL" while detecting orphans** —
+  settled as decision 2: it consumes a backend endpoint rather than the database.
+  Deletion needs no such call; only detection does.
