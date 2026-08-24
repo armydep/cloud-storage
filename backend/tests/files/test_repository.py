@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -340,3 +341,100 @@ def test_list_files_for_search_backfill_after_id_excludes_seen_rows_only(
     result_ids = {f.id for f, _ in results}
     assert smaller_id not in result_ids
     assert larger_id in result_ids
+
+
+def test_get_user_for_update_returns_the_user_row(db: Session) -> None:
+    user = create_random_user(db)
+
+    locked = repository.get_user_for_update(session=db, user_id=user.id)
+
+    assert locked is not None
+    assert locked.id == user.id
+
+
+def test_get_usage_bytes_is_zero_with_nothing_owned(db: Session) -> None:
+    user = create_random_user(db)
+
+    assert repository.get_usage_bytes(session=db, owner_id=user.id) == 0
+
+
+def test_get_usage_bytes_sums_owned_files(db: Session) -> None:
+    user = create_random_user(db)
+    root = repository.create_root_folder(session=db, owner_id=user.id)
+    _create_file(session=db, owner_id=user.id, folder=root, name="a.pdf")
+    _create_file(session=db, owner_id=user.id, folder=root, name="b.pdf")
+
+    # _create_file always writes a 123-byte file.
+    assert repository.get_usage_bytes(session=db, owner_id=user.id) == 246
+
+
+def test_get_usage_bytes_excludes_files_shared_with_the_user(db: Session) -> None:
+    """Decision 2: a file shared *with* a user does not count against them --
+
+    it is owned, and paid for, by the sharer.
+    """
+    owner = create_random_user(db)
+    recipient = create_random_user(db)
+    root = repository.create_root_folder(session=db, owner_id=owner.id)
+    file = _create_file(session=db, owner_id=owner.id, folder=root)
+    repository.create_file_share(session=db, file_id=file.id, recipient_id=recipient.id)
+
+    assert repository.get_usage_bytes(session=db, owner_id=recipient.id) == 0
+    assert repository.get_usage_bytes(session=db, owner_id=owner.id) == 123
+
+
+def test_get_usage_bytes_includes_an_unexpired_pending_upload(db: Session) -> None:
+    user = create_random_user(db)
+    repository.create_pending_upload(
+        session=db,
+        upload_id=uuid.uuid4(),
+        owner_id=user.id,
+        blob_hash=uuid.uuid4().hex * 2,
+        object_key=f"uploads/{user.id}/{uuid.uuid4()}",
+        size_bytes=456,
+        mime_type="application/pdf",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+    )
+    db.commit()
+
+    assert repository.get_usage_bytes(session=db, owner_id=user.id) == 456
+
+
+def test_get_usage_bytes_excludes_an_expired_pending_upload(db: Session) -> None:
+    """Decision 9: an expired reservation stops counting immediately,
+
+    whether or not anything has reaped the row yet.
+    """
+    user = create_random_user(db)
+    repository.create_pending_upload(
+        session=db,
+        upload_id=uuid.uuid4(),
+        owner_id=user.id,
+        blob_hash=uuid.uuid4().hex * 2,
+        object_key=f"uploads/{user.id}/{uuid.uuid4()}",
+        size_bytes=456,
+        mime_type="application/pdf",
+        expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+    db.commit()
+
+    assert repository.get_usage_bytes(session=db, owner_id=user.id) == 0
+
+
+def test_get_usage_bytes_combines_files_and_pending_uploads(db: Session) -> None:
+    user = create_random_user(db)
+    root = repository.create_root_folder(session=db, owner_id=user.id)
+    _create_file(session=db, owner_id=user.id, folder=root)
+    repository.create_pending_upload(
+        session=db,
+        upload_id=uuid.uuid4(),
+        owner_id=user.id,
+        blob_hash=uuid.uuid4().hex * 2,
+        object_key=f"uploads/{user.id}/{uuid.uuid4()}",
+        size_bytes=456,
+        mime_type="application/pdf",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+    )
+    db.commit()
+
+    assert repository.get_usage_bytes(session=db, owner_id=user.id) == 123 + 456
