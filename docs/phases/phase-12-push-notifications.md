@@ -396,10 +396,24 @@ rather than duplicating a tray notification. Whoever next has a real Firebase
 project, a real Android device, and normal outbound network access should run
 steps 1-8 above once and fold the result into this status.
 
-### Slice 3 — tap to open
+### Slice 3 — tap to open (dropped)
 
-Deep linking so tapping a notification opens the relevant file or folder rather
-than the app's default screen.
+A third slice was planned: deep linking so that tapping a notification opened the
+relevant file rather than the app's default screen. It was **dropped**, not
+deferred, and the phase is complete without it.
+
+Tapping a notification opens the app at its default screen, which is Android's
+own behaviour and requires no code. Deep linking would have saved a user two or
+three taps in exchange for per-target routing, resolution of a target that may
+have been deleted or unshared since the push was sent, and a cold-start path
+(`getInitialMessage`, distinct from `onMessageOpenedApp`) that fails silently
+when it is missed. That is not a good trade for one event type.
+
+Reconsider when there are several push-worthy event types and "which of these is
+this about" becomes a real question for the user. At that point the cheaper form —
+landing on the notification feed rather than a specific file — captures most of
+the value for one route and no target resolution, and is the version to build
+first.
 
 ## Acceptance flow
 
@@ -411,7 +425,8 @@ than the app's default screen.
 4. The event reaches `q.push`; the consumer sends to every token the recipient
    holds.
 5. The notification appears on the device with the app closed.
-6. Tapping it opens the shared file.
+6. Tapping it opens the app at its default screen. Deep linking to the shared
+   file is deliberately not implemented — see the dropped slice 3.
 7. The same notification is also present in the in-app feed, which remains
    authoritative.
 8. The user signs out; the token is unregistered and the device stops receiving
@@ -427,6 +442,8 @@ than the app's default screen.
 - Silent data-sync pushes.
 - Rich notifications — images, action buttons, grouping.
 - Delivery receipts or read tracking.
+- Deep linking from a notification tap. Tapping opens the app's default screen.
+  See the dropped slice 3.
 
 ## Open questions
 
