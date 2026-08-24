@@ -377,9 +377,7 @@ def test_get_usage_bytes_excludes_files_shared_with_the_user(db: Session) -> Non
     recipient = create_random_user(db)
     root = repository.create_root_folder(session=db, owner_id=owner.id)
     file = _create_file(session=db, owner_id=owner.id, folder=root)
-    repository.create_file_share(
-        session=db, file_id=file.id, recipient_id=recipient.id
-    )
+    repository.create_file_share(session=db, file_id=file.id, recipient_id=recipient.id)
 
     assert repository.get_usage_bytes(session=db, owner_id=recipient.id) == 0
     assert repository.get_usage_bytes(session=db, owner_id=owner.id) == 123
