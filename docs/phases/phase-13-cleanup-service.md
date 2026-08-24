@@ -32,10 +32,18 @@ reference) and covers **SCALE 5.2**.
    the bucket against metadata, and metadata lives in PostgreSQL.
 
    The resolution is that `backend` exposes the set of known object keys through
-   a paginated, superuser-only endpoint, and `cleanup-svc` consumes it. A
-   service-to-service call is a materially weaker coupling than a shared schema:
-   the contract is an API that can be versioned, not table definitions that change
-   underneath a service that does not own them.
+   a paginated endpoint, and `cleanup-svc` consumes it. A service-to-service call
+   is a materially weaker coupling than a shared schema: the contract is an API
+   that can be versioned, not table definitions that change underneath a service
+   that does not own them.
+
+   **The endpoint is unauthenticated and reachable only on the internal compose
+   network.** `cleanup-svc` is not a user, so the JWT flow does not apply to it,
+   and inventing a service-account mechanism for one internal caller is more
+   machinery than the problem warrants. This is safe only while the endpoint has
+   no Traefik route and no published port — the same posture Elasticsearch and
+   RabbitMQ already have. If it ever needs to leave the internal network, it needs
+   authentication first, and that is not a small change to bolt on afterwards.
 
    The cost is real and worth stating: `cleanup-svc` gains an outbound dependency
    on `backend`, so the detector cannot run while the backend is down. For a
@@ -64,10 +72,16 @@ reference) and covers **SCALE 5.2**.
    infrastructure pattern, and the durability comes free — the outbox guarantees
    the intent survives, and the broker retries until the delete succeeds.
 
-5. **The grace period lives in the backend, not the consumer.** An object is not
-   deleted the moment its reference count reaches zero. The blob is marked
-   unreferenced, and only after it has stayed unreferenced for a configured period
-   does the backend emit a delete request.
+5. **The grace period is one hour, and it lives in the backend, not the
+   consumer.** An object is not deleted the moment its reference count reaches
+   zero. The blob is marked unreferenced, and only after it has stayed
+   unreferenced for `CLEANUP_BLOB_GRACE_SECONDS` (default 3600) does the backend
+   emit a delete request.
+
+   Note this is a *different* setting from the detector's age threshold in
+   decision 7, which solves an unrelated problem — telling an orphan apart from an
+   in-flight upload. They are configured separately and should not be collapsed
+   into one value because they happen to be similar durations.
 
    This matters because keys are content-addressed. Without a grace period, this
    sequence is live:
@@ -107,6 +121,15 @@ reference) and covers **SCALE 5.2**.
 10. **Remediation is reported, never inferred.** The detector reports; it does not
     delete what it finds, and it does not decide that a metadata row is wrong.
     Reconciliation stays backend-driven, the same principle `search-svc` follows.
+
+11. **The report goes to both the log and Prometheus.** They answer different
+    questions and neither replaces the other. The log carries detail — which keys,
+    under which prefix — which is what someone needs when investigating. The
+    metric carries counts and total bytes over time, which is what shows the
+    number trending up before anyone thinks to look.
+
+    A count with no keys cannot be acted on; a log line nobody greps is not
+    monitoring.
 
 ## Architecture
 
@@ -196,30 +219,32 @@ This supersedes the "durable delete retry" half of #100. See Open questions.
 - Any inbound API or Traefik route for `cleanup-svc`.
 - Deleting anything the detector finds. Slice 1 reports only.
 
+## Relationship to #100
+
+#100 as originally written covered two leaks: failed object deletes, and
+unreaped pending uploads. Slice 2 of this phase supersedes the first of those —
+the same problem, solved event-driven in `cleanup-svc` rather than with in-process
+retry in the backend.
+
+**#100 is therefore rescoped to the pending-upload reaper alone.** That half
+cannot move here: reaping means querying `pending_uploads` for expired rows, which
+needs the database, and decision 2 forbids `cleanup-svc` from having it.
+
+Two issues describing the same work is how one of them gets built twice or not at
+all, so the overlap is removed rather than noted.
+
 ## Open questions
 
-1. **Does slice 2 supersede #100's durable-delete half, and should #100 be
-   rescoped to the reaper alone?** #100 currently covers both leaks. If slice 2
-   proceeds, #100 should shrink to just the pending-upload reaper, and the overlap
-   removed — otherwise two issues describe the same work.
-
-2. **How long is the grace period before an unreferenced blob is deleted?**
-   Longer is safer against the redelivery race and costs storage. This is separate
-   from the detector's age threshold in decision 7, which solves a different
-   problem.
-
-3. **Where does the detector's report go?** Log output, a Prometheus metric, or
-   both. A number nobody looks at is not a report.
-
-4. **How does `cleanup-svc` authenticate to the known-object-keys endpoint?** It
-   is not a user, so the existing user JWT flow does not obviously apply. Options
-   include a dedicated service account, a shared secret, or restricting the
-   endpoint to the internal network and not authenticating it at all. The last is
-   the simplest and is defensible while the endpoint has no route through Traefik,
-   but it should be a decision rather than an omission.
+None open.
 
 Resolved during design, retained for context:
 
 - **Whether `cleanup-svc` can honour "no PostgreSQL" while detecting orphans** —
   settled as decision 2: it consumes a backend endpoint rather than the database.
   Deletion needs no such call; only detection does.
+- **Grace period before deleting an unreferenced blob** — one hour, decision 5.
+- **Where the detector's report goes** — both the log and Prometheus, decision 11.
+- **How `cleanup-svc` authenticates to the known-keys endpoint** — it does not.
+  The endpoint is internal-network only, decision 2.
+- **Overlap with #100** — resolved above; #100 keeps the reaper, this phase takes
+  durable deletion.
