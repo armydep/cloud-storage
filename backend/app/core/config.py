@@ -113,6 +113,20 @@ class Settings(BaseSettings):
     def emails_enabled(self) -> bool:
         return bool(self.SMTP_HOST and self.EMAILS_FROM_EMAIL)
 
+    # Push notifications (Firebase Cloud Messaging), phase 12. FCM is the
+    # first mandatory external service dependency in an otherwise
+    # self-hosted stack (design doc decision 1) -- there is no self-hosted
+    # path for Android push. Base64-encoded so the service-account JSON's
+    # newlines and quotes never have to survive a .env file or a GitHub
+    # Actions secret verbatim.
+    FCM_PROJECT_ID: str | None = None
+    FCM_SERVICE_ACCOUNT_JSON_BASE64: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def fcm_configured(self) -> bool:
+        return bool(self.FCM_PROJECT_ID and self.FCM_SERVICE_ACCOUNT_JSON_BASE64)
+
     EMAIL_TEST_USER: EmailStr = "test@example.com"
     FIRST_SUPERUSER: EmailStr
     FIRST_SUPERUSER_PASSWORD: str

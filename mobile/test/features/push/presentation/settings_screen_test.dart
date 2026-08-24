@@ -3,6 +3,7 @@ import 'package:cloudestorage/features/push/application/push_providers.dart';
 import 'package:cloudestorage/features/push/data/fcm_client.dart';
 import 'package:cloudestorage/features/push/data/push_repository.dart';
 import 'package:cloudestorage/features/push/presentation/settings_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -112,6 +113,9 @@ class _FakeFcmClient implements FcmClient {
 
   @override
   Future<bool> requestPermission() async => permissionGranted;
+
+  @override
+  Stream<RemoteMessage> get onMessage => const Stream.empty();
 }
 
 class _FakePushRepository implements PushRepository {

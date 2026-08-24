@@ -23,6 +23,11 @@ INAPP_DEAD_LETTER_EXCHANGE = "notifications.dead-letter.inapp"
 INAPP_DEAD_LETTER_QUEUE = "q.inapp.dead-letter"
 INAPP_DELIVERY_LIMIT = 5
 
+PUSH_QUEUE = "q.push"
+PUSH_DEAD_LETTER_EXCHANGE = "notifications.dead-letter.push"
+PUSH_DEAD_LETTER_QUEUE = "q.push.dead-letter"
+PUSH_DELIVERY_LIMIT = 5
+
 # Consumed by search-svc, a separate deployable (Phase 10) that keeps its own
 # copy of these names rather than importing this module -- see
 # docs/phases/phase-10-search-service.md decision 1 and constraint 3 there.
@@ -139,6 +144,39 @@ def declare_topology(channel: BlockingChannel) -> None:
     channel.queue_bind(
         queue=INAPP_DEAD_LETTER_QUEUE,
         exchange=INAPP_DEAD_LETTER_EXCHANGE,
+        routing_key="#",
+    )
+
+    # Push channel, added in Phase 12 slice 2. Bound only to file_shared --
+    # which events push is a per-event decision recorded in the binding, not
+    # a property of the channel (design doc decision 11).
+    channel.exchange_declare(
+        exchange=PUSH_DEAD_LETTER_EXCHANGE,
+        exchange_type="topic",
+        durable=True,
+    )
+    channel.queue_declare(
+        queue=PUSH_QUEUE,
+        durable=True,
+        arguments={
+            "x-queue-type": "quorum",
+            "x-delivery-limit": PUSH_DELIVERY_LIMIT,
+            "x-dead-letter-exchange": PUSH_DEAD_LETTER_EXCHANGE,
+        },
+    )
+    channel.queue_bind(
+        queue=PUSH_QUEUE,
+        exchange=NOTIFICATIONS_EXCHANGE,
+        routing_key=FILE_SHARED_ROUTING_KEY,
+    )
+    channel.queue_declare(
+        queue=PUSH_DEAD_LETTER_QUEUE,
+        durable=True,
+        arguments={"x-queue-type": "quorum"},
+    )
+    channel.queue_bind(
+        queue=PUSH_DEAD_LETTER_QUEUE,
+        exchange=PUSH_DEAD_LETTER_EXCHANGE,
         routing_key="#",
     )
 

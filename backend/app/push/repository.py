@@ -65,6 +65,16 @@ def _move(
     return device_token
 
 
+def list_tokens_for_user(*, session: Session, user_id: uuid.UUID) -> list[DeviceToken]:
+    """All devices this user has registered.
+
+    One user can hold several (design doc decision 7): the push consumer
+    fans out to every row this returns and handles each independently.
+    """
+    statement = select(DeviceToken).where(DeviceToken.user_id == user_id)
+    return list(session.exec(statement).all())
+
+
 def delete_device_token(*, session: Session, user_id: uuid.UUID, token: str) -> None:
     """Unregister a token, scoped to the caller.
 

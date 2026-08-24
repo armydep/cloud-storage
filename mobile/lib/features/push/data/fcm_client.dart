@@ -18,6 +18,12 @@ abstract interface class FcmClient {
   /// afterward. A device token can still be obtained regardless of this
   /// permission -- it only gates whether a notification is actually shown.
   Future<bool> requestPermission();
+
+  /// Messages that arrive while the app is in the foreground. Delivered
+  /// through a separate callback from background/terminated messages
+  /// (design doc decision 14) -- the app must not raise a system banner in
+  /// response to this stream, since the user is already looking at it.
+  Stream<RemoteMessage> get onMessage;
 }
 
 class FirebaseFcmClient implements FcmClient {
@@ -36,4 +42,7 @@ class FirebaseFcmClient implements FcmClient {
     return settings.authorizationStatus == AuthorizationStatus.authorized ||
         settings.authorizationStatus == AuthorizationStatus.provisional;
   }
+
+  @override
+  Stream<RemoteMessage> get onMessage => FirebaseMessaging.onMessage;
 }

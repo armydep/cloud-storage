@@ -4,6 +4,7 @@ import 'package:cloudestorage/features/files/data/files_repository.dart'
 import 'package:cloudestorage/features/push/application/push_providers.dart';
 import 'package:cloudestorage/features/push/data/fcm_client.dart';
 import 'package:cloudestorage/features/push/data/push_repository.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -154,6 +155,9 @@ class _FakeFcmClient implements FcmClient {
     permissionRequested = true;
     return permissionGranted;
   }
+
+  @override
+  Stream<RemoteMessage> get onMessage => const Stream.empty();
 }
 
 class _FakePushRepository implements PushRepository {
